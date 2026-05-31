@@ -20,7 +20,7 @@
 import type { NextRequest } from "next/server";
 import { getUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/db/server";
-import { getTripBrief, createItineraryFromLLMOutput } from "@/lib/db/queries";
+import { getTripBrief, createItineraryFromLLMOutput, appendChangeLogEntry } from "@/lib/db/queries";
 import { createPlannerEngine } from "@/lib/planner/engine";
 import type { Itinerary } from "@/lib/types";
 
@@ -85,6 +85,28 @@ export async function POST(
       tripId,
       llmItinerary
     );
+
+    // --- 4. Record the initial plan in the change log (non-fatal) ---
+    try {
+      const dayCount = persisted.days?.length ?? 0;
+      await appendChangeLogEntry(
+        supabase,
+        tripId,
+        user.id,
+        "consulting_plan",
+        `Initial itinerary generated for ${llmItinerary.destination} (${dayCount} ${dayCount === 1 ? "day" : "days"})`,
+        null,
+        {
+          itinerary_id: persisted.itinerary_id,
+          version: persisted.version,
+          destination: llmItinerary.destination,
+          total_cost_estimate: llmItinerary.total_cost_estimate,
+        },
+        null
+      );
+    } catch {
+      // Change log write failing must not break the primary response
+    }
 
     const responseBody: GenerateItineraryResponseBody = {
       itinerary: persisted,

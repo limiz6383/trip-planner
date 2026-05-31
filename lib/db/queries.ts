@@ -502,6 +502,53 @@ export async function createItineraryFromLLMOutput(
 }
 
 // ---------------------------------------------------------------------------
+// Change Log — write helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Appends a single entry to the change_log table for a trip.
+ *
+ * RLS-safe: the Supabase client carries the authenticated session and the
+ * change_log RLS policies gate on trip ownership/collaboration.
+ *
+ * @param client  - Authenticated Supabase server client
+ * @param tripId  - UUID of the trip
+ * @param actorId - Supabase auth user_id of the actor
+ * @param changeType - Discriminant matching the ChangeType union
+ * @param summary - Human-readable single-sentence description
+ * @param before  - Snapshot of affected fields before the change (or null)
+ * @param after   - Snapshot of affected fields after the change (or null)
+ * @param metadata - Any extra structured metadata (or null)
+ */
+export async function appendChangeLogEntry(
+  client: SupabaseClient,
+  tripId: string,
+  actorId: string,
+  changeType: ChangeLogEntry["change_type"],
+  summary: string,
+  before: Record<string, unknown> | null = null,
+  after: Record<string, unknown> | null = null,
+  metadata: Record<string, unknown> | null = null
+): Promise<ChangeLogEntry> {
+  const { data, error } = await client
+    .from("change_log")
+    .insert({
+      trip_id: tripId,
+      user_id: actorId,
+      change_type: changeType,
+      summary,
+      before_snapshot: before,
+      after_snapshot: after,
+      metadata,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as ChangeLogEntry;
+}
+
+// ---------------------------------------------------------------------------
 // TODO (M1+): upsertPreferenceProfile, createPlaceReview,
-//             appendChangeLogEntry, createTripInvite, acceptTripInvite
+//             createTripInvite, acceptTripInvite
 // ---------------------------------------------------------------------------
