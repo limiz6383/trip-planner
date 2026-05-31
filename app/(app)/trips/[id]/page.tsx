@@ -1,11 +1,18 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/db/server";
-import { getTripById, getTripBrief, getCurrentItinerary } from "@/lib/db/queries";
+import {
+  getTripById,
+  getTripBrief,
+  getCurrentItinerary,
+  getDaysForItinerary,
+  getActivitiesForDay,
+} from "@/lib/db/queries";
 import { requireUser } from "@/lib/auth";
 import { ConsultingSession } from "@/components/consulting/ConsultingSession";
 import { ItineraryView } from "@/components/itinerary/ItineraryView";
-import type { Trip, TripBrief, Itinerary } from "@/lib/types";
+import { GenerateItineraryButton } from "@/components/itinerary/GenerateItineraryButton";
+import type { Trip, TripBrief, Itinerary, ItineraryDay, Activity } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -78,7 +85,7 @@ export default async function TripDetailPage({
 
   let trip: Trip | null = null;
   let brief: TripBrief | null = null;
-  let itinerary: Itinerary | null = null;
+  let itinerary: (Itinerary & { days: (ItineraryDay & { activities: Activity[] })[] }) | null = null;
 
   try {
     trip = await getTripById(supabase, id);
@@ -90,12 +97,25 @@ export default async function TripDetailPage({
     notFound();
   }
 
-  // Load brief and itinerary in parallel; errors are non-fatal (Wave B fills in data)
+  // Load brief and itinerary header in parallel; errors are non-fatal
   try {
-    [brief, itinerary] = await Promise.all([
+    let itineraryHeader: Itinerary | null = null;
+    [brief, itineraryHeader] = await Promise.all([
       getTripBrief(supabase, id),
       getCurrentItinerary(supabase, id),
     ]);
+
+    // If an itinerary exists, hydrate its days and activities
+    if (itineraryHeader) {
+      const days = await getDaysForItinerary(supabase, itineraryHeader.itinerary_id);
+      const hydratedDays = await Promise.all(
+        days.map(async (day) => {
+          const activities = await getActivitiesForDay(supabase, day.day_id);
+          return { ...day, activities };
+        })
+      );
+      itinerary = { ...itineraryHeader, days: hydratedDays };
+    }
   } catch {
     // Supabase not configured or RLS error — continue with nulls
   }
@@ -107,33 +127,43 @@ export default async function TripDetailPage({
     <div>
       <TripHeader trip={trip} />
 
-      {/*
-       * Feature area routing:
-       *
-       * 1. No brief yet → show ConsultingSession so the user can build one.
-       * 2. Brief exists but no itinerary → show ConsultingSession (Wave B will
-       *    transition to itinerary generation after the brief is complete) AND
-       *    a disabled itinerary placeholder.
-       * 3. Itinerary exists → show ItineraryView.
-       *
-       * ConsultingSession and ItineraryView are Wave B seams — prop contracts
-       * are defined; internals are stubs today.
-       */}
-
       <div className="flex flex-col gap-4">
-        {/* Always show consulting session until an itinerary exists */}
-        {!hasItinerary && (
+        {/*
+         * Three-state feature area routing:
+         *
+         * State 1 — No brief yet:
+         *   Show ConsultingSession so the user can build a trip brief.
+         *
+         * State 2 — Brief exists but no itinerary yet:
+         *   ConsultingSession is dismissed; show the "Generate my itinerary"
+         *   action. GenerateItineraryButton POSTs to /api/trips/[id]/itinerary
+         *   and calls router.refresh() on success so the server re-renders
+         *   into state 3.
+         *
+         * State 3 — Itinerary exists:
+         *   Show ItineraryView with the hydrated itinerary.
+         */}
+
+        {/* State 1: no brief — show consulting session */}
+        {!hasBrief && (
           <ConsultingSession tripId={trip.trip_id} />
         )}
 
-        {/* Show brief summary if consulting produced one but no itinerary yet */}
+        {/* State 2: brief done, no itinerary — show generate action */}
         {hasBrief && !hasItinerary && (
-          <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-            Trip brief collected — itinerary generation coming in Wave B.
+          <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-6">
+            <div className="mb-1 text-sm font-semibold text-indigo-900">
+              Trip brief complete
+            </div>
+            <p className="mb-4 text-sm text-indigo-700">
+              Your travel preferences are saved. Generate a personalised
+              day-by-day itinerary based on your brief.
+            </p>
+            <GenerateItineraryButton tripId={trip.trip_id} />
           </div>
         )}
 
-        {/* Show itinerary view once it exists */}
+        {/* State 3: itinerary exists — show full itinerary view */}
         {hasItinerary && itinerary && (
           <ItineraryView tripId={trip.trip_id} itinerary={itinerary} />
         )}

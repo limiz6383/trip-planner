@@ -23,6 +23,7 @@ import type {
   Itinerary,
   ItineraryDay,
   Activity,
+  LLMItinerary,
   CommunityPost,
   PlaceReview,
   PreferenceProfile,
@@ -399,7 +400,108 @@ export async function upsertTripBrief(
 }
 
 // ---------------------------------------------------------------------------
-// TODO (M1+): createItineraryFromLLMOutput, upsertPreferenceProfile,
-//             createPlaceReview, appendChangeLogEntry,
-//             createTripInvite, acceptTripInvite
+// Itinerary creation from LLM output
+// ---------------------------------------------------------------------------
+
+/**
+ * Persists a new itinerary (with versioning), its days, and activities from
+ * raw LLM output. Marks the new row as the current itinerary for the trip and
+ * clears is_current on any previous versions.
+ *
+ * All writes are RLS-safe: the server client carries the authenticated session,
+ * and the itineraries/itinerary_days/activities RLS policies gate on trip
+ * ownership or collaboration.
+ *
+ * Returns the fully hydrated Itinerary (with days and nested activities).
+ */
+export async function createItineraryFromLLMOutput(
+  client: SupabaseClient,
+  tripId: string,
+  llmItinerary: LLMItinerary
+): Promise<Itinerary & { days: (ItineraryDay & { activities: Activity[] })[] }> {
+  // --- 1. Determine the next version number ---
+  const existing = await getItinerariesForTrip(client, tripId);
+  const nextVersion = existing.length > 0
+    ? Math.max(...existing.map((i) => i.version)) + 1
+    : 1;
+
+  // --- 2. Clear is_current on previous versions ---
+  if (existing.length > 0) {
+    const { error: clearError } = await client
+      .from("itineraries")
+      .update({ is_current: false })
+      .eq("trip_id", tripId);
+    if (clearError) throw clearError;
+  }
+
+  // --- 3. Insert the new itinerary header row ---
+  const { data: itineraryRow, error: itineraryError } = await client
+    .from("itineraries")
+    .insert({
+      trip_id: tripId,
+      version: nextVersion,
+      is_current: true,
+      status: "proposed" as const,
+      proposed_reason: null,
+      total_cost_estimate: llmItinerary.total_cost_estimate ?? null,
+      notes: llmItinerary.notes ?? null,
+    })
+    .select()
+    .single();
+
+  if (itineraryError) throw itineraryError;
+  const itinerary = itineraryRow as Itinerary;
+
+  // --- 4. Insert days and activities, collecting hydrated results ---
+  const hydratedDays: (ItineraryDay & { activities: Activity[] })[] = [];
+
+  for (const llmDay of llmItinerary.days) {
+    const { data: dayRow, error: dayError } = await client
+      .from("itinerary_days")
+      .insert({
+        itinerary_id: itinerary.itinerary_id,
+        date: llmDay.date,
+        daily_cost: llmDay.daily_cost ?? null,
+        locked: false,
+      })
+      .select()
+      .single();
+
+    if (dayError) throw dayError;
+    const day = dayRow as ItineraryDay;
+
+    const hydratedActivities: Activity[] = [];
+
+    if (llmDay.activities && llmDay.activities.length > 0) {
+      const activityInserts = llmDay.activities.map((a) => ({
+        day_id: day.day_id,
+        name: a.name,
+        description: a.description ?? null,
+        estimated_time_hours: a.estimated_time_hours ?? null,
+        estimated_cost_usd: a.estimated_cost_usd ?? null,
+        place_name: a.place_name ?? null,
+        source_attribution: a.source_attribution ?? null,
+        activity_type: a.activity_type ?? null,
+        locked: false,
+      }));
+
+      const { data: activityRows, error: activityError } = await client
+        .from("activities")
+        .insert(activityInserts)
+        .select()
+        .order("created_at");
+
+      if (activityError) throw activityError;
+      hydratedActivities.push(...((activityRows as Activity[]) ?? []));
+    }
+
+    hydratedDays.push({ ...day, activities: hydratedActivities });
+  }
+
+  return { ...itinerary, days: hydratedDays };
+}
+
+// ---------------------------------------------------------------------------
+// TODO (M1+): upsertPreferenceProfile, createPlaceReview,
+//             appendChangeLogEntry, createTripInvite, acceptTripInvite
 // ---------------------------------------------------------------------------
