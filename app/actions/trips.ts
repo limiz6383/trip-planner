@@ -12,7 +12,7 @@ export async function createTripAction(
   formData: FormData
 ): Promise<TripActionState> {
   // Verify authentication (also redirects if not authed)
-  await requireUser();
+  const user = await requireUser();
 
   const title = String(formData.get("title") ?? "").trim();
   const destination = String(formData.get("destination") ?? "").trim();
@@ -36,6 +36,7 @@ export async function createTripAction(
       destination,
       start_date: startDate,
       end_date: endDate,
+      owner_id: user.id,
     });
   } catch (err) {
     const message =

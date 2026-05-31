@@ -76,7 +76,7 @@ export async function getTripById(
  */
 export async function createTrip(
   client: SupabaseClient,
-  input: Pick<Trip, "title" | "destination" | "start_date" | "end_date">
+  input: Pick<Trip, "title" | "destination" | "start_date" | "end_date" | "owner_id">
 ): Promise<Trip> {
   const { data, error } = await client
     .from("trips")
