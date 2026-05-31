@@ -1,0 +1,267 @@
+/**
+ * LLM Provider abstraction.
+ *
+ * All LLM calls are SERVER-SIDE ONLY. This module must never be imported
+ * by Client Components (it reads ANTHROPIC_API_KEY at call time).
+ *
+ * The LLMProvider interface makes the underlying model swappable: drop in
+ * a different implementation (OpenAI, Gemini, local Ollama) without touching
+ * the planner engine.
+ */
+
+import Anthropic from "@anthropic-ai/sdk";
+import type { LLMItinerary, LLMTripBrief, TripBrief, CommunityPost } from "@/lib/types";
+
+// ---------------------------------------------------------------------------
+// Interface
+// ---------------------------------------------------------------------------
+
+/**
+ * A single turn in a consulting conversation.
+ */
+export interface ConversationMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+/**
+ * Parameters for one consulting conversation turn (gathering trip intent).
+ */
+export interface ConsultingTurnParams {
+  /** Full conversation history so far */
+  history: ConversationMessage[];
+  /** The latest user message to respond to */
+  userMessage: string;
+  /** Partial trip brief assembled so far (may be empty on first turn) */
+  partialBrief: Partial<LLMTripBrief>;
+}
+
+/**
+ * Response from a consulting turn.
+ */
+export interface ConsultingTurnResult {
+  /** The assistant's response text */
+  assistantMessage: string;
+  /**
+   * Updated partial brief if the model extracted new structured fields.
+   * If the brief is complete (all required fields present) the planner
+   * engine can proceed to itinerary generation.
+   */
+  updatedBrief: Partial<LLMTripBrief>;
+  /** True when the model signals the brief is fully collected */
+  briefComplete: boolean;
+}
+
+/**
+ * Parameters for itinerary generation.
+ */
+export interface GenerateItineraryParams {
+  brief: TripBrief;
+  /** Community posts ranked and filtered by the retrieval pipeline */
+  rankedPosts: CommunityPost[];
+  /**
+   * Dates that are locked and must not be replanned.
+   * ISO date strings (YYYY-MM-DD).
+   */
+  lockedDates?: string[];
+}
+
+/**
+ * Provider interface — implement this to swap out the underlying model.
+ */
+export interface LLMProvider {
+  /**
+   * Handles one turn of the consulting conversation.
+   * Gathers trip intent and extracts structured TripBrief fields.
+   */
+  consultingTurn(params: ConsultingTurnParams): Promise<ConsultingTurnResult>;
+
+  /**
+   * Generates a full itinerary from a completed TripBrief + ranked posts.
+   */
+  generateItinerary(params: GenerateItineraryParams): Promise<LLMItinerary>;
+}
+
+// ---------------------------------------------------------------------------
+// Anthropic implementation
+// ---------------------------------------------------------------------------
+
+const MODEL = "claude-opus-4-5";
+
+/** System prompt for the consulting conversation phase */
+const CONSULTING_SYSTEM_PROMPT = `You are a knowledgeable travel planning assistant helping a user plan a trip.
+Your goal is to gather the following information through natural conversation:
+- Destination
+- Travel dates (start and end)
+- Daily budget in USD
+- Travel vibe / keywords (e.g. "relaxing", "foodie", "adventure")
+- Party composition (number of adults, children, infants)
+- Local vs touristy preference (on a scale from 0.0 very local to 1.0 very touristy)
+- Dietary constraints (if any)
+- Accessibility needs (if any)
+- Travel pace (relaxed, moderate, or fast)
+
+Ask one or two questions at a time — keep it conversational.
+When you have enough information to fill all fields, respond with a final summary and include a JSON block like:
+
+\`\`\`json
+{
+  "brief_complete": true,
+  "brief": {
+    "destination": "...",
+    "start_date": "YYYY-MM-DD",
+    "end_date": "YYYY-MM-DD",
+    "daily_budget_usd": 100,
+    "vibe_keywords": ["..."],
+    "party_composition": { "adults": 2 },
+    "local_touristy_dial": 0.4,
+    "dietary_constraints": [],
+    "accessibility_needs": [],
+    "pace": "moderate"
+  }
+}
+\`\`\`
+
+If you don't have enough information yet, omit the JSON block and keep asking.`;
+
+/** System prompt for the itinerary generation phase */
+const ITINERARY_SYSTEM_PROMPT = `You are an expert travel itinerary planner.
+You will receive a trip brief and a set of community-sourced place recommendations.
+Generate a detailed day-by-day itinerary that:
+1. Respects the budget, pace, and preferences in the brief
+2. Prioritises places from the community posts, especially those matching the local/touristy dial
+3. Produces a realistic schedule with appropriate timing and logical geography
+4. Estimates costs for each activity
+
+Respond ONLY with valid JSON matching this exact shape:
+{
+  "destination": "string",
+  "start_date": "YYYY-MM-DD",
+  "end_date": "YYYY-MM-DD",
+  "total_cost_estimate": 0,
+  "notes": "string",
+  "days": [
+    {
+      "date": "YYYY-MM-DD",
+      "daily_cost": 0,
+      "activities": [
+        {
+          "name": "string",
+          "description": "string",
+          "estimated_time_hours": 1.5,
+          "estimated_cost_usd": 20,
+          "place_name": "string",
+          "source_attribution": "string or empty",
+          "activity_type": "food|culture|outdoor|shopping|transport|accommodation|entertainment|other"
+        }
+      ]
+    }
+  ]
+}`;
+
+export class AnthropicProvider implements LLMProvider {
+  private getClient(): Anthropic {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      throw new Error(
+        "ANTHROPIC_API_KEY is not set. Add it to .env.local."
+      );
+    }
+    return new Anthropic({ apiKey });
+  }
+
+  async consultingTurn(
+    params: ConsultingTurnParams
+  ): Promise<ConsultingTurnResult> {
+    const client = this.getClient();
+
+    const messages: Anthropic.MessageParam[] = [
+      ...params.history.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      })),
+      { role: "user", content: params.userMessage },
+    ];
+
+    const response = await client.messages.create({
+      model: MODEL,
+      max_tokens: 1024,
+      system: CONSULTING_SYSTEM_PROMPT,
+      messages,
+    });
+
+    const assistantMessage =
+      response.content
+        .filter((block): block is Anthropic.TextBlock => block.type === "text")
+        .map((block) => block.text)
+        .join("") ?? "";
+
+    // Try to extract the structured brief from a ```json block
+    let updatedBrief = params.partialBrief;
+    let briefComplete = false;
+
+    const jsonMatch = assistantMessage.match(/```json\s*([\s\S]*?)```/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[1]) as {
+          brief_complete?: boolean;
+          brief?: Partial<LLMTripBrief>;
+        };
+        if (parsed.brief) {
+          updatedBrief = { ...params.partialBrief, ...parsed.brief };
+        }
+        briefComplete = parsed.brief_complete === true;
+      } catch {
+        // Malformed JSON in the response — keep the partial brief as-is
+      }
+    }
+
+    return { assistantMessage, updatedBrief, briefComplete };
+  }
+
+  async generateItinerary(
+    params: GenerateItineraryParams
+  ): Promise<LLMItinerary> {
+    const client = this.getClient();
+
+    const userContent = JSON.stringify({
+      brief: params.brief,
+      community_posts: params.rankedPosts.slice(0, 30), // cap context size
+      locked_dates: params.lockedDates ?? [],
+    });
+
+    const response = await client.messages.create({
+      model: MODEL,
+      max_tokens: 4096,
+      system: ITINERARY_SYSTEM_PROMPT,
+      messages: [{ role: "user", content: userContent }],
+    });
+
+    const raw =
+      response.content
+        .filter((block): block is Anthropic.TextBlock => block.type === "text")
+        .map((block) => block.text)
+        .join("") ?? "";
+
+    // Strip optional markdown fences before parsing
+    const jsonStr = raw.replace(/^```json\s*|```\s*$/g, "").trim();
+
+    let itinerary: LLMItinerary;
+    try {
+      itinerary = JSON.parse(jsonStr) as LLMItinerary;
+    } catch (err) {
+      throw new Error(
+        `LLM returned invalid JSON for itinerary. Raw response:\n${raw}\nParse error: ${err}`
+      );
+    }
+
+    return itinerary;
+  }
+}
+
+/**
+ * Default provider singleton.
+ * The planner engine imports this rather than instantiating directly,
+ * making it easy to swap providers in tests.
+ */
+export const defaultProvider: LLMProvider = new AnthropicProvider();
