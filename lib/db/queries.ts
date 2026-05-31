@@ -352,7 +352,54 @@ export async function getTripInviteByToken(
 }
 
 // ---------------------------------------------------------------------------
-// TODO (M1): upsertTripBrief, createItineraryFromLLMOutput,
-//            upsertPreferenceProfile, createPlaceReview,
-//            appendChangeLogEntry, createTripInvite, acceptTripInvite
+// Trip Briefs — upsert
+// ---------------------------------------------------------------------------
+
+/**
+ * Insert or update the trip_brief row for a given trip.
+ *
+ * Strategy: trip_briefs has a unique constraint on trip_id (one brief per
+ * trip). We attempt an insert; on conflict we update every mutable column.
+ * The RLS policy ensures the authenticated user can only write briefs for
+ * trips they own or collaborate on.
+ *
+ * Returns the persisted TripBrief row.
+ */
+export async function upsertTripBrief(
+  client: SupabaseClient,
+  tripId: string,
+  input: Omit<TripBrief, "brief_id" | "trip_id" | "created_at" | "updated_at">
+): Promise<TripBrief> {
+  const { data, error } = await client
+    .from("trip_briefs")
+    .upsert(
+      {
+        trip_id: tripId,
+        destination: input.destination,
+        start_date: input.start_date,
+        end_date: input.end_date,
+        daily_budget_usd: input.daily_budget_usd,
+        vibe_keywords: input.vibe_keywords,
+        party_composition: input.party_composition,
+        local_touristy_dial: input.local_touristy_dial,
+        dietary_constraints: input.dietary_constraints,
+        accessibility_needs: input.accessibility_needs,
+        pace: input.pace,
+      },
+      {
+        onConflict: "trip_id",
+        ignoreDuplicates: false,
+      }
+    )
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as TripBrief;
+}
+
+// ---------------------------------------------------------------------------
+// TODO (M1+): createItineraryFromLLMOutput, upsertPreferenceProfile,
+//             createPlaceReview, appendChangeLogEntry,
+//             createTripInvite, acceptTripInvite
 // ---------------------------------------------------------------------------
