@@ -354,8 +354,20 @@ RETURNS BOOLEAN LANGUAGE sql SECURITY DEFINER STABLE AS $$
 $$;
 
 -- ---- trips ----
-CREATE POLICY trips_select ON trips FOR SELECT USING (is_trip_member(trip_id));
-CREATE POLICY trips_insert ON trips FOR INSERT WITH CHECK (owner_id = auth.uid());
+-- NOTE: the SELECT policy evaluates owner_id directly on the row (rather than
+-- via is_trip_member(), which re-queries trips). is_trip_member is STABLE and
+-- cannot see a just-inserted row in its snapshot, which broke INSERT ...
+-- RETURNING (the app's .insert().select()) on this self-referential table.
+CREATE POLICY trips_select ON trips FOR SELECT USING (
+  owner_id = (select auth.uid())
+  OR EXISTS (
+    SELECT 1 FROM trip_collaborators tc
+    WHERE tc.trip_id = trips.trip_id
+      AND tc.user_id = (select auth.uid())
+      AND tc.accepted_at IS NOT NULL
+  )
+);
+CREATE POLICY trips_insert ON trips FOR INSERT TO authenticated WITH CHECK ((select auth.uid()) = owner_id);
 CREATE POLICY trips_update ON trips FOR UPDATE USING (is_trip_member(trip_id));
 CREATE POLICY trips_delete ON trips FOR DELETE USING (owner_id = auth.uid());
 

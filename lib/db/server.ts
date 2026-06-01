@@ -27,7 +27,7 @@ export async function createSupabaseServerClient() {
 
   const cookieStore = await cookies();
 
-  return createServerClient(supabaseUrl, supabaseAnonKey, {
+  const client = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
       getAll() {
         return cookieStore.getAll();
@@ -46,6 +46,16 @@ export async function createSupabaseServerClient() {
       },
     },
   });
+
+  // Hydrate the auth session from cookies before returning. supabase-js loads
+  // the session asynchronously on client init; if a DB query is issued on a
+  // fresh client before that completes, the request goes out as the anon role
+  // (auth.uid() is null) and trips RLS — e.g. "new row violates row-level
+  // security policy". Awaiting getUser() here forces session hydration so every
+  // client returned by this helper carries the user's access token.
+  await client.auth.getUser();
+
+  return client;
 }
 
 /**

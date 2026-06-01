@@ -39,8 +39,16 @@ export async function createTripAction(
       owner_id: user.id,
     });
   } catch (err) {
+    // Supabase/Postgrest errors are plain objects, not Error instances —
+    // log the full shape so the real cause (RLS, constraint, etc.) is visible.
+    console.error("createTrip failed:", JSON.stringify(err, null, 2));
     const message =
-      err instanceof Error ? err.message : "Failed to create trip.";
+      err && typeof err === "object" && "message" in err &&
+      typeof (err as { message?: unknown }).message === "string"
+        ? (err as { message: string }).message
+        : err instanceof Error
+          ? err.message
+          : "Failed to create trip.";
     return { error: message };
   }
 
