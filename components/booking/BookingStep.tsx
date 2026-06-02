@@ -18,6 +18,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { BookingForm } from "@/components/booking/BookingForm";
+import { ItineraryGeneratingOverlay } from "@/components/itinerary/ItineraryGeneratingOverlay";
 import type { Booking } from "@/lib/types";
 import type {
   GenerateItineraryResponseBody,
@@ -62,17 +63,10 @@ export function BookingStep({ tripId, initialBooking }: BookingStepProps) {
   }
 
   // Shown while generation is running (covers both the "save+generate" and
-  // "skip" paths). BookingForm is replaced so the user can't submit twice.
+  // "skip" paths). Replaced by the prominent overlay so the user cannot
+  // submit twice and gets clear progress feedback.
   if (generating) {
-    return (
-      <div className="flex items-center gap-3 py-4">
-        <span
-          className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-300 border-t-indigo-600"
-          aria-hidden="true"
-        />
-        <span className="text-sm text-indigo-700">Generating your itinerary…</span>
-      </div>
-    );
+    return <ItineraryGeneratingOverlay />;
   }
 
   return (

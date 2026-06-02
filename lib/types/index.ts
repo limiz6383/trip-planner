@@ -25,6 +25,7 @@ export interface Trip {
   start_date: string; // ISO date string YYYY-MM-DD
   end_date: string;
   status: TripStatus;
+  archived: boolean;
   created_at: string;
   updated_at: string;
 }

@@ -9,11 +9,16 @@
  *
  * Manages its own loading + error state so the parent page (server component)
  * stays simple.
+ *
+ * While the request is in-flight the button is replaced by a prominent centered
+ * loading panel so the user can see clearly that work is happening (generation
+ * takes 10-20 seconds).
  */
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
+import { ItineraryGeneratingOverlay } from "@/components/itinerary/ItineraryGeneratingOverlay";
 import type {
   GenerateItineraryResponseBody,
   GenerateItineraryErrorBody,
@@ -56,6 +61,13 @@ export function GenerateItineraryButton({
     }
   }
 
+  // Replace the button entirely with the prominent loading panel while
+  // generation is running so the user cannot trigger a second request and
+  // receives clear progress feedback.
+  if (loading) {
+    return <ItineraryGeneratingOverlay />;
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <Button
@@ -65,7 +77,7 @@ export function GenerateItineraryButton({
         onClick={handleGenerate}
         className="w-full sm:w-auto"
       >
-        {loading ? "Generating itinerary..." : "Generate my itinerary"}
+        Generate my itinerary
       </Button>
 
       {error && (

@@ -103,6 +103,9 @@ export interface LLMProvider {
 // ---------------------------------------------------------------------------
 
 const MODEL = "claude-opus-4-5";
+// Itinerary generation emits a large JSON payload; Opus can take ~30s for that.
+// Sonnet is markedly faster and more than capable for structured itineraries.
+const ITINERARY_MODEL = "claude-sonnet-4-5";
 
 /** System prompt for the consulting conversation phase */
 const CONSULTING_SYSTEM_PROMPT = `You are a knowledgeable travel planning assistant helping a user plan a trip.
@@ -154,6 +157,8 @@ Generate a detailed day-by-day itinerary that:
 2. Prioritises places from the community posts, especially those matching the local/touristy dial
 3. Produces a realistic schedule with appropriate timing and logical geography
 4. Estimates costs for each activity
+5. Includes 3-4 activities per day MAXIMUM — favor realistic pacing and quality over packing the day
+6. Keeps each activity "description" to ONE short sentence (the goal is a fast, scannable plan, not an essay)
 
 BOOKING CONSTRAINTS — apply these rules when a booking object is provided:
 
@@ -321,7 +326,7 @@ export class AnthropicProvider implements LLMProvider {
     });
 
     const response = await client.messages.create({
-      model: MODEL,
+      model: ITINERARY_MODEL,
       max_tokens: 8192,
       system: ITINERARY_SYSTEM_PROMPT,
       // Prefill the assistant turn with "{" so Claude returns raw JSON without a
@@ -357,6 +362,20 @@ export class AnthropicProvider implements LLMProvider {
       throw new Error(
         `LLM returned invalid JSON for itinerary. Raw response:\n${raw}\nParse error: ${err}`
       );
+    }
+
+    // Hard cap: the model tends to overshoot the per-day limit even when the
+    // prompt asks for 3-4. Enforce it so the plan stays concise and scannable.
+    const MAX_ACTIVITIES_PER_DAY = 4;
+    if (Array.isArray(itinerary.days)) {
+      for (const day of itinerary.days) {
+        if (
+          Array.isArray(day.activities) &&
+          day.activities.length > MAX_ACTIVITIES_PER_DAY
+        ) {
+          day.activities = day.activities.slice(0, MAX_ACTIVITIES_PER_DAY);
+        }
+      }
     }
 
     return itinerary;

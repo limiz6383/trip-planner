@@ -1,8 +1,9 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/db/server";
-import { createTrip } from "@/lib/db/queries";
+import { createTrip, setTripArchived, deleteTrip } from "@/lib/db/queries";
 import { requireUser } from "@/lib/auth";
 
 export type TripActionState = { error?: string } | undefined;
@@ -53,4 +54,83 @@ export async function createTripAction(
   }
 
   redirect(`/trips/${trip.trip_id}`);
+}
+
+// ---------------------------------------------------------------------------
+// Archive / Unarchive
+// ---------------------------------------------------------------------------
+
+export type TripMutationState = { error?: string } | undefined;
+
+async function setArchived(
+  tripId: string,
+  archived: boolean
+): Promise<TripMutationState> {
+  await requireUser();
+
+  if (!tripId) return { error: "Trip ID is required." };
+
+  const supabase = await createSupabaseServerClient();
+
+  try {
+    await setTripArchived(supabase, tripId, archived);
+  } catch (err) {
+    console.error("setTripArchived failed:", JSON.stringify(err, null, 2));
+    const message =
+      err && typeof err === "object" && "message" in err &&
+      typeof (err as { message?: unknown }).message === "string"
+        ? (err as { message: string }).message
+        : err instanceof Error
+          ? err.message
+          : "Failed to update trip.";
+    return { error: message };
+  }
+
+  revalidatePath("/dashboard");
+}
+
+export async function archiveTripAction(
+  _prevState: TripMutationState,
+  formData: FormData
+): Promise<TripMutationState> {
+  return setArchived(String(formData.get("trip_id") ?? "").trim(), true);
+}
+
+export async function unarchiveTripAction(
+  _prevState: TripMutationState,
+  formData: FormData
+): Promise<TripMutationState> {
+  return setArchived(String(formData.get("trip_id") ?? "").trim(), false);
+}
+
+// ---------------------------------------------------------------------------
+// Delete (permanent)
+// ---------------------------------------------------------------------------
+
+export async function deleteTripAction(
+  _prevState: TripMutationState,
+  formData: FormData
+): Promise<TripMutationState> {
+  await requireUser();
+
+  const tripId = String(formData.get("trip_id") ?? "").trim();
+  if (!tripId) return { error: "Trip ID is required." };
+
+  const supabase = await createSupabaseServerClient();
+
+  try {
+    await deleteTrip(supabase, tripId);
+  } catch (err) {
+    console.error("deleteTrip failed:", JSON.stringify(err, null, 2));
+    const message =
+      err && typeof err === "object" && "message" in err &&
+      typeof (err as { message?: unknown }).message === "string"
+        ? (err as { message: string }).message
+        : err instanceof Error
+          ? err.message
+          : "Failed to delete trip.";
+    return { error: message };
+  }
+
+  revalidatePath("/dashboard");
 }

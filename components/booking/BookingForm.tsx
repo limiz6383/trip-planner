@@ -271,10 +271,24 @@ export interface BookingFormProps {
   tripId: string;
   /** Pre-fill from an existing booking record, if one exists. */
   initialBooking?: Booking | null;
-  /** Called after booking is saved AND itinerary generation should proceed. */
-  onSaveAndGenerate: () => void;
-  /** Called when the user wants to skip booking entry and generate directly. */
-  onSkip: () => void;
+  /**
+   * Called after booking is saved AND itinerary generation should proceed.
+   * Required when used in State 2 (pre-itinerary).
+   * Omit when used in State 3 (post-itinerary) — use onSaveOnly instead.
+   */
+  onSaveAndGenerate?: () => void;
+  /**
+   * Called when the user wants to skip booking entry and generate directly.
+   * Required when used in State 2 (pre-itinerary).
+   */
+  onSkip?: () => void;
+  /**
+   * Called after booking is saved without triggering generation.
+   * Used in State 3 (post-itinerary) where the user may save without
+   * regenerating. When provided, renders a "Save bookings" primary action
+   * instead of "Save & generate itinerary".
+   */
+  onSaveOnly?: () => void;
 }
 
 export function BookingForm({
@@ -282,6 +296,7 @@ export function BookingForm({
   initialBooking,
   onSaveAndGenerate,
   onSkip,
+  onSaveOnly,
 }: BookingFormProps) {
   // Flight fields
   const [flightArrivalDate, setFlightArrivalDate] = useState(
@@ -373,8 +388,18 @@ export function BookingForm({
 
   async function handleSaveAndGenerate() {
     const ok = await saveBooking();
-    if (ok) onSaveAndGenerate();
+    if (ok) onSaveAndGenerate?.();
   }
+
+  async function handleSaveOnly() {
+    const ok = await saveBooking();
+    if (ok) onSaveOnly?.();
+  }
+
+  // Determine which action mode is active:
+  //   "generate" — State 2 (pre-itinerary): show "Save & generate" + "Skip"
+  //   "save"     — State 3 (post-itinerary): show "Save bookings" only
+  const mode: "generate" | "save" = onSaveOnly ? "save" : "generate";
 
   return (
     <div className="flex flex-col gap-6">
@@ -465,25 +490,39 @@ export function BookingForm({
 
       {/* ---- Actions ---- */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <Button
-          variant="primary"
-          size="lg"
-          loading={saving}
-          onClick={handleSaveAndGenerate}
-          className="w-full sm:w-auto"
-        >
-          {saving ? "Saving…" : "Save & generate itinerary"}
-        </Button>
+        {mode === "generate" ? (
+          <>
+            <Button
+              variant="primary"
+              size="lg"
+              loading={saving}
+              onClick={handleSaveAndGenerate}
+              className="w-full sm:w-auto"
+            >
+              {saving ? "Saving…" : "Save & generate itinerary"}
+            </Button>
 
-        <Button
-          variant="ghost"
-          size="lg"
-          disabled={saving}
-          onClick={onSkip}
-          className="w-full sm:w-auto text-zinc-500"
-        >
-          Skip — generate without bookings
-        </Button>
+            <Button
+              variant="ghost"
+              size="lg"
+              disabled={saving}
+              onClick={onSkip}
+              className="w-full sm:w-auto text-zinc-500"
+            >
+              Skip — generate without bookings
+            </Button>
+          </>
+        ) : (
+          <Button
+            variant="primary"
+            size="lg"
+            loading={saving}
+            onClick={handleSaveOnly}
+            className="w-full sm:w-auto"
+          >
+            {saving ? "Saving…" : "Save bookings"}
+          </Button>
+        )}
       </div>
     </div>
   );
