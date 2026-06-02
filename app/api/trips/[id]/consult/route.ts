@@ -28,6 +28,8 @@ import { getUser } from "@/lib/auth";
 import { defaultProvider } from "@/lib/llm/provider";
 import type { ConversationMessage } from "@/lib/llm/provider";
 import type { LLMTripBrief } from "@/lib/types";
+import { createSupabaseServerClient } from "@/lib/db/server";
+import { getTripById } from "@/lib/db/queries";
 
 // ---- request / response shapes (exported so the client component can import) ----
 
@@ -98,16 +100,50 @@ export async function POST(
     );
   }
 
+  // Fetch the trip row so the consultant always knows the destination and dates
+  // the user already entered on the create-trip form.
+  let knownTrip: { destination: string; start_date: string; end_date: string };
+  try {
+    const supabase = await createSupabaseServerClient();
+    const trip = await getTripById(supabase, tripId);
+    if (!trip) {
+      return Response.json({ error: "Trip not found" }, { status: 404 });
+    }
+    knownTrip = {
+      destination: trip.destination,
+      start_date: trip.start_date,
+      end_date: trip.end_date,
+    };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Failed to load trip.";
+    return Response.json({ error: message }, { status: 500 });
+  }
+
   try {
     const result = await defaultProvider.consultingTurn({
       history,
       userMessage,
-      partialBrief: partialBrief ?? {},
+      // Always seed the incoming partialBrief with the known trip facts so the
+      // consultant never starts from a blank destination/dates.
+      partialBrief: {
+        destination: knownTrip.destination,
+        start_date: knownTrip.start_date,
+        end_date: knownTrip.end_date,
+        ...(partialBrief ?? {}),
+      },
+      knownTrip,
     });
 
     const responseBody: ConsultResponseBody = {
       assistantMessage: result.assistantMessage,
-      partialBrief: result.updatedBrief,
+      // Ensure destination/dates are always present in the response brief.
+      partialBrief: {
+        destination: knownTrip.destination,
+        start_date: knownTrip.start_date,
+        end_date: knownTrip.end_date,
+        ...result.updatedBrief,
+      },
       briefComplete: result.briefComplete,
     };
 

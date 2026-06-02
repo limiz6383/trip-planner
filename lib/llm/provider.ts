@@ -34,6 +34,15 @@ export interface ConsultingTurnParams {
   userMessage: string;
   /** Partial trip brief assembled so far (may be empty on first turn) */
   partialBrief: Partial<LLMTripBrief>;
+  /**
+   * Trip facts already known from the trip row (entered on the create-trip
+   * form). The consultant must NEVER re-ask for these.
+   */
+  knownTrip: {
+    destination: string;
+    start_date: string;
+    end_date: string;
+  };
 }
 
 /**
@@ -90,9 +99,10 @@ const MODEL = "claude-opus-4-5";
 
 /** System prompt for the consulting conversation phase */
 const CONSULTING_SYSTEM_PROMPT = `You are a knowledgeable travel planning assistant helping a user plan a trip.
-Your goal is to gather the following information through natural conversation:
-- Destination
-- Travel dates (start and end)
+
+IMPORTANT — destination and travel dates are ALREADY KNOWN. You must NEVER ask about them. They will be provided to you at the start of every turn in a context block. Your opening message must naturally reference the destination and the number of days (e.g. "Let's plan your 4-day trip to Tokyo!").
+
+Your goal is to gather ONLY the following remaining fields through natural conversation (do not gather destination, start_date, or end_date — those are already set):
 - Daily budget in USD
 - Travel vibe / keywords (e.g. "relaxing", "foodie", "adventure")
 - Party composition (number of adults, children, infants)
@@ -100,6 +110,8 @@ Your goal is to gather the following information through natural conversation:
 - Dietary constraints (if any)
 - Accessibility needs (if any)
 - Travel pace (relaxed, moderate, or fast)
+
+Tailor your questions and suggestions to the trip length you are given. For example, a 3-day trip needs a tighter itinerary than a 14-day trip.
 
 Ask one or two questions at a time — keep it conversational.
 When you have enough information to fill all fields, respond with a final summary and include a JSON block like:
@@ -121,6 +133,8 @@ When you have enough information to fill all fields, respond with a final summar
   }
 }
 \`\`\`
+
+Always populate destination, start_date, and end_date in the brief JSON from the known trip facts — never leave them blank or ask the user to re-enter them.
 
 If you don't have enough information yet, omit the JSON block and keep asking.`;
 
@@ -175,11 +189,47 @@ export class AnthropicProvider implements LLMProvider {
   ): Promise<ConsultingTurnResult> {
     const client = this.getClient();
 
-    const messages: Anthropic.MessageParam[] = [
-      ...params.history.map((m) => ({
+    // Compute trip length in days so the model can tailor its questions.
+    const msPerDay = 1000 * 60 * 60 * 24;
+    const startMs = new Date(params.knownTrip.start_date).getTime();
+    const endMs = new Date(params.knownTrip.end_date).getTime();
+    const tripDays = Math.round((endMs - startMs) / msPerDay) + 1;
+
+    // Build a per-turn context block injected as the first user message so the
+    // model always has the known trip facts and the current partial brief.
+    const knownFactsBlock = [
+      "--- TRIP CONTEXT (already known — do not ask about these) ---",
+      `Destination: ${params.knownTrip.destination}`,
+      `Start date: ${params.knownTrip.start_date}`,
+      `End date: ${params.knownTrip.end_date}`,
+      `Trip length: ${tripDays} day${tripDays !== 1 ? "s" : ""}`,
+      "",
+      "Current partial brief (fields gathered so far):",
+      JSON.stringify(
+        {
+          ...params.knownTrip,
+          ...params.partialBrief,
+        },
+        null,
+        2
+      ),
+      "--- END TRIP CONTEXT ---",
+    ].join("\n");
+
+    // Prepend the context block to the conversation. If there is no history yet
+    // this becomes the sole user turn; otherwise it is injected before the
+    // existing history so the model always sees it at position 0.
+    const historyMessages: Anthropic.MessageParam[] = params.history.map(
+      (m) => ({
         role: m.role as "user" | "assistant",
         content: m.content,
-      })),
+      })
+    );
+
+    const messages: Anthropic.MessageParam[] = [
+      { role: "user", content: knownFactsBlock },
+      { role: "assistant", content: "Understood. I have the trip context." },
+      ...historyMessages,
       { role: "user", content: params.userMessage },
     ];
 
@@ -196,8 +246,15 @@ export class AnthropicProvider implements LLMProvider {
         .map((block) => block.text)
         .join("") ?? "";
 
+    // Always seed the brief with the known trip facts so they are never lost.
+    const knownFields: Pick<LLMTripBrief, "destination" | "start_date" | "end_date"> = {
+      destination: params.knownTrip.destination,
+      start_date: params.knownTrip.start_date,
+      end_date: params.knownTrip.end_date,
+    };
+
     // Try to extract the structured brief from a ```json block
-    let updatedBrief = params.partialBrief;
+    let updatedBrief: Partial<LLMTripBrief> = { ...knownFields, ...params.partialBrief };
     let briefComplete = false;
 
     const jsonMatch = assistantMessage.match(/```json\s*([\s\S]*?)```/);
@@ -208,7 +265,9 @@ export class AnthropicProvider implements LLMProvider {
           brief?: Partial<LLMTripBrief>;
         };
         if (parsed.brief) {
-          updatedBrief = { ...params.partialBrief, ...parsed.brief };
+          // Merge: known facts take precedence over whatever the LLM emits for
+          // destination/dates to prevent the model from accidentally changing them.
+          updatedBrief = { ...params.partialBrief, ...parsed.brief, ...knownFields };
         }
         briefComplete = parsed.brief_complete === true;
       } catch {

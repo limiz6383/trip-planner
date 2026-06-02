@@ -17,7 +17,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
 import type { LLMTripBrief } from "@/lib/types";
 import type { ConversationMessage } from "@/lib/llm/provider";
 import type {
@@ -238,12 +237,33 @@ export function ConsultingSession({
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Scroll to bottom whenever history or loading state changes
+  // Queued sending: the user can keep typing/sending while a turn is in flight.
+  // queueRef is the authoritative FIFO of un-started messages; queueView mirrors
+  // it for rendering. Refs hold the latest history/brief/phase so the async
+  // processor reads current values without stale closures.
+  const [queueView, setQueueView] = useState<string[]>([]);
+  const queueRef = useRef<string[]>([]);
+  const processingRef = useRef(false);
+  const historyRef = useRef(history);
+  historyRef.current = history;
+  const briefRef = useRef(partialBrief);
+  briefRef.current = partialBrief;
+  const phaseRef = useRef<Phase>(phase);
+  phaseRef.current = phase;
+
+  // Scroll to bottom whenever the conversation, queue, or loading state changes
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [history, isLoading]);
+  }, [history, isLoading, queueView]);
+
+  // Reset textarea height when the input is cleared (e.g. after send)
+  useEffect(() => {
+    if (inputValue === "" && inputRef.current) {
+      inputRef.current.style.height = "auto";
+    }
+  }, [inputValue]);
 
   // Send the first greeting from the assistant when the component mounts
   const hasBootstrapped = useRef(false);
@@ -306,67 +326,97 @@ export function ConsultingSession({
     }
   }, [isLoading, phase]);
 
-  // Handle sending a user message
-  async function handleSend() {
-    const message = inputValue.trim();
-    if (!message || isLoading) return;
-
-    setInputValue("");
-    setError(null);
-
-    // Optimistically append the user message
-    const nextHistory: ConversationMessage[] = [
-      ...history,
-      { role: "user", content: message },
-    ];
-    setHistory(nextHistory);
-    setIsLoading(true);
-
+  // Drains the message queue one turn at a time. Safe to call repeatedly;
+  // a single instance runs at once (guarded by processingRef). New messages
+  // enqueued mid-flight are picked up because queueRef is read each iteration.
+  const processQueue = useCallback(async () => {
+    if (processingRef.current) return;
+    processingRef.current = true;
     try {
-      const reqBody: ConsultRequestBody = {
-        userMessage: message,
-        history: history, // history before the user message (server appends it)
-        partialBrief,
-      };
+      while (queueRef.current.length > 0 && phaseRef.current === "chat") {
+        // Move the next message from the queue into the conversation.
+        const message = queueRef.current[0];
+        queueRef.current = queueRef.current.slice(1);
+        setQueueView([...queueRef.current]);
+        setIsLoading(true);
 
-      const res = await fetch(`/api/trips/${tripId}/consult`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(reqBody),
-      });
+        const base = historyRef.current;
+        const optimistic: ConversationMessage[] = [
+          ...base,
+          { role: "user", content: message },
+        ];
+        setHistory(optimistic);
+        historyRef.current = optimistic;
 
-      if (!res.ok) {
-        const errData = (await res.json()) as { error?: string };
-        throw new Error(errData.error ?? `Server error ${res.status}`);
+        try {
+          const reqBody: ConsultRequestBody = {
+            userMessage: message,
+            history: base, // history before this message (server appends it)
+            partialBrief: briefRef.current,
+          };
+          const res = await fetch(`/api/trips/${tripId}/consult`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(reqBody),
+          });
+          if (!res.ok) {
+            const errData = (await res.json()) as { error?: string };
+            throw new Error(errData.error ?? `Server error ${res.status}`);
+          }
+          const data = (await res.json()) as ConsultResponseBody;
+
+          const withAssistant: ConversationMessage[] = [
+            ...optimistic,
+            { role: "assistant", content: data.assistantMessage },
+          ];
+          setHistory(withAssistant);
+          historyRef.current = withAssistant;
+          setPartialBrief(data.partialBrief);
+          briefRef.current = data.partialBrief;
+          setError(null);
+
+          if (data.briefComplete) {
+            setPhase("review");
+            phaseRef.current = "review";
+            break;
+          }
+        } catch (err) {
+          const msg =
+            err instanceof Error ? err.message : "Something went wrong.";
+          setError(msg);
+          // Roll back the optimistic message, restore it to the input, and drop
+          // any remaining queued messages so the user can retry deliberately.
+          setHistory(base);
+          historyRef.current = base;
+          setInputValue((v) => (v ? v : message));
+          queueRef.current = [];
+          setQueueView([]);
+          break;
+        }
       }
-
-      const data = (await res.json()) as ConsultResponseBody;
-
-      setHistory([
-        ...nextHistory,
-        { role: "assistant", content: data.assistantMessage },
-      ]);
-      setPartialBrief(data.partialBrief);
-
-      if (data.briefComplete) {
-        setPhase("review");
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Something went wrong.";
-      setError(msg);
-      // Roll back the optimistic user message so they can retry
-      setHistory(history);
-      setInputValue(message);
     } finally {
+      processingRef.current = false;
       setIsLoading(false);
     }
+  }, [tripId]);
+
+  // Enqueue a message and kick the processor. Never blocks on an in-flight turn.
+  function handleSend() {
+    const message = inputValue.trim();
+    if (!message) return;
+    setInputValue("");
+    setError(null);
+    queueRef.current = [...queueRef.current, message];
+    setQueueView([...queueRef.current]);
+    void processQueue();
   }
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       void handleSend();
     }
+    // Shift+Enter: allow default behaviour (inserts a newline into the textarea)
   }
 
   // Handle confirmation — persist the brief, then notify parent
@@ -555,6 +605,12 @@ export function ConsultingSession({
               {history.map((msg, idx) => (
                 <ChatBubble key={idx} message={msg} />
               ))}
+              {queueView.map((q, idx) => (
+                <ChatBubble
+                  key={`queued-${idx}`}
+                  message={{ role: "user", content: q }}
+                />
+              ))}
               {isLoading && <TypingIndicator />}
               {/* Error inline */}
               {error && (
@@ -583,22 +639,36 @@ export function ConsultingSession({
 
         {/* Input area */}
         <div className="border-t border-zinc-200 px-4 py-3">
-          <div className="flex items-center gap-2">
-            <Input
+          <div className="flex items-end gap-2">
+            <textarea
               ref={inputRef}
               placeholder="Type your message…"
               value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
+              rows={1}
+              onChange={(e) => {
+                setInputValue(e.target.value);
+                // Auto-grow: reset to auto first so shrinking works, then
+                // expand to scrollHeight up to a ~5-line cap (~120 px).
+                const el = e.target;
+                el.style.height = "auto";
+                el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+              }}
               onKeyDown={handleKeyDown}
-              disabled={isLoading}
-              className="flex-1"
               aria-label="Message"
+              className={[
+                "flex-1 resize-none overflow-y-auto rounded-lg border px-3 py-2.5",
+                "text-sm text-zinc-900 placeholder:text-zinc-400 leading-relaxed",
+                "focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent",
+                "disabled:bg-zinc-50 disabled:text-zinc-500 disabled:cursor-not-allowed",
+                "border-zinc-300 bg-white",
+              ].join(" ")}
+              style={{ minHeight: "42px", maxHeight: "120px" }}
             />
             <Button
               variant="primary"
               size="md"
-              disabled={isLoading || inputValue.trim() === ""}
-              onClick={() => void handleSend()}
+              disabled={inputValue.trim() === "" || history.length === 0}
+              onClick={handleSend}
               aria-label="Send"
             >
               <svg

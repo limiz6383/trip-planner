@@ -174,6 +174,21 @@ const STATUS_COLORS: Record<string, string> = {
   confirmed: "bg-green-100 text-green-700",
 };
 
+const STATUS_LABELS: Record<string, string> = {
+  planned: "Upcoming",
+  in_progress: "On trip",
+  completed: "Completed",
+};
+
+function getTripStatusLabel(status: string): string {
+  return (
+    STATUS_LABELS[status] ??
+    status
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase())
+  );
+}
+
 function StatusBadge({ status }: { status: string }) {
   return (
     <span
@@ -182,7 +197,7 @@ function StatusBadge({ status }: { status: string }) {
         STATUS_COLORS[status] ?? "bg-zinc-100 text-zinc-600",
       ].join(" ")}
     >
-      {status}
+      {getTripStatusLabel(status)}
     </span>
   );
 }
