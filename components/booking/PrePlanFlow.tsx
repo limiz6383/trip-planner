@@ -24,6 +24,7 @@
  */
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { BookingForm } from "@/components/booking/BookingForm";
 import { ConsultingSession } from "@/components/consulting/ConsultingSession";
 import type { Booking } from "@/lib/types";
@@ -49,10 +50,20 @@ export function PrePlanFlow({
   initialBooking,
   onBriefComplete,
 }: PrePlanFlowProps) {
+  const router = useRouter();
   const [stage, setStage] = useState<Stage>("logistics");
 
   function advanceToConsult() {
     setStage("consult");
+  }
+
+  // The trip page is a Server Component and can't hand us a refresh callback,
+  // so refresh the route ourselves when the brief is saved — this re-renders
+  // the page into the "generate itinerary" step instead of leaving the user
+  // stuck on the consulting "done" card.
+  function handleBriefComplete() {
+    onBriefComplete?.();
+    router.refresh();
   }
 
   // ---- Stage: logistics ----
@@ -85,7 +96,7 @@ export function PrePlanFlow({
   return (
     <ConsultingSession
       tripId={tripId}
-      onBriefComplete={onBriefComplete}
+      onBriefComplete={handleBriefComplete}
     />
   );
 }

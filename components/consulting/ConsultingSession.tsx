@@ -484,8 +484,7 @@ export function ConsultingSession({
           </div>
           <p className="text-sm font-semibold text-zinc-900">Trip brief saved!</p>
           <p className="max-w-xs text-xs text-zinc-500">
-            Your travel preferences have been saved. Itinerary generation is
-            coming soon.
+            Taking you to itinerary generation&hellip;
           </p>
         </div>
       </Card>
