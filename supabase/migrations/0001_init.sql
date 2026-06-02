@@ -96,7 +96,8 @@ CREATE TABLE bookings (
   accommodation_check_in    DATE,
   accommodation_check_out   DATE,
   created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (trip_id)
 );
 
 CREATE INDEX idx_bookings_trip_id ON bookings(trip_id);

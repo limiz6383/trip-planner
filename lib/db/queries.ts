@@ -400,6 +400,54 @@ export async function upsertTripBrief(
 }
 
 // ---------------------------------------------------------------------------
+// Bookings — upsert
+// ---------------------------------------------------------------------------
+
+/**
+ * Insert or update the booking row for a given trip.
+ *
+ * Strategy: bookings has a unique constraint on trip_id (one booking per trip).
+ * We attempt an insert; on conflict we update every mutable column.
+ * The RLS policy ensures the authenticated user can only write bookings for
+ * trips they own or collaborate on.
+ *
+ * All fields are optional/nullable — the user may have partial booking info.
+ * Returns the persisted Booking row.
+ */
+export async function upsertBooking(
+  client: SupabaseClient,
+  tripId: string,
+  input: Partial<Omit<Booking, "booking_id" | "trip_id" | "created_at" | "updated_at">>
+): Promise<Booking> {
+  const { data, error } = await client
+    .from("bookings")
+    .upsert(
+      {
+        trip_id: tripId,
+        flight_arrival_date: input.flight_arrival_date ?? null,
+        flight_arrival_time: input.flight_arrival_time ?? null,
+        flight_departure_date: input.flight_departure_date ?? null,
+        flight_departure_time: input.flight_departure_time ?? null,
+        accommodation_name: input.accommodation_name ?? null,
+        accommodation_neighborhood: input.accommodation_neighborhood ?? null,
+        accommodation_lat: input.accommodation_lat ?? null,
+        accommodation_lon: input.accommodation_lon ?? null,
+        accommodation_check_in: input.accommodation_check_in ?? null,
+        accommodation_check_out: input.accommodation_check_out ?? null,
+      },
+      {
+        onConflict: "trip_id",
+        ignoreDuplicates: false,
+      }
+    )
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as Booking;
+}
+
+// ---------------------------------------------------------------------------
 // Itinerary creation from LLM output
 // ---------------------------------------------------------------------------
 

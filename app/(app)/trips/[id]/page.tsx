@@ -7,12 +7,13 @@ import {
   getCurrentItinerary,
   getDaysForItinerary,
   getActivitiesForDay,
+  getBookingForTrip,
 } from "@/lib/db/queries";
 import { requireUser } from "@/lib/auth";
 import { ConsultingSession } from "@/components/consulting/ConsultingSession";
 import { ItineraryView } from "@/components/itinerary/ItineraryView";
-import { GenerateItineraryButton } from "@/components/itinerary/GenerateItineraryButton";
-import type { Trip, TripBrief, Itinerary, ItineraryDay, Activity } from "@/lib/types";
+import { BookingStep } from "@/components/booking/BookingStep";
+import type { Trip, TripBrief, Booking, Itinerary, ItineraryDay, Activity } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -97,6 +98,7 @@ export default async function TripDetailPage({
 
   let trip: Trip | null = null;
   let brief: TripBrief | null = null;
+  let booking: Booking | null = null;
   let itinerary: (Itinerary & { days: (ItineraryDay & { activities: Activity[] })[] }) | null = null;
 
   try {
@@ -109,11 +111,12 @@ export default async function TripDetailPage({
     notFound();
   }
 
-  // Load brief and itinerary header in parallel; errors are non-fatal
+  // Load brief, booking, and itinerary header in parallel; errors are non-fatal
   try {
     let itineraryHeader: Itinerary | null = null;
-    [brief, itineraryHeader] = await Promise.all([
+    [brief, booking, itineraryHeader] = await Promise.all([
       getTripBrief(supabase, id),
+      getBookingForTrip(supabase, id),
       getCurrentItinerary(supabase, id),
     ]);
 
@@ -147,10 +150,10 @@ export default async function TripDetailPage({
          *   Show ConsultingSession so the user can build a trip brief.
          *
          * State 2 — Brief exists but no itinerary yet:
-         *   ConsultingSession is dismissed; show the "Generate my itinerary"
-         *   action. GenerateItineraryButton POSTs to /api/trips/[id]/itinerary
-         *   and calls router.refresh() on success so the server re-renders
-         *   into state 3.
+         *   ConsultingSession is dismissed; show BookingStep so the user can
+         *   enter flights + accommodation before generation (or skip).
+         *   BookingStep shows BookingForm with any existing booking prefilled,
+         *   then drives itinerary generation once the user is ready.
          *
          * State 3 — Itinerary exists:
          *   Show ItineraryView with the hydrated itinerary.
@@ -161,17 +164,17 @@ export default async function TripDetailPage({
           <ConsultingSession tripId={trip.trip_id} />
         )}
 
-        {/* State 2: brief done, no itinerary — show generate action */}
+        {/* State 2: brief done, no itinerary — show booking entry + generate */}
         {hasBrief && !hasItinerary && (
           <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-6">
             <div className="mb-1 text-sm font-semibold text-indigo-900">
               Trip brief complete
             </div>
             <p className="mb-4 text-sm text-indigo-700">
-              Your travel preferences are saved. Generate a personalised
-              day-by-day itinerary based on your brief.
+              Enter your flights and accommodation so we can plan your itinerary
+              around your actual travel schedule. All fields are optional.
             </p>
-            <GenerateItineraryButton tripId={trip.trip_id} />
+            <BookingStep tripId={trip.trip_id} initialBooking={booking} />
           </div>
         )}
 

@@ -10,7 +10,7 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import type { LLMItinerary, LLMTripBrief, TripBrief, CommunityPost } from "@/lib/types";
+import type { LLMItinerary, LLMTripBrief, TripBrief, Booking, CommunityPost } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -73,6 +73,13 @@ export interface GenerateItineraryParams {
    * ISO date strings (YYYY-MM-DD).
    */
   lockedDates?: string[];
+  /**
+   * Optional booking record for the trip.
+   * When present the model uses flight times to bound day-1 and last-day
+   * usable hours, and clusters activities near the accommodation location.
+   * When null/undefined the model plans full days as if no constraints exist.
+   */
+  booking?: Booking | null;
 }
 
 /**
@@ -140,12 +147,32 @@ If you don't have enough information yet, omit the JSON block and keep asking.`;
 
 /** System prompt for the itinerary generation phase */
 const ITINERARY_SYSTEM_PROMPT = `You are an expert travel itinerary planner.
-You will receive a trip brief and a set of community-sourced place recommendations.
+You will receive a trip brief, a set of community-sourced place recommendations, and optionally a booking record containing flight and accommodation details.
+
 Generate a detailed day-by-day itinerary that:
 1. Respects the budget, pace, and preferences in the brief
 2. Prioritises places from the community posts, especially those matching the local/touristy dial
 3. Produces a realistic schedule with appropriate timing and logical geography
 4. Estimates costs for each activity
+
+BOOKING CONSTRAINTS — apply these rules when a booking object is provided:
+
+Flight arrival (flight_arrival_date + flight_arrival_time):
+- Day 1 of the trip starts at the arrival time, not at the beginning of the day.
+- Subtract realistic airport-to-accommodation transit time (typically 1–2 hours depending on destination).
+- Schedule only activities that fit in the remaining usable hours. For late arrivals (e.g. 21:00+) day 1 should contain only arrival logistics and dinner/rest — no sightseeing.
+
+Flight departure (flight_departure_date + flight_departure_time):
+- The last day ends when the traveller must leave for the airport.
+- Allow at least 2–3 hours before departure for transit and check-in (adjust for destination norms).
+- For early departures (e.g. before 10:00) the last day may have zero or only one quick activity.
+
+Accommodation location (accommodation_neighborhood, accommodation_lat, accommodation_lon):
+- Cluster activities geographically near the accommodation where possible to minimise transit time.
+- When the accommodation neighbourhood is known, explicitly note proximity in activity descriptions.
+- Account for accommodation check-in time on day 1 (typically 15:00 or as known).
+
+If no booking is provided, or booking fields are null, plan full days from morning to evening as normal — do not invent flight or accommodation constraints.
 
 Respond ONLY with valid JSON matching this exact shape:
 {
@@ -287,6 +314,10 @@ export class AnthropicProvider implements LLMProvider {
       brief: params.brief,
       community_posts: params.rankedPosts.slice(0, 30), // cap context size
       locked_dates: params.lockedDates ?? [],
+      // Include booking when present so the model can apply flight/accommodation
+      // constraints. Omit the key entirely when there is no booking so the
+      // model prompt remains identical to the no-booking path.
+      ...(params.booking ? { booking: params.booking } : {}),
     });
 
     const response = await client.messages.create({
