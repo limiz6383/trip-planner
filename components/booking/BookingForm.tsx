@@ -289,6 +289,18 @@ export interface BookingFormProps {
    * instead of "Save & generate itinerary".
    */
   onSaveOnly?: () => void;
+  /**
+   * Called after booking is saved (or skipped) in the pre-brief logistics step.
+   * When provided, the primary action reads "Continue to consultation" and the
+   * secondary action reads "Skip for now". Distinct from onSaveAndGenerate so
+   * existing State 2 usages are not affected.
+   */
+  onContinueToConsult?: () => void;
+  /**
+   * Called when the user wants to skip booking entry in the pre-brief step.
+   * Companion to onContinueToConsult. Used only when mode === "preplan".
+   */
+  onSkipToConsult?: () => void;
 }
 
 export function BookingForm({
@@ -297,6 +309,8 @@ export function BookingForm({
   onSaveAndGenerate,
   onSkip,
   onSaveOnly,
+  onContinueToConsult,
+  onSkipToConsult,
 }: BookingFormProps) {
   // Flight fields
   const [flightArrivalDate, setFlightArrivalDate] = useState(
@@ -396,10 +410,27 @@ export function BookingForm({
     if (ok) onSaveOnly?.();
   }
 
+  /**
+   * Pre-brief logistics step: save any filled fields then advance to the
+   * consultation stage. If all fields are empty the save is a no-op (POST
+   * would still create an empty booking row, which is fine — the route
+   * handles upsert idempotently). We still call through so the consultant
+   * always has an up-to-date booking record.
+   */
+  async function handleSaveAndContinueToConsult() {
+    const ok = await saveBooking();
+    if (ok) onContinueToConsult?.();
+  }
+
   // Determine which action mode is active:
+  //   "preplan"  — Pre-brief logistics step: show "Continue to consultation" + "Skip for now"
   //   "generate" — State 2 (pre-itinerary): show "Save & generate" + "Skip"
   //   "save"     — State 3 (post-itinerary): show "Save bookings" only
-  const mode: "generate" | "save" = onSaveOnly ? "save" : "generate";
+  const mode: "preplan" | "generate" | "save" = onContinueToConsult
+    ? "preplan"
+    : onSaveOnly
+    ? "save"
+    : "generate";
 
   return (
     <div className="flex flex-col gap-6">
@@ -490,7 +521,29 @@ export function BookingForm({
 
       {/* ---- Actions ---- */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        {mode === "generate" ? (
+        {mode === "preplan" ? (
+          <>
+            <Button
+              variant="primary"
+              size="lg"
+              loading={saving}
+              onClick={handleSaveAndContinueToConsult}
+              className="w-full sm:w-auto"
+            >
+              {saving ? "Saving…" : "Continue to consultation"}
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="lg"
+              disabled={saving}
+              onClick={onSkipToConsult}
+              className="w-full sm:w-auto text-zinc-500"
+            >
+              Skip for now
+            </Button>
+          </>
+        ) : mode === "generate" ? (
           <>
             <Button
               variant="primary"

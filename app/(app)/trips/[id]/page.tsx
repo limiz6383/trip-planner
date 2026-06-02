@@ -10,9 +10,9 @@ import {
   getBookingForTrip,
 } from "@/lib/db/queries";
 import { requireUser } from "@/lib/auth";
-import { ConsultingSession } from "@/components/consulting/ConsultingSession";
 import { ItineraryView } from "@/components/itinerary/ItineraryView";
-import { BookingStep } from "@/components/booking/BookingStep";
+import { GenerateItineraryButton } from "@/components/itinerary/GenerateItineraryButton";
+import { PrePlanFlow } from "@/components/booking/PrePlanFlow";
 import { PostItineraryBookingPanel } from "@/components/booking/PostItineraryBookingPanel";
 import type { Trip, TripBrief, Booking, Itinerary, ItineraryDay, Activity } from "@/lib/types";
 
@@ -147,35 +147,42 @@ export default async function TripDetailPage({
         {/*
          * Three-state feature area routing:
          *
-         * State 1 — No brief yet:
-         *   Show ConsultingSession so the user can build a trip brief.
+         * State 1 — No brief yet (pre-brief):
+         *   Show PrePlanFlow, which first collects flights + accommodation
+         *   (logistics stage), then hands off to ConsultingSession (consult
+         *   stage). Logistics is optional — the user may skip to the AI
+         *   consultation immediately. Booking data is prefilled from any
+         *   existing booking row loaded above.
          *
          * State 2 — Brief exists but no itinerary yet:
-         *   ConsultingSession is dismissed; show BookingStep so the user can
-         *   enter flights + accommodation before generation (or skip).
-         *   BookingStep shows BookingForm with any existing booking prefilled,
-         *   then drives itinerary generation once the user is ready.
+         *   Logistics were already collected in State 1. Show only the
+         *   GenerateItineraryButton so the user can trigger generation.
          *
          * State 3 — Itinerary exists:
-         *   Show ItineraryView with the hydrated itinerary.
+         *   Show ItineraryView with the hydrated itinerary, and the
+         *   PostItineraryBookingPanel so the user can view/edit bookings
+         *   and optionally regenerate.
          */}
 
-        {/* State 1: no brief — show consulting session */}
+        {/* State 1: no brief — collect logistics then run consulting session */}
         {!hasBrief && (
-          <ConsultingSession tripId={trip.trip_id} />
+          <PrePlanFlow
+            tripId={trip.trip_id}
+            initialBooking={booking}
+          />
         )}
 
-        {/* State 2: brief done, no itinerary — show booking entry + generate */}
+        {/* State 2: brief done, no itinerary — generate (logistics already collected) */}
         {hasBrief && !hasItinerary && (
           <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-6">
             <div className="mb-1 text-sm font-semibold text-indigo-900">
               Trip brief complete
             </div>
             <p className="mb-4 text-sm text-indigo-700">
-              Enter your flights and accommodation so we can plan your itinerary
-              around your actual travel schedule. All fields are optional.
+              Your trip preferences have been saved. Generate your itinerary
+              whenever you&apos;re ready.
             </p>
-            <BookingStep tripId={trip.trip_id} initialBooking={booking} />
+            <GenerateItineraryButton tripId={trip.trip_id} />
           </div>
         )}
 

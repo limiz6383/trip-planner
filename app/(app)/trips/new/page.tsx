@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import Link from "next/link";
 import { createTripAction, type TripActionState } from "@/app/actions/trips";
 import { Button } from "@/components/ui/Button";
@@ -15,6 +15,10 @@ export default function NewTripPage() {
 
   // Today's date as YYYY-MM-DD for default values
   const today = new Date().toISOString().split("T")[0];
+
+  // Controlled dates so the end date can't precede the start date.
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState(today);
 
   return (
     <div>
@@ -52,14 +56,23 @@ export default function NewTripPage() {
               name="start_date"
               type="date"
               required
-              defaultValue={today}
+              min={today}
+              value={startDate}
+              onChange={(e) => {
+                const v = e.target.value;
+                setStartDate(v);
+                // Never let the end date sit before the (new) start date.
+                if (v && endDate < v) setEndDate(v);
+              }}
             />
             <Input
               label="End date"
               name="end_date"
               type="date"
               required
-              defaultValue={today}
+              min={startDate || today}
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
             />
           </div>
 

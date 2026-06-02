@@ -43,6 +43,14 @@ export interface ConsultingTurnParams {
     start_date: string;
     end_date: string;
   };
+  /**
+   * Flights and accommodation details collected before the consulting session.
+   * When present the consultant treats them as fixed facts, never asks for them,
+   * and factors them into its questions and suggestions (e.g. a late arrival
+   * means day 1 is light; lodging neighbourhood anchors recommendations).
+   * When null/undefined the consultant behaves as if no logistics are known.
+   */
+  booking?: Booking | null;
 }
 
 /**
@@ -112,7 +120,15 @@ const CONSULTING_SYSTEM_PROMPT = `You are a knowledgeable travel planning assist
 
 IMPORTANT — destination and travel dates are ALREADY KNOWN. You must NEVER ask about them. They will be provided to you at the start of every turn in a context block. Your opening message must naturally reference the destination and the number of days (e.g. "Let's plan your 4-day trip to Tokyo!").
 
-Your goal is to gather ONLY the following remaining fields through natural conversation (do not gather destination, start_date, or end_date — those are already set):
+LOGISTICS — If a "Booked logistics" block appears in the context, the user has already provided flight and accommodation details. You must:
+- NEVER ask for flight arrival/departure times, accommodation name, neighbourhood, check-in, or check-out — these are already set.
+- Treat them as fixed facts and factor them into your questions and suggestions. For example:
+  - A late-evening arrival means day 1 will be short — acknowledge this and suggest a light first day.
+  - An early departure means the last day ends early — note this when discussing pace.
+  - The accommodation neighbourhood is a natural anchor for activity recommendations.
+- If no "Booked logistics" block appears, behave as today — do not mention flights or accommodation unless the user raises them.
+
+Your goal is to gather ONLY the following remaining fields through natural conversation (do not gather destination, start_date, end_date, or any logistics already provided):
 - Daily budget in USD
 - Travel vibe / keywords (e.g. "relaxing", "foodie", "adventure")
 - Party composition (number of adults, children, infants)
@@ -228,13 +244,43 @@ export class AnthropicProvider implements LLMProvider {
     const tripDays = Math.round((endMs - startMs) / msPerDay) + 1;
 
     // Build a per-turn context block injected as the first user message so the
-    // model always has the known trip facts and the current partial brief.
+    // model always has the known trip facts, the current partial brief, and any
+    // pre-collected booking details.
+    const bookingLines: string[] = [];
+    if (params.booking) {
+      const b = params.booking;
+      bookingLines.push("", "Booked logistics (fixed — do not ask about these):");
+      if (b.flight_arrival_date) {
+        bookingLines.push(
+          `  Flight arrival: ${b.flight_arrival_date}${b.flight_arrival_time ? " at " + b.flight_arrival_time : ""}`
+        );
+      }
+      if (b.flight_departure_date) {
+        bookingLines.push(
+          `  Flight departure: ${b.flight_departure_date}${b.flight_departure_time ? " at " + b.flight_departure_time : ""}`
+        );
+      }
+      if (b.accommodation_name) {
+        bookingLines.push(`  Accommodation: ${b.accommodation_name}`);
+      }
+      if (b.accommodation_neighborhood) {
+        bookingLines.push(`  Neighbourhood: ${b.accommodation_neighborhood}`);
+      }
+      if (b.accommodation_check_in) {
+        bookingLines.push(`  Check-in: ${b.accommodation_check_in}`);
+      }
+      if (b.accommodation_check_out) {
+        bookingLines.push(`  Check-out: ${b.accommodation_check_out}`);
+      }
+    }
+
     const knownFactsBlock = [
       "--- TRIP CONTEXT (already known — do not ask about these) ---",
       `Destination: ${params.knownTrip.destination}`,
       `Start date: ${params.knownTrip.start_date}`,
       `End date: ${params.knownTrip.end_date}`,
       `Trip length: ${tripDays} day${tripDays !== 1 ? "s" : ""}`,
+      ...bookingLines,
       "",
       "Current partial brief (fields gathered so far):",
       JSON.stringify(
