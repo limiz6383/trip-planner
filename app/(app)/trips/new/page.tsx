@@ -6,6 +6,7 @@ import { createTripAction, type TripActionState } from "@/app/actions/trips";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Card } from "@/components/ui/Card";
+import { DestinationAutocomplete } from "@/components/DestinationAutocomplete";
 
 const initialState: TripActionState = undefined;
 
@@ -40,9 +41,7 @@ export default function NewTripPage() {
             autoFocus
           />
 
-          <Input
-            label="Destination"
-            name="destination"
+          <DestinationAutocomplete
             required
             placeholder="e.g. Tokyo, Japan"
           />

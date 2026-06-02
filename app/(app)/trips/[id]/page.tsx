@@ -39,6 +39,18 @@ function TripHeader({ trip }: { trip: Trip }) {
     completed: "bg-zinc-100 text-zinc-600",
   };
 
+  const statusLabels: Record<string, string> = {
+    planned: "Upcoming",
+    in_progress: "On trip",
+    completed: "Completed",
+  };
+
+  const statusLabel =
+    statusLabels[trip.status] ??
+    trip.status
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+
   return (
     <div className="mb-6">
       <Link
@@ -61,7 +73,7 @@ function TripHeader({ trip }: { trip: Trip }) {
             statusColors[trip.status] ?? "bg-zinc-100 text-zinc-600",
           ].join(" ")}
         >
-          {trip.status.replace("_", " ")}
+          {statusLabel}
         </span>
       </div>
     </div>
