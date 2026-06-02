@@ -57,7 +57,7 @@ CREATE INDEX idx_trip_collaborators_user_id ON trip_collaborators(user_id);
 
 CREATE TABLE trip_briefs (
   brief_id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  trip_id               UUID NOT NULL REFERENCES trips(trip_id) ON DELETE CASCADE,
+  trip_id               UUID NOT NULL UNIQUE REFERENCES trips(trip_id) ON DELETE CASCADE,
   destination           TEXT NOT NULL,
   start_date            DATE NOT NULL,
   end_date              DATE NOT NULL,

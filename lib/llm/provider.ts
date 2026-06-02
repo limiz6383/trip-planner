@@ -232,19 +232,33 @@ export class AnthropicProvider implements LLMProvider {
 
     const response = await client.messages.create({
       model: MODEL,
-      max_tokens: 4096,
+      max_tokens: 8192,
       system: ITINERARY_SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userContent }],
+      // Prefill the assistant turn with "{" so Claude returns raw JSON without a
+      // markdown code fence or any preamble.
+      messages: [
+        { role: "user", content: userContent },
+        { role: "assistant", content: "{" },
+      ],
     });
 
     const raw =
-      response.content
+      "{" +
+      (response.content
         .filter((block): block is Anthropic.TextBlock => block.type === "text")
         .map((block) => block.text)
-        .join("") ?? "";
+        .join("") ?? "");
 
-    // Strip optional markdown fences before parsing
-    const jsonStr = raw.replace(/^```json\s*|```\s*$/g, "").trim();
+    // Robustly extract the JSON object: strip any markdown fences, then fall
+    // back to slicing between the first "{" and the last "}".
+    let jsonStr = raw.trim();
+    const fence = jsonStr.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    if (fence) jsonStr = fence[1].trim();
+    if (!jsonStr.startsWith("{")) {
+      const s = jsonStr.indexOf("{");
+      const e = jsonStr.lastIndexOf("}");
+      if (s !== -1 && e !== -1 && e > s) jsonStr = jsonStr.slice(s, e + 1);
+    }
 
     let itinerary: LLMItinerary;
     try {
