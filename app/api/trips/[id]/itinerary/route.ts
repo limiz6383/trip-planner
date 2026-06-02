@@ -20,7 +20,7 @@
 import type { NextRequest } from "next/server";
 import { getUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/db/server";
-import { getTripBrief, createItineraryFromLLMOutput, appendChangeLogEntry } from "@/lib/db/queries";
+import { getTripBrief, getBookingForTrip, createItineraryFromLLMOutput, appendChangeLogEntry } from "@/lib/db/queries";
 import { createPlannerEngine } from "@/lib/planner/engine";
 import type { Itinerary } from "@/lib/types";
 
@@ -75,18 +75,21 @@ export async function POST(
       );
     }
 
-    // --- 2. Run the planner pipeline (fetch posts → rank → generate) ---
-    const engine = createPlannerEngine(supabase);
-    const { itinerary: llmItinerary } = await engine.plan({ brief });
+    // --- 2. Load the booking (optional — null is fine; generation proceeds without it) ---
+    const booking = await getBookingForTrip(supabase, tripId);
 
-    // --- 3. Persist and return the hydrated itinerary ---
+    // --- 3. Run the planner pipeline (fetch posts → rank → generate) ---
+    const engine = createPlannerEngine(supabase);
+    const { itinerary: llmItinerary } = await engine.plan({ brief, booking });
+
+    // --- 4. Persist and return the hydrated itinerary ---
     const persisted = await createItineraryFromLLMOutput(
       supabase,
       tripId,
       llmItinerary
     );
 
-    // --- 4. Record the initial plan in the change log (non-fatal) ---
+    // --- 5. Record the initial plan in the change log (non-fatal) ---
     try {
       const dayCount = persisted.days?.length ?? 0;
       await appendChangeLogEntry(

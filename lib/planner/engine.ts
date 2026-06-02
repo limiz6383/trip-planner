@@ -22,7 +22,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { TripBrief, Itinerary, ItineraryDay, Activity, LLMItinerary } from "@/lib/types";
+import type { TripBrief, Booking, Itinerary, ItineraryDay, Activity, LLMItinerary } from "@/lib/types";
 import type { ContentSource } from "@/lib/retrieval/source";
 import type { LLMProvider } from "@/lib/llm/provider";
 import { rankPosts } from "@/lib/retrieval/ranking";
@@ -53,6 +53,13 @@ export interface PlannerInput {
    * Ignored for initial planning.
    */
   currentDate?: string;
+  /**
+   * Optional booking record for the trip (flights + accommodation).
+   * Passed through to the LLM so it can bound arrival/departure day hours
+   * and cluster activities near the accommodation.
+   * When null/undefined the LLM plans full days with no travel constraints.
+   */
+  booking?: Booking | null;
 }
 
 export interface PlannerResult {
@@ -72,7 +79,7 @@ export class PlannerEngine {
   ) {}
 
   async plan(input: PlannerInput): Promise<PlannerResult> {
-    const { brief, existingItinerary, currentDate } = input;
+    const { brief, existingItinerary, currentDate, booking } = input;
 
     // --- Step 1: Derive locked constraints (mid-trip re-planning only) ---
     let lockedDates: string[] = [];
@@ -94,6 +101,9 @@ export class PlannerEngine {
       brief,
       rankedPosts: ranked,
       lockedDates,
+      // Pass booking through so the LLM can apply flight/accommodation constraints.
+      // Undefined when not provided — LLM plans full days with no constraints.
+      booking: booking ?? null,
     });
 
     // --- Step 5: Merge locked days (deterministic override of LLM output) ---
