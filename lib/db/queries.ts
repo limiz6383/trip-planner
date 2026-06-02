@@ -36,19 +36,75 @@ import type {
 // ---------------------------------------------------------------------------
 
 /**
- * Returns all trips the authenticated user owns or collaborates on.
- * RLS handles the visibility filter.
+ * Returns trips the authenticated user owns or collaborates on.
+ *
+ * @param archived - When false (default) returns only active trips.
+ *                   When true returns only archived trips.
+ *
+ * RLS handles the ownership/collaboration visibility filter.
  */
 export async function getTripsForUser(
-  client: SupabaseClient
+  client: SupabaseClient,
+  { archived = false }: { archived?: boolean } = {}
 ): Promise<Trip[]> {
   const { data, error } = await client
     .from("trips")
     .select("*")
+    .eq("archived", archived)
     .order("created_at", { ascending: false });
 
   if (error) throw error;
   return (data as Trip[]) ?? [];
+}
+
+/**
+ * Returns archived trips the authenticated user owns or collaborates on.
+ * Convenience wrapper around getTripsForUser({ archived: true }).
+ */
+export async function getArchivedTripsForUser(
+  client: SupabaseClient
+): Promise<Trip[]> {
+  return getTripsForUser(client, { archived: true });
+}
+
+/**
+ * Sets the archived flag on a trip.
+ *
+ * RLS trips_update USING is_trip_member(trip_id) — both owner and accepted
+ * collaborators may archive/unarchive.
+ */
+export async function setTripArchived(
+  client: SupabaseClient,
+  tripId: string,
+  archived: boolean
+): Promise<Trip> {
+  const { data, error } = await client
+    .from("trips")
+    .update({ archived })
+    .eq("trip_id", tripId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as Trip;
+}
+
+/**
+ * Permanently deletes a trip.
+ *
+ * RLS trips_delete USING owner_id = auth.uid() — only the trip owner may
+ * delete. All child rows cascade via ON DELETE CASCADE on the FK.
+ */
+export async function deleteTrip(
+  client: SupabaseClient,
+  tripId: string
+): Promise<void> {
+  const { error } = await client
+    .from("trips")
+    .delete()
+    .eq("trip_id", tripId);
+
+  if (error) throw error;
 }
 
 /**

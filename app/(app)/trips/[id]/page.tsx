@@ -13,6 +13,7 @@ import { requireUser } from "@/lib/auth";
 import { ConsultingSession } from "@/components/consulting/ConsultingSession";
 import { ItineraryView } from "@/components/itinerary/ItineraryView";
 import { BookingStep } from "@/components/booking/BookingStep";
+import { PostItineraryBookingPanel } from "@/components/booking/PostItineraryBookingPanel";
 import type { Trip, TripBrief, Booking, Itinerary, ItineraryDay, Activity } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -178,9 +179,22 @@ export default async function TripDetailPage({
           </div>
         )}
 
-        {/* State 3: itinerary exists — show full itinerary view */}
+        {/* State 3: itinerary exists — show full itinerary view and editable bookings */}
         {hasItinerary && itinerary && (
-          <ItineraryView tripId={trip.trip_id} itinerary={itinerary} />
+          <>
+            <ItineraryView tripId={trip.trip_id} itinerary={itinerary} />
+            {/*
+             * PostItineraryBookingPanel lets the user view and edit their
+             * flights/accommodation at any time after generation. It starts
+             * collapsed so the itinerary remains the visual focus. Booking
+             * data is already loaded on this page (getBookingForTrip runs
+             * in the parallel Promise.all above), so no extra fetch is needed.
+             */}
+            <PostItineraryBookingPanel
+              tripId={trip.trip_id}
+              initialBooking={booking}
+            />
+          </>
         )}
       </div>
     </div>

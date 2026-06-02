@@ -24,6 +24,7 @@ CREATE TABLE trips (
   end_date        DATE NOT NULL,
   status          TEXT NOT NULL DEFAULT 'planned'
                     CHECK (status IN ('planned', 'in_progress', 'completed')),
+  archived        BOOLEAN NOT NULL DEFAULT FALSE,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
