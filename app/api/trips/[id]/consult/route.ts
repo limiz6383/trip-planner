@@ -29,7 +29,7 @@ import { defaultProvider } from "@/lib/llm/provider";
 import type { ConversationMessage } from "@/lib/llm/provider";
 import type { LLMTripBrief } from "@/lib/types";
 import { createSupabaseServerClient } from "@/lib/db/server";
-import { getTripById } from "@/lib/db/queries";
+import { getTripById, getBookingForTrip } from "@/lib/db/queries";
 
 // ---- request / response shapes (exported so the client component can import) ----
 
@@ -100,12 +100,18 @@ export async function POST(
     );
   }
 
-  // Fetch the trip row so the consultant always knows the destination and dates
-  // the user already entered on the create-trip form.
+  // Fetch the trip row and any existing booking in parallel.
+  // The trip facts seed the known-context block so the consultant never asks
+  // for destination/dates. The booking (if present) is forwarded so the
+  // consultant can treat flights/accommodation as fixed facts.
   let knownTrip: { destination: string; start_date: string; end_date: string };
+  let booking: import("@/lib/types").Booking | null = null;
   try {
     const supabase = await createSupabaseServerClient();
-    const trip = await getTripById(supabase, tripId);
+    const [trip, bookingResult] = await Promise.all([
+      getTripById(supabase, tripId),
+      getBookingForTrip(supabase, tripId).catch(() => null),
+    ]);
     if (!trip) {
       return Response.json({ error: "Trip not found" }, { status: 404 });
     }
@@ -114,6 +120,7 @@ export async function POST(
       start_date: trip.start_date,
       end_date: trip.end_date,
     };
+    booking = bookingResult;
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Failed to load trip.";
@@ -133,6 +140,7 @@ export async function POST(
         ...(partialBrief ?? {}),
       },
       knownTrip,
+      booking,
     });
 
     const responseBody: ConsultResponseBody = {
