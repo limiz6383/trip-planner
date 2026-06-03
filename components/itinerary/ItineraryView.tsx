@@ -50,6 +50,11 @@ import type {
   ReviseItineraryRequestBody,
   ReviseItineraryErrorBody,
 } from "@/app/api/trips/[id]/itinerary/revise/route";
+import type {
+  ReviseDayRequestBody,
+  ReviseDayResponseBody,
+  ReviseDayErrorBody,
+} from "@/app/api/trips/[id]/days/[dayId]/revise/route";
 
 // ---------------------------------------------------------------------------
 // Prop contract — FINAL (unchanged)
@@ -803,6 +808,91 @@ function ActivityCard({ activity, tripId, onActivityUpdated }: ActivityCardProps
 }
 
 // ---------------------------------------------------------------------------
+// Day revise form (inline AI revision of a whole day)
+// ---------------------------------------------------------------------------
+
+interface ReviseDayFormProps {
+  dayId: string;
+  tripId: string;
+  onRevised: (activities: Activity[]) => void;
+  onCancel: () => void;
+}
+
+function ReviseDayForm({ dayId, tripId, onRevised, onCancel }: ReviseDayFormProps) {
+  const [instruction, setInstruction] = useState("");
+  const [revising, setRevising] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleRevise() {
+    const trimmed = instruction.trim();
+    if (!trimmed) {
+      setError("Tell the planner how to change this day.");
+      return;
+    }
+    setRevising(true);
+    setError(null);
+
+    const body: ReviseDayRequestBody = { instruction: trimmed };
+    try {
+      const res = await fetch(`/api/trips/${tripId}/days/${dayId}/revise`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const errBody = (await res.json()) as ReviseDayErrorBody;
+        setError(errBody.error ?? "Failed to revise this day.");
+        return;
+      }
+      const responseBody = (await res.json()) as ReviseDayResponseBody;
+      onRevised(responseBody.activities);
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setRevising(false);
+    }
+  }
+
+  return (
+    <div className="ml-8 flex flex-col gap-2 rounded-lg border border-violet-200 bg-violet-50 p-3">
+      <label className="flex items-center gap-1.5 text-sm font-medium text-violet-800">
+        <SparkleIcon />
+        Revise this day
+      </label>
+      <textarea
+        value={instruction}
+        onChange={(e) => setInstruction(e.target.value)}
+        disabled={revising}
+        rows={2}
+        autoFocus
+        className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:cursor-not-allowed disabled:bg-zinc-50"
+        placeholder="e.g. more outdoorsy, make the morning cheaper, add a museum"
+      />
+      {error && (
+        <p className="text-xs text-red-600" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="flex gap-2">
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={handleRevise}
+          loading={revising}
+          disabled={revising}
+        >
+          {revising ? "Revising…" : "Revise day"}
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onCancel} disabled={revising}>
+          Cancel
+        </Button>
+      </div>
+      <p className="text-xs text-violet-700/70">Locked activities are kept.</p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Day section (with lock toggle)
 // ---------------------------------------------------------------------------
 
@@ -812,6 +902,7 @@ interface DaySectionProps {
   tripId: string;
   onDayUpdated: (updated: ItineraryDay) => void;
   onActivityUpdated: (updated: Activity) => void;
+  onDayActivitiesReplaced: (dayId: string, activities: Activity[]) => void;
 }
 
 function DaySection({
@@ -820,10 +911,12 @@ function DaySection({
   tripId,
   onDayUpdated,
   onActivityUpdated,
+  onDayActivitiesReplaced,
 }: DaySectionProps) {
   const [localDay, setLocalDay] = useState<ItineraryDay>(day);
   const [lockPending, setLockPending] = useState(false);
   const [lockError, setLockError] = useState<string | null>(null);
+  const [revisingDay, setRevisingDay] = useState(false);
 
   const activities = day.activities ?? [];
 
@@ -885,6 +978,17 @@ function DaySection({
             </span>
           )}
 
+          {/* AI revise-day toggle */}
+          <button
+            onClick={() => setRevisingDay((v) => !v)}
+            className="flex items-center gap-1 rounded-lg bg-violet-100 px-2 py-1 text-xs font-medium text-violet-700 transition-colors hover:bg-violet-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+            title="Revise this day with AI"
+            aria-expanded={revisingDay}
+          >
+            <SparkleIcon />
+            Revise day
+          </button>
+
           {/* Day lock toggle */}
           <button
             onClick={handleToggleDayLock}
@@ -908,6 +1012,19 @@ function DaySection({
         <p className="text-xs text-red-600" role="alert">
           {lockError}
         </p>
+      )}
+
+      {/* AI revise-day form */}
+      {revisingDay && (
+        <ReviseDayForm
+          dayId={day.day_id}
+          tripId={tripId}
+          onRevised={(acts) => {
+            onDayActivitiesReplaced(day.day_id, acts);
+            setRevisingDay(false);
+          }}
+          onCancel={() => setRevisingDay(false)}
+        />
       )}
 
       {/* Activity list */}
@@ -1215,6 +1332,18 @@ export function ItineraryView({
     [tripId, onItineraryUpdated]
   );
 
+  // Per-day AI revise replaced the whole day's activity set — swap them in
+  // (already ordered by start_time from the server).
+  const handleDayActivitiesReplaced = useCallback(
+    (dayId: string, activities: Activity[]) => {
+      setLocalDays((prev) =>
+        prev.map((d) => (d.day_id === dayId ? { ...d, activities } : d))
+      );
+      onItineraryUpdated?.();
+    },
+    [onItineraryUpdated]
+  );
+
   // Compute total from day costs if total_cost_estimate is missing
   const totalCost =
     itinerary.total_cost_estimate ??
@@ -1352,6 +1481,7 @@ export function ItineraryView({
                     tripId={tripId}
                     onDayUpdated={handleDayUpdated}
                     onActivityUpdated={handleActivityUpdated}
+                    onDayActivitiesReplaced={handleDayActivitiesReplaced}
                   />
                 </div>
               ))}

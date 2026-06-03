@@ -701,6 +701,46 @@ export async function updateActivityFromLLMOutput(
 }
 
 /**
+ * Replaces ALL activities on a day with a fresh list from the revision
+ * pipeline (used by per-day AI revise). Locked activities are expected to be
+ * present in `llmActivities` already (re-injected upstream), so deleting and
+ * re-inserting preserves them. start_time, sort_order, and locked are carried.
+ *
+ * Returns the day's activities, ordered by start_time.
+ */
+export async function replaceDayActivitiesFromLLM(
+  client: SupabaseClient,
+  dayId: string,
+  llmActivities: import("@/lib/types").LLMActivity[]
+): Promise<Activity[]> {
+  const { error: delError } = await client
+    .from("activities")
+    .delete()
+    .eq("day_id", dayId);
+  if (delError) throw delError;
+
+  if (llmActivities.length > 0) {
+    const inserts = llmActivities.map((a, index) => ({
+      day_id: dayId,
+      name: a.name,
+      description: a.description ?? null,
+      start_time: a.start_time || null,
+      estimated_time_hours: a.estimated_time_hours ?? null,
+      estimated_cost_usd: a.estimated_cost_usd ?? null,
+      place_name: a.place_name ?? null,
+      source_attribution: a.source_attribution ?? null,
+      activity_type: a.activity_type ?? null,
+      locked: a.locked ?? false,
+      sort_order: index,
+    }));
+    const { error: insError } = await client.from("activities").insert(inserts);
+    if (insError) throw insError;
+  }
+
+  return getActivitiesForDay(client, dayId);
+}
+
+/**
  * Returns a single activity by its ID, or null if not found / not accessible.
  */
 export async function getActivityById(

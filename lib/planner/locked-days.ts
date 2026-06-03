@@ -271,6 +271,46 @@ export function applyLocksToRevision(
   };
 }
 
+/**
+ * Applies locks when revising a SINGLE day. Locked activities from the existing
+ * day are reproduced verbatim (locked carried forward); the model's revised
+ * activities fill the rest, de-duplicated by name, capped to the per-day max.
+ * Order is left to the caller / DB read (which sorts by start_time).
+ */
+export function applyLocksToDayRevision(
+  revised: LLMActivity[],
+  existing: Activity[]
+): LLMActivity[] {
+  const toLLM = (a: Activity): LLMActivity => ({
+    name: a.name,
+    description: a.description ?? "",
+    start_time: a.start_time ?? "",
+    estimated_time_hours: a.estimated_time_hours ?? 1,
+    estimated_cost_usd: a.estimated_cost_usd ?? 0,
+    place_name: a.place_name ?? "",
+    source_attribution: a.source_attribution ?? "",
+    activity_type: a.activity_type ?? "other",
+    locked: true,
+  });
+
+  const lockedExisting = existing.filter((a) => a.locked);
+  if (lockedExisting.length === 0) {
+    return revised
+      .map((a) => ({ ...a, locked: false }))
+      .slice(0, MAX_ACTIVITIES_PER_DAY);
+  }
+
+  const lockedNames = new Set(
+    lockedExisting.map((a) => a.name.trim().toLowerCase())
+  );
+  const revisedKept = revised
+    .filter((a) => !lockedNames.has(a.name.trim().toLowerCase()))
+    .map((a) => ({ ...a, locked: false }));
+  const fill = Math.max(0, MAX_ACTIVITIES_PER_DAY - lockedExisting.length);
+
+  return [...lockedExisting.map(toLLM), ...revisedKept.slice(0, fill)];
+}
+
 // ---------------------------------------------------------------------------
 // Validation
 // ---------------------------------------------------------------------------

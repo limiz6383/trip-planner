@@ -118,6 +118,21 @@ export interface ReviseActivityParams {
 }
 
 /**
+ * Parameters for single-day revision.
+ */
+export interface ReviseDayParams {
+  brief: TripBrief;
+  rankedPosts: CommunityPost[];
+  /** ISO date (YYYY-MM-DD) of the day being revised. */
+  dayDate: string;
+  /** The day's current activities expressed as the LLM shape (no DB ids). */
+  currentActivities: LLMActivity[];
+  /** Free-text revision instruction from the user. */
+  instruction: string;
+  booking?: Booking | null;
+}
+
+/**
  * Provider interface — implement this to swap out the underlying model.
  */
 export interface LLMProvider {
@@ -143,6 +158,12 @@ export interface LLMProvider {
    * Returns a single LLMActivity replacement; caller applies it to the DB row.
    */
   reviseActivity(params: ReviseActivityParams): Promise<LLMActivity>;
+
+  /**
+   * Revises all activities for a single day according to a free-text
+   * instruction. Returns the day's new activity list; caller persists it.
+   */
+  reviseDay(params: ReviseDayParams): Promise<LLMActivity[]>;
 }
 
 // ---------------------------------------------------------------------------
@@ -274,6 +295,40 @@ Return ONLY a single replacement activity as valid JSON matching this exact shap
 }
 
 No markdown fences, no explanation — just the JSON object.`;
+
+/** System prompt for single-day revision */
+const DAY_REVISION_SYSTEM_PROMPT = `You are an expert travel planner revising ONE day of an existing itinerary.
+
+You will receive:
+- The trip brief (budget, pace, preferences)
+- The date of the day being revised
+- The day's current activities (each with start_time, duration, locked flag)
+- A revision instruction (e.g. "more outdoorsy", "make the morning cheaper", "add a museum")
+- Community-sourced place recommendations
+
+Rules:
+1. Apply the instruction to THIS day only; keep unaffected activities where reasonable.
+2. LOCKED ITEMS ARE NON-NEGOTIABLE. Any activity with "locked": true must be reproduced EXACTLY (do not change, reorder, reprice, or remove it) and the rest of the day planned around it.
+3. Size the day to the traveller's PACE: relaxed ≈ 3-4, moderate ≈ 4-5, fast ≈ 6-7 activities (default ~4; meals count; never exceed 8).
+4. Keep breakfast, lunch, and dinner present (activity_type "food") at realistic times unless the instruction explicitly changes meals.
+5. Give every activity a "start_time" in 24-hour "HH:MM" format — chronological, consistent with each activity's estimated_time_hours and realistic venue/meal hours.
+6. Keep each "description" to ONE short sentence.
+
+Respond ONLY with valid JSON matching this exact shape:
+{
+  "activities": [
+    {
+      "name": "string",
+      "description": "string",
+      "start_time": "HH:MM",
+      "estimated_time_hours": 1.5,
+      "estimated_cost_usd": 20,
+      "place_name": "string",
+      "source_attribution": "string or empty",
+      "activity_type": "food|culture|outdoor|shopping|transport|accommodation|entertainment|other"
+    }
+  ]
+}`;
 
 /** System prompt for the itinerary generation phase */
 const ITINERARY_SYSTEM_PROMPT = `You are an expert travel itinerary planner.
@@ -660,6 +715,57 @@ export class AnthropicProvider implements LLMProvider {
     }
 
     return activity;
+  }
+
+  async reviseDay(params: ReviseDayParams): Promise<LLMActivity[]> {
+    const client = this.getClient();
+
+    const userContent = JSON.stringify({
+      brief: params.brief,
+      day_date: params.dayDate,
+      current_activities: params.currentActivities,
+      revision_instruction: params.instruction,
+      community_posts: params.rankedPosts.slice(0, 20),
+      ...(params.booking ? { booking: params.booking } : {}),
+    });
+
+    const response = await client.messages.create({
+      model: ITINERARY_MODEL,
+      max_tokens: 2048,
+      system: DAY_REVISION_SYSTEM_PROMPT,
+      messages: [
+        { role: "user", content: userContent },
+        { role: "assistant", content: "{" },
+      ],
+    });
+
+    const raw =
+      "{" +
+      (response.content
+        .filter((block): block is Anthropic.TextBlock => block.type === "text")
+        .map((block) => block.text)
+        .join("") ?? "");
+
+    let jsonStr = raw.trim();
+    const fence = jsonStr.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    if (fence) jsonStr = fence[1].trim();
+    if (!jsonStr.startsWith("{")) {
+      const s = jsonStr.indexOf("{");
+      const e = jsonStr.lastIndexOf("}");
+      if (s !== -1 && e !== -1 && e > s) jsonStr = jsonStr.slice(s, e + 1);
+    }
+
+    let parsed: { activities?: LLMActivity[] };
+    try {
+      parsed = JSON.parse(jsonStr) as { activities?: LLMActivity[] };
+    } catch (err) {
+      throw new Error(
+        `LLM returned invalid JSON for day revision. Raw response:\n${raw}\nParse error: ${err}`
+      );
+    }
+
+    const activities = Array.isArray(parsed.activities) ? parsed.activities : [];
+    return activities.slice(0, 8); // safety ceiling; pace drives the real count
   }
 }
 
