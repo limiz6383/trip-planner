@@ -221,6 +221,7 @@ Your job is to apply the instruction to produce a revised itinerary. Rules:
 6. Maintain the same date range and day count as the original itinerary.
 7. Respect the budget and pace from the brief.
 8. Prioritise community posts that match the revised intent.
+9. List each day's activities in the ORDER the traveller does them, earliest first — the array order IS the schedule. On the arrival day, sequence arrival logistics first (e.g. a meal eaten en route from the airport, then check-in) before activities that need the traveller settled in. Never place a later-in-the-day activity before an earlier one.
 
 Respond ONLY with valid JSON matching this exact shape:
 {
@@ -282,6 +283,7 @@ Generate a detailed day-by-day itinerary that:
 4. Estimates costs for each activity
 5. Includes 3-4 activities per day MAXIMUM — favor realistic pacing and quality over packing the day
 6. Keeps each activity "description" to ONE short sentence (the goal is a fast, scannable plan, not an essay)
+7. Lists each day's activities in the ORDER the traveller does them, earliest first — the array order IS the schedule. On the arrival day, sequence arrival logistics first (e.g. a meal eaten en route from the airport, then hotel check-in) before any activity that needs the traveller already settled in. Never place a later-in-the-day activity before an earlier one.
 
 BOOKING CONSTRAINTS — apply these rules when a booking object is provided:
 

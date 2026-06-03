@@ -150,6 +150,8 @@ export interface Activity {
   source_attribution: string | null;
   activity_type: ActivityType | null;
   locked: boolean;
+  /** 0-based position within the day; preserves the planned chronological order. */
+  sort_order: number;
   created_at: string;
 }
 

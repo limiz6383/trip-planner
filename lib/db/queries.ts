@@ -289,6 +289,7 @@ export async function getActivitiesForDay(
     .from("activities")
     .select("*")
     .eq("day_id", dayId)
+    .order("sort_order")
     .order("created_at");
 
   if (error) throw error;
@@ -581,7 +582,7 @@ export async function createItineraryFromLLMOutput(
     const hydratedActivities: Activity[] = [];
 
     if (llmDay.activities && llmDay.activities.length > 0) {
-      const activityInserts = llmDay.activities.map((a) => ({
+      const activityInserts = llmDay.activities.map((a, index) => ({
         day_id: day.day_id,
         name: a.name,
         description: a.description ?? null,
@@ -592,13 +593,16 @@ export async function createItineraryFromLLMOutput(
         activity_type: a.activity_type ?? null,
         // Carried forward by the revision pipeline; false for fresh generation.
         locked: a.locked ?? false,
+        // Preserve the model's intended chronological order — a batch insert
+        // ties created_at, so this is the only reliable ordering key.
+        sort_order: index,
       }));
 
       const { data: activityRows, error: activityError } = await client
         .from("activities")
         .insert(activityInserts)
         .select()
-        .order("created_at");
+        .order("sort_order");
 
       if (activityError) throw activityError;
       hydratedActivities.push(...((activityRows as Activity[]) ?? []));
