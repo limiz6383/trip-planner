@@ -86,13 +86,6 @@ export interface ItineraryViewProps {
 // Activity type constants
 // ---------------------------------------------------------------------------
 
-/** Canned instruction for the "Tidy up trip" action (whole-itinerary revise). */
-const TIDY_UP_INSTRUCTION =
-  "Tidy up the whole trip: remove duplicate or redundant activities, fix " +
-  "scheduling conflicts and unrealistic timing, and make each day flow " +
-  "coherently. Keep the destination, dates, day count, and all locked items " +
-  "unchanged.";
-
 const ACTIVITY_TYPES: ActivityType[] = [
   "food",
   "culture",
@@ -1624,10 +1617,6 @@ export function ItineraryView({
     void runWholeItineraryRevise(trimmed);
   }
 
-  function handleTidyUp() {
-    void runWholeItineraryRevise(TIDY_UP_INSTRUCTION, "tidy");
-  }
-
   const [exportOpen, setExportOpen] = useState(false);
   const exportTitle = tripTitle?.trim() || "Trip itinerary";
 
@@ -1967,15 +1956,6 @@ export function ItineraryView({
                   <SparkleIcon />
                   Revise
                 </span>
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleTidyUp}
-                aria-label="Tidy up the whole trip with AI"
-                title="Remove redundancy and fix timing across the whole trip"
-              >
-                Tidy up
               </Button>
               <Button
                 variant="ghost"
