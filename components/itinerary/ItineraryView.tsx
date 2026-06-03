@@ -15,6 +15,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import type { DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -200,6 +201,38 @@ function byClock(a: Activity, b: Activity): number {
   if (bm == null) return -1;
   if (am !== bm) return am - bm;
   return a.sort_order - b.sort_order;
+}
+
+/**
+ * Reassigns a day's time-slots to a newly-ordered activity list. The set of
+ * non-locked start_times (the "slots") is kept and handed out in the new visual
+ * order; locked activities keep their own time (fixed anchors). Returns the
+ * updated activities plus the list of changes to persist.
+ */
+function reassignTimeSlots(ordered: Activity[]): {
+  acts: Activity[];
+  changed: { activity_id: string; start_time: string | null }[];
+} {
+  const slots = ordered
+    .filter((a) => !a.locked)
+    .map((a) => parseClock(a.start_time))
+    .filter((x): x is number => x != null)
+    .sort((x, y) => x - y);
+
+  let si = 0;
+  const changed: { activity_id: string; start_time: string | null }[] = [];
+  const acts = ordered.map((a) => {
+    if (a.locked) return a;
+    const slot = slots[si++];
+    if (slot == null) return a;
+    if (parseClock(a.start_time) !== slot) {
+      const ns = minutesToHHMM(slot);
+      changed.push({ activity_id: a.activity_id, start_time: ns });
+      return { ...a, start_time: ns };
+    }
+    return a;
+  });
+  return { acts, changed };
 }
 
 function formatChangelogDate(isoString: string): string {
@@ -662,23 +695,23 @@ interface ActivityCardProps {
   activity: Activity;
   tripId: string;
   onActivityUpdated: (updated: Activity) => void;
+  dayId: string;
   canMoveUp: boolean;
   canMoveDown: boolean;
   onReorder: (direction: "up" | "down") => void;
-  otherDays: { day_id: string; label: string }[];
-  onMoveToDay: (targetDayId: string) => void;
+  onDropBeforeMe: (dragged: { activityId: string; fromDayId: string }) => void;
   onDeleted: () => void;
 }
 
 function ActivityCard({
   activity,
   tripId,
+  dayId,
   onActivityUpdated,
   canMoveUp,
   canMoveDown,
   onReorder,
-  otherDays,
-  onMoveToDay,
+  onDropBeforeMe,
   onDeleted,
 }: ActivityCardProps) {
   const [editing, setEditing] = useState(false);
@@ -688,6 +721,8 @@ function ActivityCard({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [dropBefore, setDropBefore] = useState(false);
 
   async function handleDelete() {
     setDeleting(true);
@@ -756,10 +791,41 @@ function ActivityCard({
     onActivityUpdated(updated);
   }
 
+  const interactive = !editing && !revising;
+
   return (
     <div
+      draggable={interactive}
+      onDragStart={(e) => {
+        e.dataTransfer.setData(
+          "text/plain",
+          JSON.stringify({ activityId: act.activity_id, fromDayId: dayId })
+        );
+        e.dataTransfer.effectAllowed = "move";
+        setDragging(true);
+      }}
+      onDragEnd={() => setDragging(false)}
+      onDragOver={(e) => {
+        if (!interactive) return;
+        e.preventDefault();
+        e.stopPropagation();
+        setDropBefore(true);
+      }}
+      onDragLeave={() => setDropBefore(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setDropBefore(false);
+        const dragged = readDrag(e);
+        if (dragged && dragged.activityId !== act.activity_id) {
+          onDropBeforeMe(dragged);
+        }
+      }}
       className={[
         "flex flex-col gap-1.5 rounded-lg border bg-zinc-50 p-3",
+        interactive ? "cursor-grab active:cursor-grabbing" : "",
+        dragging ? "opacity-40" : "",
+        dropBefore ? "border-t-2 border-t-indigo-500" : "",
         act.locked ? "border-indigo-200" : "border-zinc-100",
       ].join(" ")}
     >
@@ -931,28 +997,6 @@ function ActivityCard({
             </p>
           )}
 
-          {/* Move to another day */}
-          {otherDays.length > 0 && (
-            <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-              <span>Move to</span>
-              <select
-                value=""
-                onChange={(e) => {
-                  if (e.target.value) onMoveToDay(e.target.value);
-                }}
-                className="rounded border border-zinc-300 bg-white px-1.5 py-0.5 text-xs text-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                aria-label={`Move ${act.name} to another day`}
-              >
-                <option value="">day…</option>
-                {otherDays.map((o) => (
-                  <option key={o.day_id} value={o.day_id}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
           {/* Lock error */}
           {lockError && (
             <p className="text-xs text-red-600" role="alert">
@@ -1061,18 +1105,33 @@ interface DaySectionProps {
   onDayUpdated: (updated: ItineraryDay) => void;
   onActivityUpdated: (updated: Activity) => void;
   onDayActivitiesReplaced: (dayId: string, activities: Activity[]) => void;
-  allDays: { day_id: string; label: string }[];
   onReorderActivity: (
     dayId: string,
     activityId: string,
     direction: "up" | "down"
   ) => void;
-  onMoveToDay: (
-    activityId: string,
-    fromDayId: string,
-    targetDayId: string
+  onActivityDrop: (
+    targetDayId: string,
+    beforeActivityId: string | null,
+    draggedActivityId: string,
+    fromDayId: string
   ) => void;
   onActivityDeleted: (dayId: string, activityId: string) => void;
+}
+
+/** Reads the dragged activity payload from a drop event. */
+function readDrag(
+  e: DragEvent
+): { activityId: string; fromDayId: string } | null {
+  try {
+    const raw = e.dataTransfer.getData("text/plain");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { activityId: string; fromDayId: string };
+    if (!parsed.activityId || !parsed.fromDayId) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
 }
 
 function DaySection({
@@ -1082,15 +1141,15 @@ function DaySection({
   onDayUpdated,
   onActivityUpdated,
   onDayActivitiesReplaced,
-  allDays,
   onReorderActivity,
-  onMoveToDay,
+  onActivityDrop,
   onActivityDeleted,
 }: DaySectionProps) {
   const [localDay, setLocalDay] = useState<ItineraryDay>(day);
   const [lockPending, setLockPending] = useState(false);
   const [lockError, setLockError] = useState<string | null>(null);
   const [revisingDay, setRevisingDay] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   const activities = day.activities ?? [];
 
@@ -1201,35 +1260,63 @@ function DaySection({
         />
       )}
 
-      {/* Activity list */}
-      {activities.length > 0 ? (
-        <div className="flex flex-col gap-2 pl-8">
-          {activities.map((activity, index) => (
+      {/* Activity list — also a drop zone (drop here = move to end of this day) */}
+      <div
+        className={[
+          "flex flex-col gap-2 rounded-lg pl-8 transition-colors",
+          isDragOver ? "bg-indigo-50 ring-2 ring-indigo-300" : "",
+        ].join(" ")}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setIsDragOver(true);
+        }}
+        onDragLeave={(e) => {
+          // Only clear when leaving the container, not when moving over a child.
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+            setIsDragOver(false);
+          }
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setIsDragOver(false);
+          const dragged = readDrag(e);
+          if (dragged) {
+            onActivityDrop(day.day_id, null, dragged.activityId, dragged.fromDayId);
+          }
+        }}
+      >
+        {activities.length > 0 ? (
+          activities.map((activity, index) => (
             <ActivityCard
               key={activity.activity_id}
               activity={activity}
               tripId={tripId}
+              dayId={day.day_id}
               onActivityUpdated={onActivityUpdated}
               canMoveUp={index > 0}
               canMoveDown={index < activities.length - 1}
               onReorder={(direction) =>
                 onReorderActivity(day.day_id, activity.activity_id, direction)
               }
-              otherDays={allDays.filter((o) => o.day_id !== day.day_id)}
-              onMoveToDay={(targetDayId) =>
-                onMoveToDay(activity.activity_id, day.day_id, targetDayId)
+              onDropBeforeMe={(dragged) =>
+                onActivityDrop(
+                  day.day_id,
+                  activity.activity_id,
+                  dragged.activityId,
+                  dragged.fromDayId
+                )
               }
               onDeleted={() =>
                 onActivityDeleted(day.day_id, activity.activity_id)
               }
             />
-          ))}
-        </div>
-      ) : (
-        <p className="pl-8 text-xs italic text-zinc-400">
-          No activities planned for this day.
-        </p>
-      )}
+          ))
+        ) : (
+          <p className="py-2 text-xs italic text-zinc-400">
+            No activities planned for this day. Drag one here to move it.
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -1490,6 +1577,8 @@ export function ItineraryView({
       let newActs = acts.map((a, i) => {
         if (a.activity_id === updated.activity_id) return updated;
         if (delta === 0 || i <= editedIdx) return a;
+        // A locked activity is a fixed anchor — never shift its time via cascade.
+        if (a.locked) return a;
         const s = parseClock(a.start_time);
         if (s == null) return a;
         const shifted = minutesToHHMM(s + delta);
@@ -1552,6 +1641,8 @@ export function ItineraryView({
 
       const a = acts[idx];
       const b = acts[swapIdx];
+      // Can't reorder across a locked anchor — its time must stay fixed.
+      if (a.locked || b.locked) return;
       acts[idx] = { ...a, start_time: b.start_time };
       acts[swapIdx] = { ...b, start_time: a.start_time };
       const sorted = [...acts].sort(byClock);
@@ -1647,11 +1738,58 @@ export function ItineraryView({
     [onItineraryUpdated]
   );
 
-  // Day options for the per-activity "move to day" control.
-  const dayOptions = localDays.map((d, i) => ({
-    day_id: d.day_id,
-    label: `Day ${i + 1}`,
-  }));
+  // Drag-and-drop: reorder within a day, or move to another day.
+  const handleActivityDrop = useCallback(
+    (
+      targetDayId: string,
+      beforeActivityId: string | null,
+      draggedActivityId: string,
+      fromDayId: string
+    ) => {
+      if (!draggedActivityId || draggedActivityId === beforeActivityId) return;
+
+      // Cross-day: move it (keeps its time, re-sorts into place on the new day).
+      if (fromDayId !== targetDayId) {
+        void handleMoveToDay(draggedActivityId, fromDayId, targetDayId);
+        return;
+      }
+
+      // Within-day reorder: splice to the new position, then reassign time-slots.
+      const prev = localDaysRef.current;
+      const dayIdx = prev.findIndex((d) => d.day_id === targetDayId);
+      if (dayIdx === -1) return;
+      const acts = [...(prev[dayIdx].activities ?? [])];
+      const fromIdx = acts.findIndex((a) => a.activity_id === draggedActivityId);
+      if (fromIdx === -1) return;
+
+      const [moved] = acts.splice(fromIdx, 1);
+      let insertIdx = beforeActivityId
+        ? acts.findIndex((a) => a.activity_id === beforeActivityId)
+        : acts.length;
+      if (insertIdx === -1) insertIdx = acts.length;
+      acts.splice(insertIdx, 0, moved);
+
+      const { acts: reassigned, changed } = reassignTimeSlots(acts);
+      const sorted = [...reassigned].sort(byClock);
+      const newDays = prev.map((d, i) =>
+        i === dayIdx ? { ...d, activities: sorted } : d
+      );
+      setLocalDays(newDays);
+      localDaysRef.current = newDays;
+
+      if (changed.length > 0) {
+        void fetch(`/api/trips/${tripId}/days/${targetDayId}/schedule`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ updates: changed } satisfies RescheduleRequestBody),
+        }).catch(() => {
+          /* non-fatal */
+        });
+      }
+      onItineraryUpdated?.();
+    },
+    [tripId, onItineraryUpdated, handleMoveToDay]
+  );
 
   // Compute total from day costs if total_cost_estimate is missing
   const totalCost =
@@ -1800,9 +1938,8 @@ export function ItineraryView({
                     onDayUpdated={handleDayUpdated}
                     onActivityUpdated={handleActivityUpdated}
                     onDayActivitiesReplaced={handleDayActivitiesReplaced}
-                    allDays={dayOptions}
                     onReorderActivity={handleReorderActivity}
-                    onMoveToDay={handleMoveToDay}
+                    onActivityDrop={handleActivityDrop}
                     onActivityDeleted={handleActivityDeleted}
                   />
                 </div>
