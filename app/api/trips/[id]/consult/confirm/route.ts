@@ -23,7 +23,7 @@
 import type { NextRequest } from "next/server";
 import { getUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/db/server";
-import { upsertTripBrief } from "@/lib/db/queries";
+import { upsertTripBrief, getTripById } from "@/lib/db/queries";
 import type { LLMTripBrief } from "@/lib/types";
 
 export interface ConfirmRequestBody {
@@ -84,10 +84,19 @@ export async function POST(
   try {
     const supabase = await createSupabaseServerClient();
 
+    // The trip row is the source of truth for destination + dates (the user set
+    // them at trip creation). The consultant LLM only transcribes them into the
+    // brief JSON and can get them wrong (e.g. the wrong year), so override with
+    // the trip's authoritative values rather than trusting the model's copy.
+    const trip = await getTripById(supabase, tripId);
+    if (!trip) {
+      return Response.json({ error: "Trip not found" }, { status: 404 });
+    }
+
     const persisted = await upsertTripBrief(supabase, tripId, {
-      destination: brief.destination,
-      start_date: brief.start_date,
-      end_date: brief.end_date,
+      destination: trip.destination,
+      start_date: trip.start_date,
+      end_date: trip.end_date,
       daily_budget_usd: brief.daily_budget_usd,
       vibe_keywords: brief.vibe_keywords,
       party_composition: brief.party_composition,
