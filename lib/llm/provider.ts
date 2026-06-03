@@ -10,7 +10,7 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import type { LLMItinerary, LLMTripBrief, TripBrief, Booking, CommunityPost } from "@/lib/types";
+import type { LLMItinerary, LLMActivity, LLMTripBrief, TripBrief, Booking, CommunityPost, Activity } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -91,6 +91,33 @@ export interface GenerateItineraryParams {
 }
 
 /**
+ * Parameters for whole-itinerary revision.
+ */
+export interface ReviseItineraryParams {
+  brief: TripBrief;
+  booking?: Booking | null;
+  rankedPosts: CommunityPost[];
+  /** The current hydrated itinerary expressed as the LLMItinerary shape (no DB ids). */
+  currentItinerary: LLMItinerary;
+  /** Free-text revision instruction from the user. */
+  instruction: string;
+}
+
+/**
+ * Parameters for single-activity revision.
+ */
+export interface ReviseActivityParams {
+  /** The activity being replaced (DB row). */
+  activity: Activity;
+  /** Free-text instruction from the user. */
+  instruction: string;
+  brief: TripBrief;
+  rankedPosts: CommunityPost[];
+  /** ISO date string for the day this activity belongs to. */
+  dayDateContext: string;
+}
+
+/**
  * Provider interface — implement this to swap out the underlying model.
  */
 export interface LLMProvider {
@@ -104,6 +131,18 @@ export interface LLMProvider {
    * Generates a full itinerary from a completed TripBrief + ranked posts.
    */
   generateItinerary(params: GenerateItineraryParams): Promise<LLMItinerary>;
+
+  /**
+   * Revises the entire itinerary according to a free-text instruction.
+   * Returns the same LLMItinerary shape; caller is responsible for persistence.
+   */
+  reviseItinerary(params: ReviseItineraryParams): Promise<LLMItinerary>;
+
+  /**
+   * Revises a single activity according to a free-text instruction.
+   * Returns a single LLMActivity replacement; caller applies it to the DB row.
+   */
+  reviseActivity(params: ReviseActivityParams): Promise<LLMActivity>;
 }
 
 // ---------------------------------------------------------------------------
@@ -163,6 +202,74 @@ When you have enough information to fill all fields, respond with a final summar
 Always populate destination, start_date, and end_date in the brief JSON from the known trip facts — never leave them blank or ask the user to re-enter them.
 
 If you don't have enough information yet, omit the JSON block and keep asking.`;
+
+/** System prompt for whole-itinerary revision */
+const ITINERARY_REVISION_SYSTEM_PROMPT = `You are an expert travel itinerary planner helping a user revise an existing plan.
+
+You will receive:
+- The user's trip brief (budget, pace, preferences)
+- The current itinerary (day-by-day with activities)
+- A revision instruction from the user (e.g. "make it cheaper", "more outdoorsy", "less walking on day 2")
+- Community-sourced place recommendations
+
+Your job is to apply the instruction to produce a revised itinerary. Rules:
+1. Apply the instruction purposefully — change what the user asked to change.
+2. Keep what the user did NOT ask to change where reasonable; preserve good activities that are unaffected by the instruction.
+3. LOCKED ITEMS ARE NON-NEGOTIABLE. Any day or activity marked "locked": true in the current itinerary represents a committed plan (e.g. a booking the user cannot move). Reproduce it EXACTLY — do not change, reword, reprice, reorder, or remove it — and plan the rest of the trip around it.
+4. Produce 3-4 activities per day MAXIMUM — same cap as the original generation.
+5. Keep each "description" to ONE short sentence.
+6. Maintain the same date range and day count as the original itinerary.
+7. Respect the budget and pace from the brief.
+8. Prioritise community posts that match the revised intent.
+
+Respond ONLY with valid JSON matching this exact shape:
+{
+  "destination": "string",
+  "start_date": "YYYY-MM-DD",
+  "end_date": "YYYY-MM-DD",
+  "total_cost_estimate": 0,
+  "notes": "string",
+  "days": [
+    {
+      "date": "YYYY-MM-DD",
+      "daily_cost": 0,
+      "activities": [
+        {
+          "name": "string",
+          "description": "string",
+          "estimated_time_hours": 1.5,
+          "estimated_cost_usd": 20,
+          "place_name": "string",
+          "source_attribution": "string or empty",
+          "activity_type": "food|culture|outdoor|shopping|transport|accommodation|entertainment|other"
+        }
+      ]
+    }
+  ]
+}`;
+
+/** System prompt for single-activity revision */
+const ACTIVITY_REVISION_SYSTEM_PROMPT = `You are an expert travel planner helping a user swap one activity in their itinerary.
+
+You will receive:
+- The current activity to replace
+- The user's revision instruction (e.g. "swap for something cheaper", "find a more local option", "different cuisine")
+- The trip brief for context (budget, preferences, location)
+- The date of the day this activity belongs to
+- Community-sourced place recommendations for the destination
+
+Return ONLY a single replacement activity as valid JSON matching this exact shape:
+{
+  "name": "string",
+  "description": "string (one sentence)",
+  "estimated_time_hours": 1.5,
+  "estimated_cost_usd": 20,
+  "place_name": "string",
+  "source_attribution": "string or empty",
+  "activity_type": "food|culture|outdoor|shopping|transport|accommodation|entertainment|other"
+}
+
+No markdown fences, no explanation — just the JSON object.`;
 
 /** System prompt for the itinerary generation phase */
 const ITINERARY_SYSTEM_PROMPT = `You are an expert travel itinerary planner.
@@ -425,6 +532,126 @@ export class AnthropicProvider implements LLMProvider {
     }
 
     return itinerary;
+  }
+  async reviseItinerary(
+    params: ReviseItineraryParams
+  ): Promise<LLMItinerary> {
+    const client = this.getClient();
+
+    const userContent = JSON.stringify({
+      brief: params.brief,
+      current_itinerary: params.currentItinerary,
+      revision_instruction: params.instruction,
+      community_posts: params.rankedPosts.slice(0, 30),
+      ...(params.booking ? { booking: params.booking } : {}),
+    });
+
+    const response = await client.messages.create({
+      model: ITINERARY_MODEL,
+      max_tokens: 8192,
+      system: ITINERARY_REVISION_SYSTEM_PROMPT,
+      messages: [
+        { role: "user", content: userContent },
+        { role: "assistant", content: "{" },
+      ],
+    });
+
+    const raw =
+      "{" +
+      (response.content
+        .filter((block): block is Anthropic.TextBlock => block.type === "text")
+        .map((block) => block.text)
+        .join("") ?? "");
+
+    let jsonStr = raw.trim();
+    const fence = jsonStr.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    if (fence) jsonStr = fence[1].trim();
+    if (!jsonStr.startsWith("{")) {
+      const s = jsonStr.indexOf("{");
+      const e = jsonStr.lastIndexOf("}");
+      if (s !== -1 && e !== -1 && e > s) jsonStr = jsonStr.slice(s, e + 1);
+    }
+
+    let itinerary: LLMItinerary;
+    try {
+      itinerary = JSON.parse(jsonStr) as LLMItinerary;
+    } catch (err) {
+      throw new Error(
+        `LLM returned invalid JSON for itinerary revision. Raw response:\n${raw}\nParse error: ${err}`
+      );
+    }
+
+    const MAX_ACTIVITIES_PER_DAY = 4;
+    if (Array.isArray(itinerary.days)) {
+      for (const day of itinerary.days) {
+        if (
+          Array.isArray(day.activities) &&
+          day.activities.length > MAX_ACTIVITIES_PER_DAY
+        ) {
+          day.activities = day.activities.slice(0, MAX_ACTIVITIES_PER_DAY);
+        }
+      }
+    }
+
+    return itinerary;
+  }
+
+  async reviseActivity(
+    params: ReviseActivityParams
+  ): Promise<LLMActivity> {
+    const client = this.getClient();
+
+    const userContent = JSON.stringify({
+      current_activity: {
+        name: params.activity.name,
+        description: params.activity.description,
+        estimated_time_hours: params.activity.estimated_time_hours,
+        estimated_cost_usd: params.activity.estimated_cost_usd,
+        place_name: params.activity.place_name,
+        activity_type: params.activity.activity_type,
+      },
+      revision_instruction: params.instruction,
+      day_date: params.dayDateContext,
+      brief: params.brief,
+      community_posts: params.rankedPosts.slice(0, 20),
+    });
+
+    const response = await client.messages.create({
+      model: ITINERARY_MODEL,
+      max_tokens: 512,
+      system: ACTIVITY_REVISION_SYSTEM_PROMPT,
+      messages: [
+        { role: "user", content: userContent },
+        { role: "assistant", content: "{" },
+      ],
+    });
+
+    const raw =
+      "{" +
+      (response.content
+        .filter((block): block is Anthropic.TextBlock => block.type === "text")
+        .map((block) => block.text)
+        .join("") ?? "");
+
+    let jsonStr = raw.trim();
+    const fence = jsonStr.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    if (fence) jsonStr = fence[1].trim();
+    if (!jsonStr.startsWith("{")) {
+      const s = jsonStr.indexOf("{");
+      const e = jsonStr.lastIndexOf("}");
+      if (s !== -1 && e !== -1 && e > s) jsonStr = jsonStr.slice(s, e + 1);
+    }
+
+    let activity: LLMActivity;
+    try {
+      activity = JSON.parse(jsonStr) as LLMActivity;
+    } catch (err) {
+      throw new Error(
+        `LLM returned invalid JSON for activity revision. Raw response:\n${raw}\nParse error: ${err}`
+      );
+    }
+
+    return activity;
   }
 }
 

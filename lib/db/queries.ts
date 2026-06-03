@@ -568,7 +568,9 @@ export async function createItineraryFromLLMOutput(
         itinerary_id: itinerary.itinerary_id,
         date: llmDay.date,
         daily_cost: llmDay.daily_cost ?? null,
-        locked: false,
+        // Lock state is carried forward by the revision pipeline; defaults to
+        // false for fresh generation (where llmDay.locked is undefined).
+        locked: llmDay.locked ?? false,
       })
       .select()
       .single();
@@ -588,7 +590,8 @@ export async function createItineraryFromLLMOutput(
         place_name: a.place_name ?? null,
         source_attribution: a.source_attribution ?? null,
         activity_type: a.activity_type ?? null,
-        locked: false,
+        // Carried forward by the revision pipeline; false for fresh generation.
+        locked: a.locked ?? false,
       }));
 
       const { data: activityRows, error: activityError } = await client
@@ -652,6 +655,113 @@ export async function appendChangeLogEntry(
 
   if (error) throw error;
   return data as ChangeLogEntry;
+}
+
+// ---------------------------------------------------------------------------
+// Activity — LLM-driven update
+// ---------------------------------------------------------------------------
+
+/**
+ * Replaces the content fields of an existing activity row with values from a
+ * single LLMActivity returned by the revision pipeline. The activity_id and
+ * day_id are preserved; locked status is not changed.
+ *
+ * Returns the updated Activity row.
+ */
+export async function updateActivityFromLLMOutput(
+  client: SupabaseClient,
+  activityId: string,
+  llmActivity: import("@/lib/types").LLMActivity
+): Promise<Activity> {
+  const { data, error } = await client
+    .from("activities")
+    .update({
+      name: llmActivity.name,
+      description: llmActivity.description ?? null,
+      estimated_time_hours: llmActivity.estimated_time_hours ?? null,
+      estimated_cost_usd: llmActivity.estimated_cost_usd ?? null,
+      place_name: llmActivity.place_name ?? null,
+      source_attribution: llmActivity.source_attribution ?? null,
+      activity_type: llmActivity.activity_type ?? null,
+    })
+    .eq("activity_id", activityId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as Activity;
+}
+
+/**
+ * Returns a single activity by its ID, or null if not found / not accessible.
+ */
+export async function getActivityById(
+  client: SupabaseClient,
+  activityId: string
+): Promise<Activity | null> {
+  const { data, error } = await client
+    .from("activities")
+    .select("*")
+    .eq("activity_id", activityId)
+    .single();
+
+  if (error) {
+    if (error.code === "PGRST116") return null;
+    throw error;
+  }
+  return data as Activity;
+}
+
+/**
+ * Returns a single itinerary day by its ID, or null if not found / not accessible.
+ */
+export async function getDayById(
+  client: SupabaseClient,
+  dayId: string
+): Promise<import("@/lib/types").ItineraryDay | null> {
+  const { data, error } = await client
+    .from("itinerary_days")
+    .select("*")
+    .eq("day_id", dayId)
+    .single();
+
+  if (error) {
+    if (error.code === "PGRST116") return null;
+    throw error;
+  }
+  return data as import("@/lib/types").ItineraryDay;
+}
+
+// ---------------------------------------------------------------------------
+// Itinerary — hydration helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the current itinerary for a trip with days and activities hydrated.
+ * Returns null if no current itinerary exists.
+ */
+export async function getCurrentItineraryHydrated(
+  client: SupabaseClient,
+  tripId: string
+): Promise<
+  (import("@/lib/types").Itinerary & {
+    days: (import("@/lib/types").ItineraryDay & {
+      activities: Activity[];
+    })[];
+  }) | null
+> {
+  const itinerary = await getCurrentItinerary(client, tripId);
+  if (!itinerary) return null;
+
+  const days = await getDaysForItinerary(client, itinerary.itinerary_id);
+  const hydratedDays = await Promise.all(
+    days.map(async (day) => {
+      const activities = await getActivitiesForDay(client, day.day_id);
+      return { ...day, activities };
+    })
+  );
+
+  return { ...itinerary, days: hydratedDays };
 }
 
 // ---------------------------------------------------------------------------

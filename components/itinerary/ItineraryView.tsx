@@ -15,9 +15,11 @@
  */
 
 import { useState, useCallback, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { ItineraryGeneratingOverlay } from "@/components/itinerary/ItineraryGeneratingOverlay";
 import type {
   Itinerary,
   ItineraryDay,
@@ -39,6 +41,15 @@ import type {
   GetChangelogResponseBody,
   GetChangelogErrorBody,
 } from "@/app/api/trips/[id]/changelog/route";
+import type {
+  ReviseActivityRequestBody,
+  ReviseActivityResponseBody,
+  ReviseActivityErrorBody,
+} from "@/app/api/trips/[id]/activities/[activityId]/revise/route";
+import type {
+  ReviseItineraryRequestBody,
+  ReviseItineraryErrorBody,
+} from "@/app/api/trips/[id]/itinerary/revise/route";
 
 // ---------------------------------------------------------------------------
 // Prop contract — FINAL (unchanged)
@@ -253,6 +264,123 @@ function PencilIcon() {
 }
 
 // ---------------------------------------------------------------------------
+// Sparkle (AI revise) icon
+// ---------------------------------------------------------------------------
+
+function SparkleIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className="h-3.5 w-3.5"
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M10 1.5l1.6 4.2a3 3 0 001.7 1.7l4.2 1.6-4.2 1.6a3 3 0 00-1.7 1.7L10 16.5l-1.6-4.2a3 3 0 00-1.7-1.7L2.5 9l4.2-1.6a3 3 0 001.7-1.7L10 1.5zM16 13l.6 1.6a1.5 1.5 0 00.8.8L19 16l-1.6.6a1.5 1.5 0 00-.8.8L16 19l-.6-1.6a1.5 1.5 0 00-.8-.8L13 16l1.6-.6a1.5 1.5 0 00.8-.8L16 13z" />
+    </svg>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Activity revise form (inline AI revision)
+// ---------------------------------------------------------------------------
+
+interface ReviseActivityFormProps {
+  activity: Activity;
+  tripId: string;
+  onRevised: (updated: Activity) => void;
+  onCancel: () => void;
+}
+
+function ReviseActivityForm({
+  activity,
+  tripId,
+  onRevised,
+  onCancel,
+}: ReviseActivityFormProps) {
+  const [instruction, setInstruction] = useState("");
+  const [revising, setRevising] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleRevise() {
+    const trimmed = instruction.trim();
+    if (!trimmed) {
+      setError("Tell the planner what to change.");
+      return;
+    }
+    setRevising(true);
+    setError(null);
+
+    const body: ReviseActivityRequestBody = { instruction: trimmed };
+
+    try {
+      const res = await fetch(
+        `/api/trips/${tripId}/activities/${activity.activity_id}/revise`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }
+      );
+
+      if (!res.ok) {
+        const errBody = (await res.json()) as ReviseActivityErrorBody;
+        setError(errBody.error ?? "Failed to revise this activity.");
+        return;
+      }
+
+      const responseBody = (await res.json()) as ReviseActivityResponseBody;
+      onRevised(responseBody.activity);
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setRevising(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-violet-200 bg-violet-50 p-3">
+      <div className="flex flex-col gap-1">
+        <label className="flex items-center gap-1.5 text-sm font-medium text-violet-800">
+          <SparkleIcon />
+          Revise &ldquo;{activity.name}&rdquo;
+        </label>
+        <textarea
+          value={instruction}
+          onChange={(e) => setInstruction(e.target.value)}
+          disabled={revising}
+          rows={2}
+          autoFocus
+          className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-500"
+          placeholder="e.g. swap for something cheaper, find a more local option, different cuisine"
+        />
+      </div>
+
+      {error && (
+        <p className="text-xs text-red-600" role="alert">
+          {error}
+        </p>
+      )}
+
+      <div className="flex gap-2">
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={handleRevise}
+          loading={revising}
+          disabled={revising}
+        >
+          {revising ? "Revising…" : "Revise"}
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onCancel} disabled={revising}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Activity edit form (inline)
 // ---------------------------------------------------------------------------
 
@@ -434,6 +562,7 @@ interface ActivityCardProps {
 
 function ActivityCard({ activity, tripId, onActivityUpdated }: ActivityCardProps) {
   const [editing, setEditing] = useState(false);
+  const [revising, setRevising] = useState(false);
   const [localActivity, setLocalActivity] = useState<Activity>(activity);
   const [lockPending, setLockPending] = useState(false);
   const [lockError, setLockError] = useState<string | null>(null);
@@ -476,6 +605,12 @@ function ActivityCard({ activity, tripId, onActivityUpdated }: ActivityCardProps
     onActivityUpdated(updated);
   }
 
+  function handleRevised(updated: Activity) {
+    setLocalActivity(updated);
+    setRevising(false);
+    onActivityUpdated(updated);
+  }
+
   const act = localActivity;
 
   return (
@@ -492,6 +627,13 @@ function ActivityCard({ activity, tripId, onActivityUpdated }: ActivityCardProps
           onSaved={handleSaved}
           onCancel={() => setEditing(false)}
         />
+      ) : revising ? (
+        <ReviseActivityForm
+          activity={act}
+          tripId={tripId}
+          onRevised={handleRevised}
+          onCancel={() => setRevising(false)}
+        />
       ) : (
         <>
           {/* Header row: name + type badge + action buttons */}
@@ -501,6 +643,16 @@ function ActivityCard({ activity, tripId, onActivityUpdated }: ActivityCardProps
             </p>
             <div className="flex shrink-0 items-center gap-1">
               <ActivityTypeBadge type={act.activity_type} />
+
+              {/* AI revise button */}
+              <button
+                onClick={() => setRevising(true)}
+                className="rounded p-1 text-zinc-400 transition-colors hover:bg-violet-100 hover:text-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                title="Revise with AI"
+                aria-label={`Revise ${act.name} with AI`}
+              >
+                <SparkleIcon />
+              </button>
 
               {/* Edit button */}
               <button
@@ -852,12 +1004,59 @@ export function ItineraryView({
   itinerary,
   onItineraryUpdated,
 }: ItineraryViewProps) {
+  const router = useRouter();
+
   // Local copy of days so mutations reflect immediately without a full page refresh
   const [localDays, setLocalDays] = useState<
     (ItineraryDay & { activities?: Activity[] })[]
   >(itinerary.days ?? []);
 
   const [changelogOpen, setChangelogOpen] = useState(false);
+
+  // Whole-itinerary AI revision
+  const [reviseOpen, setReviseOpen] = useState(false);
+  const [reviseInstruction, setReviseInstruction] = useState("");
+  const [revising, setRevising] = useState(false);
+  const [reviseError, setReviseError] = useState<string | null>(null);
+
+  async function handleReviseItinerary() {
+    const trimmed = reviseInstruction.trim();
+    if (!trimmed) {
+      setReviseError("Tell the planner what to change across the trip.");
+      return;
+    }
+    setRevising(true);
+    setReviseError(null);
+
+    const body: ReviseItineraryRequestBody = { instruction: trimmed };
+
+    try {
+      const res = await fetch(`/api/trips/${tripId}/itinerary/revise`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const errBody = (await res.json()) as ReviseItineraryErrorBody;
+        setReviseError(errBody.error ?? "Failed to revise the itinerary.");
+        return;
+      }
+
+      // Revision creates a NEW current version. Refresh so the server component
+      // re-fetches and renders it. router.refresh() does NOT remount this
+      // client component, so `revising` must be reset explicitly (in finally) —
+      // otherwise the overlay would stay up forever.
+      setReviseInstruction("");
+      setReviseOpen(false);
+      onItineraryUpdated?.();
+      router.refresh();
+    } catch {
+      setReviseError("Network error. Please try again.");
+    } finally {
+      setRevising(false);
+    }
+  }
 
   const handleDayUpdated = useCallback(
     (updated: ItineraryDay) => {
@@ -893,6 +1092,14 @@ export function ItineraryView({
       ? localDays.reduce((sum, d) => sum + (d.daily_cost ?? 0), 0)
       : null);
 
+  // While a whole-itinerary revision is in flight, replace the view with the
+  // prominent overlay (revision regenerates the plan — takes 10-20s). The
+  // overlay stays up through router.refresh(), which remounts this component
+  // with the new version.
+  if (revising) {
+    return <ItineraryGeneratingOverlay />;
+  }
+
   return (
     <>
       <div className="flex flex-col gap-4">
@@ -902,6 +1109,21 @@ export function ItineraryView({
             <CardTitle>Your Itinerary</CardTitle>
             {/* View changes drawer trigger (change-log mount point) */}
             <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setReviseError(null);
+                  setReviseOpen((v) => !v);
+                }}
+                aria-expanded={reviseOpen}
+                aria-label="Revise itinerary with AI"
+              >
+                <span className="flex items-center gap-1.5">
+                  <SparkleIcon />
+                  Revise
+                </span>
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -916,6 +1138,52 @@ export function ItineraryView({
               </span>
             </div>
           </CardHeader>
+
+          {/* Whole-itinerary AI revision panel */}
+          {reviseOpen && (
+            <div className="mb-3 flex flex-col gap-2 rounded-lg border border-violet-200 bg-violet-50 p-3">
+              <label className="flex items-center gap-1.5 text-sm font-medium text-violet-800">
+                <SparkleIcon />
+                Revise the whole trip
+              </label>
+              <textarea
+                value={reviseInstruction}
+                onChange={(e) => setReviseInstruction(e.target.value)}
+                rows={2}
+                autoFocus
+                className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-violet-500"
+                placeholder="e.g. make it cheaper, more outdoorsy, less walking on day 2"
+              />
+              {reviseError && (
+                <p className="text-xs text-red-600" role="alert">
+                  {reviseError}
+                </p>
+              )}
+              <div className="flex gap-2">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleReviseItinerary}
+                >
+                  Revise itinerary
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setReviseOpen(false);
+                    setReviseError(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+              <p className="text-xs text-violet-700/70">
+                Locked activities are kept as-is. Creates a new version — your
+                current plan stays in history.
+              </p>
+            </div>
+          )}
 
           {itinerary.notes && (
             <p className="mb-3 text-sm text-zinc-600">{itinerary.notes}</p>
