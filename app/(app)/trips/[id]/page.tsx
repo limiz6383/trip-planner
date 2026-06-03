@@ -10,6 +10,7 @@ import {
   getBookingForTrip,
 } from "@/lib/db/queries";
 import { requireUser } from "@/lib/auth";
+import { calendarToken } from "@/lib/calendar-token";
 import { ItineraryView } from "@/components/itinerary/ItineraryView";
 import { GenerateItineraryButton } from "@/components/itinerary/GenerateItineraryButton";
 import { PrePlanFlow } from "@/components/booking/PrePlanFlow";
@@ -191,7 +192,16 @@ export default async function TripDetailPage({
         {/* State 3: itinerary exists — show full itinerary view and editable bookings */}
         {hasItinerary && itinerary && (
           <>
-            <ItineraryView tripId={trip.trip_id} itinerary={itinerary} tripTitle={trip.title} />
+            <ItineraryView
+              tripId={trip.trip_id}
+              itinerary={itinerary}
+              tripTitle={trip.title}
+              calendarSubscribeUrl={
+                process.env.NEXT_PUBLIC_SITE_URL
+                  ? `${process.env.NEXT_PUBLIC_SITE_URL}/api/trips/${trip.trip_id}/calendar.ics?token=${calendarToken(trip.trip_id)}`
+                  : undefined
+              }
+            />
             {/*
              * PostItineraryBookingPanel lets the user view and edit their
              * flights/accommodation at any time after generation. It starts

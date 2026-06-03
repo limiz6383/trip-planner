@@ -21,6 +21,7 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { ItineraryGeneratingOverlay } from "@/components/itinerary/ItineraryGeneratingOverlay";
+import { buildICS } from "@/lib/ics";
 import type {
   Itinerary,
   ItineraryDay,
@@ -75,6 +76,8 @@ export interface ItineraryViewProps {
   itinerary: Itinerary;
   /** Trip title — used for export filenames/headings. */
   tripTitle?: string;
+  /** Public, tokenized .ics feed URL for calendar subscribe-by-URL. */
+  calendarSubscribeUrl?: string;
   /** Fired after a successful in-place mutation so the parent page can revalidate */
   onItineraryUpdated?: () => void;
 }
@@ -243,43 +246,6 @@ function reassignTimeSlots(ordered: Activity[]): {
 
 type ExportDay = ItineraryDay & { activities?: Activity[] };
 
-function pad2(n: number): string {
-  return String(n).padStart(2, "0");
-}
-
-/** "YYYY-MM-DD" → "YYYYMMDD" */
-function icsDate(iso: string): string {
-  return iso.slice(0, 10).replace(/-/g, "");
-}
-
-/** minutes-since-midnight → "HHMMSS" */
-function icsTime(min: number): string {
-  return pad2(Math.floor(min / 60)) + pad2(min % 60) + "00";
-}
-
-/** Add days to a "YYYY-MM-DD" (component math, TZ-safe) → "YYYYMMDD". */
-function icsDatePlus(iso: string, addDays: number): string {
-  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d + addDays));
-  return `${dt.getUTCFullYear()}${pad2(dt.getUTCMonth() + 1)}${pad2(dt.getUTCDate())}`;
-}
-
-function icsStamp(d: Date): string {
-  return (
-    `${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}` +
-    `T${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}${pad2(d.getUTCSeconds())}Z`
-  );
-}
-
-/** RFC 5545 text escaping. */
-function icsEscape(s: string): string {
-  return s
-    .replace(/\\/g, "\\\\")
-    .replace(/;/g, "\\;")
-    .replace(/,/g, "\\,")
-    .replace(/\r?\n/g, "\\n");
-}
-
 function slugify(s: string): string {
   return (
     s
@@ -287,57 +253,6 @@ function slugify(s: string): string {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "") || "trip"
   );
-}
-
-/** Build an .ics calendar (floating local times) from the itinerary days. */
-function buildICS(days: ExportDay[], title: string): string {
-  const stamp = icsStamp(new Date());
-  const lines: string[] = [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//trip-planner//itinerary//EN",
-    "CALSCALE:GREGORIAN",
-    "METHOD:PUBLISH",
-  ];
-  if (title) lines.push("X-WR-CALNAME:" + icsEscape(title));
-
-  for (const day of days) {
-    for (const a of day.activities ?? []) {
-      lines.push("BEGIN:VEVENT");
-      lines.push(`UID:${a.activity_id}@trip-planner`);
-      lines.push("DTSTAMP:" + stamp);
-
-      const startMin = parseClock(a.start_time);
-      if (startMin != null) {
-        const durMin =
-          a.estimated_time_hours != null
-            ? Math.round(a.estimated_time_hours * 60)
-            : 60;
-        const endTotal = startMin + durMin;
-        lines.push(`DTSTART:${icsDate(day.date)}T${icsTime(startMin)}`);
-        lines.push(
-          `DTEND:${icsDatePlus(day.date, Math.floor(endTotal / 1440))}T${icsTime(
-            endTotal % 1440
-          )}`
-        );
-      } else {
-        // Untimed → all-day event on that date.
-        lines.push(`DTSTART;VALUE=DATE:${icsDate(day.date)}`);
-      }
-
-      lines.push("SUMMARY:" + icsEscape(a.name));
-      if (a.place_name) lines.push("LOCATION:" + icsEscape(a.place_name));
-      const desc: string[] = [];
-      if (a.description) desc.push(a.description);
-      if (a.estimated_cost_usd != null) desc.push(`Est. $${a.estimated_cost_usd}`);
-      if (a.source_attribution) desc.push(`via ${a.source_attribution}`);
-      if (desc.length) lines.push("DESCRIPTION:" + icsEscape(desc.join(" — ")));
-      lines.push("END:VEVENT");
-    }
-  }
-
-  lines.push("END:VCALENDAR");
-  return lines.join("\r\n");
 }
 
 /** Trigger a client-side file download. */
@@ -1645,6 +1560,7 @@ export function ItineraryView({
   tripId,
   itinerary,
   tripTitle,
+  calendarSubscribeUrl,
   onItineraryUpdated,
 }: ItineraryViewProps) {
   const router = useRouter();
@@ -1735,6 +1651,20 @@ export function ItineraryView({
     w.focus();
     setTimeout(() => w.print(), 300);
     setExportOpen(false);
+  }
+
+  const [subscribeOpen, setSubscribeOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopySubscribe() {
+    if (!calendarSubscribeUrl) return;
+    try {
+      await navigator.clipboard.writeText(calendarSubscribeUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard blocked — the URL is shown for manual copy */
+    }
   }
 
   const handleDayUpdated = useCallback(
@@ -2085,6 +2015,17 @@ export function ItineraryView({
                       >
                         Add to calendar (.ics)
                       </button>
+                      {calendarSubscribeUrl && (
+                        <button
+                          onClick={() => {
+                            setExportOpen(false);
+                            setSubscribeOpen(true);
+                          }}
+                          className="block w-full rounded px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-100"
+                        >
+                          Subscribe (auto-sync)…
+                        </button>
+                      )}
                     </div>
                   </>
                 )}
@@ -2138,6 +2079,38 @@ export function ItineraryView({
               <p className="text-xs text-violet-700/70">
                 Locked activities are kept as-is. Creates a new version — your
                 current plan stays in history.
+              </p>
+            </div>
+          )}
+
+          {/* Subscribe-by-URL panel */}
+          {subscribeOpen && calendarSubscribeUrl && (
+            <div className="mb-3 flex flex-col gap-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-zinc-800">
+                  Subscribe in your calendar (auto-syncs)
+                </span>
+                <button
+                  onClick={() => setSubscribeOpen(false)}
+                  className="rounded p-1 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700"
+                  aria-label="Close subscribe panel"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  readOnly
+                  value={calendarSubscribeUrl}
+                  onFocus={(e) => e.currentTarget.select()}
+                  className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-xs text-zinc-700"
+                />
+                <Button variant="secondary" size="sm" onClick={handleCopySubscribe}>
+                  {copied ? "Copied" : "Copy"}
+                </Button>
+              </div>
+              <p className="text-xs text-zinc-500">
+                In Google Calendar (web): <span className="font-medium">Other calendars → + → From URL</span>, paste this link. It updates automatically when you change the trip. Anyone with the link can view this itinerary.
               </p>
             </div>
           )}
