@@ -101,6 +101,8 @@ export interface ReviseItineraryParams {
   currentItinerary: LLMItinerary;
   /** Free-text revision instruction from the user. */
   instruction: string;
+  /** Earlier revision asks to keep honoring unless the current one overrides. */
+  standingPreferences?: string[];
 }
 
 /**
@@ -129,6 +131,8 @@ export interface ReviseDayParams {
   currentActivities: LLMActivity[];
   /** Free-text revision instruction from the user. */
   instruction: string;
+  /** Earlier revision asks to keep honoring unless the current one overrides. */
+  standingPreferences?: string[];
   booking?: Booking | null;
 }
 
@@ -231,11 +235,13 @@ You will receive:
 - The user's trip brief (budget, pace, preferences)
 - The current itinerary (day-by-day with activities)
 - A revision instruction from the user (e.g. "make it cheaper", "more outdoorsy", "less walking on day 2")
+- standing_preferences: things the traveller asked for in EARLIER revisions
 - Community-sourced place recommendations
 
 Your job is to apply the instruction to produce a revised itinerary. Rules:
 1. Apply the instruction purposefully — change what the user asked to change.
-2. Keep what the user did NOT ask to change where reasonable; preserve good activities that are unaffected by the instruction.
+2. STANDING PREFERENCES ARE STICKY. Everything in standing_preferences was explicitly requested earlier and must still hold in your result. Do NOT undo or compromise an earlier request while satisfying the new one — only drop a standing preference if the current instruction directly contradicts it. (e.g. if they earlier asked to add a specific restaurant, keep it when they later say "make it cheaper".)
+3. Keep what the user did NOT ask to change where reasonable; preserve good activities that are unaffected by the instruction.
 3. LOCKED ITEMS ARE NON-NEGOTIABLE. Any day or activity marked "locked": true in the current itinerary represents a committed plan (e.g. a booking the user cannot move). Reproduce it EXACTLY — do not change, reword, reprice, reorder, or remove it — and plan the rest of the trip around it.
 4. Size each day to the traveller's PACE from the brief: relaxed ≈ 3-4, moderate ≈ 4-5, fast ≈ 6-7 activities (default ~4; meals included in the count; never exceed 8) — same policy as the original generation.
 5. MEALS: keep breakfast, lunch, and dinner present on every full day (activity_type "food") at realistic times, unless the instruction explicitly changes meals. Arrival/departure days include only meals that fit around the flight.
@@ -304,10 +310,12 @@ You will receive:
 - The date of the day being revised
 - The day's current activities (each with start_time, duration, locked flag)
 - A revision instruction (e.g. "more outdoorsy", "make the morning cheaper", "add a museum")
+- standing_preferences: things the traveller asked for in EARLIER revisions
 - Community-sourced place recommendations
 
 Rules:
 1. Apply the instruction to THIS day only; keep unaffected activities where reasonable.
+2. STANDING PREFERENCES ARE STICKY. Everything in standing_preferences was explicitly requested earlier and must still hold. Do NOT undo or compromise an earlier request while satisfying the new one — only drop one if the current instruction directly contradicts it.
 2. LOCKED ITEMS ARE NON-NEGOTIABLE. Any activity with "locked": true must be reproduced EXACTLY (do not change, reorder, reprice, or remove it) and the rest of the day planned around it.
 3. Size the day to the traveller's PACE: relaxed ≈ 3-4, moderate ≈ 4-5, fast ≈ 6-7 activities (default ~4; meals count; never exceed 8).
 4. Keep breakfast, lunch, and dinner present (activity_type "food") at realistic times unless the instruction explicitly changes meals.
@@ -605,6 +613,7 @@ export class AnthropicProvider implements LLMProvider {
       brief: params.brief,
       current_itinerary: params.currentItinerary,
       revision_instruction: params.instruction,
+      standing_preferences: params.standingPreferences ?? [],
       community_posts: params.rankedPosts.slice(0, 30),
       ...(params.booking ? { booking: params.booking } : {}),
     });
@@ -725,6 +734,7 @@ export class AnthropicProvider implements LLMProvider {
       day_date: params.dayDate,
       current_activities: params.currentActivities,
       revision_instruction: params.instruction,
+      standing_preferences: params.standingPreferences ?? [],
       community_posts: params.rankedPosts.slice(0, 20),
       ...(params.booking ? { booking: params.booking } : {}),
     });

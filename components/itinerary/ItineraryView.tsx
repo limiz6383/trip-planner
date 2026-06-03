@@ -1482,11 +1482,14 @@ export function ItineraryView({
   const [revising, setRevising] = useState(false);
   const [reviseError, setReviseError] = useState<string | null>(null);
 
-  async function runWholeItineraryRevise(instruction: string) {
+  async function runWholeItineraryRevise(
+    instruction: string,
+    kind: "user" | "tidy" = "user"
+  ) {
     setRevising(true);
     setReviseError(null);
 
-    const body: ReviseItineraryRequestBody = { instruction };
+    const body: ReviseItineraryRequestBody = { instruction, kind };
 
     try {
       const res = await fetch(`/api/trips/${tripId}/itinerary/revise`, {
@@ -1526,7 +1529,7 @@ export function ItineraryView({
   }
 
   function handleTidyUp() {
-    void runWholeItineraryRevise(TIDY_UP_INSTRUCTION);
+    void runWholeItineraryRevise(TIDY_UP_INSTRUCTION, "tidy");
   }
 
   const handleDayUpdated = useCallback(

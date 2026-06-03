@@ -90,6 +90,8 @@ export interface ReviseItineraryInput {
   currentItinerary: HydratedItinerary;
   /** Free-text revision instruction from the user. */
   instruction: string;
+  /** Earlier revision asks to keep honoring. */
+  standingPreferences?: string[];
   booking?: Booking | null;
   /**
    * ISO date (YYYY-MM-DD) for today. When provided, past days are preserved in
@@ -117,6 +119,8 @@ export interface ReviseDayInput {
   activities: Activity[];
   /** Free-text revision instruction from the user. */
   instruction: string;
+  /** Earlier revision asks to keep honoring. */
+  standingPreferences?: string[];
   booking?: Booking | null;
 }
 
@@ -225,7 +229,7 @@ export class PlannerEngine {
    * (which creates a new version via createItineraryFromLLMOutput).
    */
   async reviseItinerary(input: ReviseItineraryInput): Promise<LLMItinerary> {
-    const { brief, currentItinerary, instruction, booking, currentDate } = input;
+    const { brief, currentItinerary, instruction, booking, currentDate, standingPreferences } = input;
 
     const posts = await this.source.fetchForDestination(brief.destination, {
       limit: 200,
@@ -245,6 +249,7 @@ export class PlannerEngine {
       // is told which items to leave alone.
       currentItinerary: hydratedItineraryToLLM(brief, currentItinerary),
       instruction,
+      standingPreferences,
     });
 
     // Deterministically guarantee locked content survives regardless of model
@@ -278,7 +283,7 @@ export class PlannerEngine {
    * list (locked activities preserved + carried forward); caller persists it.
    */
   async reviseDay(input: ReviseDayInput): Promise<LLMActivity[]> {
-    const { brief, dayDate, activities, instruction, booking } = input;
+    const { brief, dayDate, activities, instruction, booking, standingPreferences } = input;
 
     const posts = await this.source.fetchForDestination(brief.destination, {
       limit: 200,
@@ -305,6 +310,7 @@ export class PlannerEngine {
       dayDate,
       currentActivities,
       instruction,
+      standingPreferences,
       booking: booking ?? null,
     });
 

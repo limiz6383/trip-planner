@@ -27,6 +27,7 @@ import {
   getActivitiesForDay,
   getTripBrief,
   getBookingForTrip,
+  getRevisionInstructions,
   replaceDayActivitiesFromLLM,
   appendChangeLogEntry,
 } from "@/lib/db/queries";
@@ -113,9 +114,10 @@ export async function POST(
         { status: 400 }
       );
     }
-    const [activities, booking] = await Promise.all([
+    const [activities, booking, standingPreferences] = await Promise.all([
       getActivitiesForDay(supabase, dayId),
       getBookingForTrip(supabase, tripId),
+      getRevisionInstructions(supabase, tripId),
     ]);
 
     // --- 3. Revise the day via the planner pipeline ---
@@ -125,6 +127,7 @@ export async function POST(
       dayDate: day.date,
       activities,
       instruction,
+      standingPreferences,
       booking,
     });
 
