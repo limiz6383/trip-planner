@@ -317,6 +317,11 @@ export class PlannerEngine {
     // Deterministically guarantee locked activities survive and stay locked.
     return applyLocksToDayRevision(revised, activities);
   }
+
+  /** Generate a general destination overview (cache the result). */
+  async generateDestinationGuide(destination: string) {
+    return this.llm.generateDestinationGuide(destination);
+  }
 }
 
 // ---------------------------------------------------------------------------
