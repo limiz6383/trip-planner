@@ -26,6 +26,8 @@ function formatDateRange(start: string, end: string): string {
       month: "short",
       day: "numeric",
       year: "numeric",
+      // Date-only value: format in UTC to avoid an off-by-one in timezones west of UTC.
+      timeZone: "UTC",
     });
   return `${fmt(start)} — ${fmt(end)}`;
 }
