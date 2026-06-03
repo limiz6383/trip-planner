@@ -28,6 +28,7 @@ import type {
   Activity,
   ActivityType,
   ChangeLogEntry,
+  DestinationGuide,
 } from "@/lib/types";
 import type {
   PatchActivityRequestBody,
@@ -1549,6 +1550,169 @@ function ChangelogDrawer({ tripId, onClose }: ChangelogDrawerProps) {
 // Main component
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Destination guide card (overview + coverage cross-reference)
+// ---------------------------------------------------------------------------
+
+function normalizeText(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/** Is this guide highlight covered by any activity in the plan? */
+function isCovered(name: string, activities: Activity[]): boolean {
+  // Drop parenthetical qualifiers (e.g. "The Shed (green chile)") so the core
+  // name still matches an activity like "Lunch at The Shed".
+  const sp = normalizeText(name.replace(/\([^)]*\)/g, " "));
+  if (sp.length < 3) return false;
+  return activities.some((a) => {
+    const at = normalizeText(`${a.name} ${a.place_name ?? ""}`);
+    if (!at) return false;
+    if (at.includes(sp)) return true;
+    const an = normalizeText(a.name);
+    return an.length > 4 && sp.includes(an);
+  });
+}
+
+function CheckDot({ on }: { on: boolean }) {
+  return (
+    <span
+      className={[
+        "mt-0.5 flex h-4 w-4 flex-none items-center justify-center rounded-full text-[10px] font-bold",
+        on ? "bg-green-100 text-green-700" : "bg-zinc-100 text-zinc-300",
+      ].join(" ")}
+      aria-hidden="true"
+    >
+      {on ? "✓" : "○"}
+    </span>
+  );
+}
+
+function DestinationGuideCard({
+  tripId,
+  activities,
+}: {
+  tripId: string;
+  activities: Activity[];
+}) {
+  const [guide, setGuide] = useState<DestinationGuide | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/trips/${tripId}/guide`);
+        if (!res.ok) return; // no guide (e.g. not migrated) — hide silently
+        const body = (await res.json()) as { guide: DestinationGuide };
+        if (!cancelled) setGuide(body.guide);
+      } catch {
+        /* network error — hide */
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tripId]);
+
+  if (loading) {
+    return (
+      <Card>
+        <div className="flex items-center gap-2 text-sm text-zinc-500">
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-300 border-t-indigo-600" />
+          Loading destination highlights…
+        </div>
+      </Card>
+    );
+  }
+
+  if (!guide) return null;
+
+  const spotsHit = guide.top_spots.filter((s) => isCovered(s.name, activities)).length;
+  const foodsHit = guide.must_try_foods.filter((f) =>
+    isCovered(f.name, activities)
+  ).length;
+
+  return (
+    <Card>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 text-left"
+        aria-expanded={open}
+      >
+        <CardTitle>About {guide.destination}</CardTitle>
+        <span
+          className={[
+            "shrink-0 text-zinc-400 transition-transform",
+            open ? "rotate-180" : "",
+          ].join(" ")}
+          aria-hidden="true"
+        >
+          ▾
+        </span>
+      </button>
+
+      {open && (
+        <div className="mt-2 flex flex-col gap-4">
+          {guide.known_for && (
+            <p className="text-sm leading-relaxed text-zinc-600">
+              {guide.known_for}
+            </p>
+          )}
+
+          {guide.top_spots.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                Top spots — your plan covers {spotsHit} of {guide.top_spots.length}
+              </h4>
+              <ul className="flex flex-col gap-1">
+                {guide.top_spots.map((s) => (
+                  <li key={s.name} className="flex gap-2 text-sm">
+                    <CheckDot on={isCovered(s.name, activities)} />
+                    <span>
+                      <span className="font-medium text-zinc-800">{s.name}</span>
+                      {s.why ? (
+                        <span className="text-zinc-500"> — {s.why}</span>
+                      ) : null}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {guide.must_try_foods.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                Must-try food — {foodsHit} on your plan
+              </h4>
+              <ul className="flex flex-col gap-1">
+                {guide.must_try_foods.map((f) => (
+                  <li key={f.name} className="flex gap-2 text-sm">
+                    <CheckDot on={isCovered(f.name, activities)} />
+                    <span>
+                      <span className="font-medium text-zinc-800">{f.name}</span>
+                      {f.why ? (
+                        <span className="text-zinc-500"> — {f.why}</span>
+                      ) : null}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export function ItineraryView({
   tripId,
   itinerary,
@@ -2116,6 +2280,12 @@ export function ItineraryView({
             )}
           </div>
         </Card>
+
+        {/* ---- Destination guide (overview + coverage) ---- */}
+        <DestinationGuideCard
+          tripId={tripId}
+          activities={localDays.flatMap((d) => d.activities ?? [])}
+        />
 
         {/* ---- Day-by-day list ---- */}
         {localDays.length > 0 ? (

@@ -638,6 +638,21 @@ export async function createItineraryFromLLMOutput(
  * @param metadata - Any extra structured metadata (or null)
  */
 /**
+ * Caches the generated destination guide on the trip. Returns nothing.
+ */
+export async function setTripDestinationGuide(
+  client: SupabaseClient,
+  tripId: string,
+  guide: import("@/lib/types").DestinationGuide
+): Promise<void> {
+  const { error } = await client
+    .from("trips")
+    .update({ destination_guide: guide })
+    .eq("trip_id", tripId);
+  if (error) throw error;
+}
+
+/**
  * Returns the traveller's prior revision instructions for a trip — the
  * free-text asks they made in earlier whole-itinerary / day / activity
  * revisions — so later revisions can honor them as standing preferences and

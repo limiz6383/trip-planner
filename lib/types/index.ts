@@ -26,8 +26,24 @@ export interface Trip {
   end_date: string;
   status: TripStatus;
   archived: boolean;
+  /** Cached LLM-generated destination overview (null until first generated). */
+  destination_guide: DestinationGuide | null;
   created_at: string;
   updated_at: string;
+}
+
+/** A highlight (spot or dish) in the destination guide. */
+export interface GuideHighlight {
+  name: string;
+  why: string;
+}
+
+/** LLM-generated overview of a destination, cached on the trip. */
+export interface DestinationGuide {
+  destination: string;
+  known_for: string;
+  top_spots: GuideHighlight[];
+  must_try_foods: GuideHighlight[];
 }
 
 // ----- Trip Collaborators -----

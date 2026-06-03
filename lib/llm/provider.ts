@@ -10,7 +10,7 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import type { LLMItinerary, LLMActivity, LLMTripBrief, TripBrief, Booking, CommunityPost, Activity } from "@/lib/types";
+import type { LLMItinerary, LLMActivity, LLMTripBrief, TripBrief, Booking, CommunityPost, Activity, DestinationGuide } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -168,6 +168,12 @@ export interface LLMProvider {
    * instruction. Returns the day's new activity list; caller persists it.
    */
   reviseDay(params: ReviseDayParams): Promise<LLMActivity[]>;
+
+  /**
+   * Generates a general overview of a destination (what it's known for, the
+   * spots people usually hit, must-try foods). Not trip-specific; cache it.
+   */
+  generateDestinationGuide(destination: string): Promise<DestinationGuide>;
 }
 
 // ---------------------------------------------------------------------------
@@ -336,6 +342,23 @@ Respond ONLY with valid JSON matching this exact shape:
       "activity_type": "food|culture|outdoor|shopping|transport|accommodation|entertainment|other"
     }
   ]
+}`;
+
+/** System prompt for the destination overview/guide */
+const DESTINATION_GUIDE_SYSTEM_PROMPT = `You are a seasoned local travel guide. Given a destination, produce a concise overview a traveller can use as a reference for the area's highlights.
+
+Rules:
+- "known_for": 2-3 sentences capturing what the destination is famous for and its character.
+- "top_spots": 6-9 of the places/experiences most visitors prioritise (landmarks, neighbourhoods, museums, viewpoints, day trips). Use the COMMON, recognisable name for each so it can be matched against an itinerary. One short "why" each.
+- "must_try_foods": 5-8 iconic local dishes/drinks/food experiences. One short "why" each.
+- Be specific and accurate to THIS destination — no generic filler.
+
+Respond ONLY with valid JSON matching this exact shape:
+{
+  "destination": "string",
+  "known_for": "string",
+  "top_spots": [{ "name": "string", "why": "string" }],
+  "must_try_foods": [{ "name": "string", "why": "string" }]
 }`;
 
 /** System prompt for the itinerary generation phase */
@@ -776,6 +799,54 @@ export class AnthropicProvider implements LLMProvider {
 
     const activities = Array.isArray(parsed.activities) ? parsed.activities : [];
     return activities.slice(0, 8); // safety ceiling; pace drives the real count
+  }
+
+  async generateDestinationGuide(destination: string): Promise<DestinationGuide> {
+    const client = this.getClient();
+
+    const response = await client.messages.create({
+      model: ITINERARY_MODEL,
+      max_tokens: 1500,
+      system: DESTINATION_GUIDE_SYSTEM_PROMPT,
+      messages: [
+        { role: "user", content: `Destination: ${destination}` },
+        { role: "assistant", content: "{" },
+      ],
+    });
+
+    const raw =
+      "{" +
+      (response.content
+        .filter((block): block is Anthropic.TextBlock => block.type === "text")
+        .map((block) => block.text)
+        .join("") ?? "");
+
+    let jsonStr = raw.trim();
+    const fence = jsonStr.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    if (fence) jsonStr = fence[1].trim();
+    if (!jsonStr.startsWith("{")) {
+      const s = jsonStr.indexOf("{");
+      const e = jsonStr.lastIndexOf("}");
+      if (s !== -1 && e !== -1 && e > s) jsonStr = jsonStr.slice(s, e + 1);
+    }
+
+    let guide: DestinationGuide;
+    try {
+      guide = JSON.parse(jsonStr) as DestinationGuide;
+    } catch (err) {
+      throw new Error(
+        `LLM returned invalid JSON for destination guide. Raw response:\n${raw}\nParse error: ${err}`
+      );
+    }
+
+    return {
+      destination: guide.destination || destination,
+      known_for: guide.known_for ?? "",
+      top_spots: Array.isArray(guide.top_spots) ? guide.top_spots : [],
+      must_try_foods: Array.isArray(guide.must_try_foods)
+        ? guide.must_try_foods
+        : [],
+    };
   }
 }
 
