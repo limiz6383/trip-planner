@@ -39,6 +39,7 @@ export interface PatchActivityRequestBody {
   estimated_cost_usd?: number | null;
   estimated_time_hours?: number | null;
   activity_type?: ActivityType | null;
+  start_time?: string | null;
   locked?: boolean;
 }
 
@@ -58,6 +59,7 @@ const ALLOWED_FIELDS = new Set<string>([
   "estimated_cost_usd",
   "estimated_time_hours",
   "activity_type",
+  "start_time",
   "locked",
 ]);
 

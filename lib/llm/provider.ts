@@ -216,12 +216,14 @@ Your job is to apply the instruction to produce a revised itinerary. Rules:
 1. Apply the instruction purposefully — change what the user asked to change.
 2. Keep what the user did NOT ask to change where reasonable; preserve good activities that are unaffected by the instruction.
 3. LOCKED ITEMS ARE NON-NEGOTIABLE. Any day or activity marked "locked": true in the current itinerary represents a committed plan (e.g. a booking the user cannot move). Reproduce it EXACTLY — do not change, reword, reprice, reorder, or remove it — and plan the rest of the trip around it.
-4. Produce 3-4 activities per day MAXIMUM — same cap as the original generation.
-5. Keep each "description" to ONE short sentence.
-6. Maintain the same date range and day count as the original itinerary.
-7. Respect the budget and pace from the brief.
-8. Prioritise community posts that match the revised intent.
-9. List each day's activities in the ORDER the traveller does them, earliest first — the array order IS the schedule. On the arrival day, sequence arrival logistics first (e.g. a meal eaten en route from the airport, then check-in) before activities that need the traveller settled in. Never place a later-in-the-day activity before an earlier one.
+4. Size each day to the traveller's PACE from the brief: relaxed ≈ 3-4, moderate ≈ 4-5, fast ≈ 6-7 activities (default ~4; meals included in the count; never exceed 8) — same policy as the original generation.
+5. MEALS: keep breakfast, lunch, and dinner present on every full day (activity_type "food") at realistic times, unless the instruction explicitly changes meals. Arrival/departure days include only meals that fit around the flight.
+6. Keep each "description" to ONE short sentence.
+7. Maintain the same date range and day count as the original itinerary.
+8. Respect the budget and pace from the brief.
+9. Prioritise community posts that match the revised intent.
+10. List each day's activities in the ORDER the traveller does them, earliest first — the array order IS the schedule. On the arrival day, sequence arrival logistics first (e.g. a meal eaten en route from the airport, then check-in) before activities that need the traveller settled in. Never place a later-in-the-day activity before an earlier one.
+11. TIMING: give every activity a "start_time" in 24-hour "HH:MM" format, chronological and consistent with each activity's estimated_time_hours and realistic venue/meal hours.
 
 Respond ONLY with valid JSON matching this exact shape:
 {
@@ -238,6 +240,7 @@ Respond ONLY with valid JSON matching this exact shape:
         {
           "name": "string",
           "description": "string",
+          "start_time": "HH:MM",
           "estimated_time_hours": 1.5,
           "estimated_cost_usd": 20,
           "place_name": "string",
@@ -281,9 +284,11 @@ Generate a detailed day-by-day itinerary that:
 2. Prioritises places from the community posts, especially those matching the local/touristy dial
 3. Produces a realistic schedule with appropriate timing and logical geography
 4. Estimates costs for each activity
-5. Includes 3-4 activities per day MAXIMUM — favor realistic pacing and quality over packing the day
-6. Keeps each activity "description" to ONE short sentence (the goal is a fast, scannable plan, not an essay)
-7. Lists each day's activities in the ORDER the traveller does them, earliest first — the array order IS the schedule. On the arrival day, sequence arrival logistics first (e.g. a meal eaten en route from the airport, then hotel check-in) before any activity that needs the traveller already settled in. Never place a later-in-the-day activity before an earlier one.
+5. Sizes each day to the traveller's PACE from the brief: relaxed ≈ 3-4 activities, moderate ≈ 4-5, fast ≈ 6-7. Default to about 4 when pace is moderate or unspecified. These counts INCLUDE meals. Never exceed 8 in a day; favor realistic pacing over packing the day.
+6. MEALS: every full day MUST include breakfast, lunch, and dinner as activities (activity_type "food") at realistic times (breakfast ~08:00, lunch ~12:30, dinner ~19:00) — meals are part of the per-day count above, not extra. On the arrival day, include only the meals that fall after arrival + transit; on the departure day, only meals before leaving for the airport.
+7. Keeps each activity "description" to ONE short sentence (the goal is a fast, scannable plan, not an essay)
+8. Lists each day's activities in the ORDER the traveller does them, earliest first — the array order IS the schedule. On the arrival day, sequence arrival logistics first (e.g. a meal eaten en route from the airport, then hotel check-in) before any activity that needs the traveller already settled in. Never place a later-in-the-day activity before an earlier one.
+9. TIMING: give every activity a "start_time" in 24-hour "HH:MM" format. Times must be in chronological order, consistent with each activity's estimated_time_hours (so one activity ends before the next begins, leaving brief transit gaps), realistic venue/meal hours, and any flight arrival/departure bounds.
 
 BOOKING CONSTRAINTS — apply these rules when a booking object is provided:
 
@@ -319,6 +324,7 @@ Respond ONLY with valid JSON matching this exact shape:
         {
           "name": "string",
           "description": "string",
+          "start_time": "HH:MM",
           "estimated_time_hours": 1.5,
           "estimated_cost_usd": 20,
           "place_name": "string",
@@ -521,7 +527,7 @@ export class AnthropicProvider implements LLMProvider {
 
     // Hard cap: the model tends to overshoot the per-day limit even when the
     // prompt asks for 3-4. Enforce it so the plan stays concise and scannable.
-    const MAX_ACTIVITIES_PER_DAY = 4;
+    const MAX_ACTIVITIES_PER_DAY = 8;
     if (Array.isArray(itinerary.days)) {
       for (const day of itinerary.days) {
         if (
@@ -583,7 +589,7 @@ export class AnthropicProvider implements LLMProvider {
       );
     }
 
-    const MAX_ACTIVITIES_PER_DAY = 4;
+    const MAX_ACTIVITIES_PER_DAY = 8;
     if (Array.isArray(itinerary.days)) {
       for (const day of itinerary.days) {
         if (
