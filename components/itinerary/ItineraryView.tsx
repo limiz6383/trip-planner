@@ -110,6 +110,9 @@ function formatDate(isoDate: string): string {
     weekday: "long",
     month: "short",
     day: "numeric",
+    // Date-only value: format in UTC so the day doesn't shift back one in
+    // timezones west of UTC (e.g. "2026-06-05" must read Jun 5, not Jun 4).
+    timeZone: "UTC",
   });
 }
 

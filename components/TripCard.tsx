@@ -40,11 +40,14 @@ export function TripCard({ trip }: TripCardProps) {
     month: "short",
     day: "numeric",
     year: "numeric",
+    // Date-only value: format in UTC to avoid an off-by-one in timezones west of UTC.
+    timeZone: "UTC",
   });
   const end = new Date(trip.end_date).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
+    timeZone: "UTC",
   });
 
   function handleConfirmDelete() {
