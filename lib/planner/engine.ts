@@ -42,6 +42,7 @@ import {
   mergeLockedDays,
   validateLockedConstraints,
   applyLocksToRevision,
+  applyLocksToDayRevision,
 } from "@/lib/planner/locked-days";
 
 // ---------------------------------------------------------------------------
@@ -106,6 +107,17 @@ export interface ReviseActivityInput {
   dayDate: string;
   /** Free-text revision instruction from the user. */
   instruction: string;
+}
+
+export interface ReviseDayInput {
+  brief: TripBrief;
+  /** ISO date (YYYY-MM-DD) of the day being revised. */
+  dayDate: string;
+  /** The day's current activities (DB rows). */
+  activities: Activity[];
+  /** Free-text revision instruction from the user. */
+  instruction: string;
+  booking?: Booking | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -259,6 +271,45 @@ export class PlannerEngine {
       rankedPosts: ranked,
       dayDateContext: dayDate,
     });
+  }
+
+  /**
+   * Revises all activities for a single day. Returns the day's new activity
+   * list (locked activities preserved + carried forward); caller persists it.
+   */
+  async reviseDay(input: ReviseDayInput): Promise<LLMActivity[]> {
+    const { brief, dayDate, activities, instruction, booking } = input;
+
+    const posts = await this.source.fetchForDestination(brief.destination, {
+      limit: 200,
+    });
+    const ranked = rankPosts(posts, brief.local_touristy_dial);
+
+    // Express the day's current activities in the LLM shape (with lock flags so
+    // the model is told what it must preserve).
+    const currentActivities: LLMActivity[] = activities.map((a) => ({
+      name: a.name,
+      description: a.description ?? "",
+      start_time: a.start_time ?? "",
+      estimated_time_hours: a.estimated_time_hours ?? 1,
+      estimated_cost_usd: a.estimated_cost_usd ?? 0,
+      place_name: a.place_name ?? "",
+      source_attribution: a.source_attribution ?? "",
+      activity_type: a.activity_type ?? "other",
+      locked: a.locked,
+    }));
+
+    const revised = await this.llm.reviseDay({
+      brief,
+      rankedPosts: ranked,
+      dayDate,
+      currentActivities,
+      instruction,
+      booking: booking ?? null,
+    });
+
+    // Deterministically guarantee locked activities survive and stay locked.
+    return applyLocksToDayRevision(revised, activities);
   }
 }
 
