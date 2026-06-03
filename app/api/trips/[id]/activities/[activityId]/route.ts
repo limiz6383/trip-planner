@@ -171,3 +171,90 @@ export async function PATCH(
     return Response.json({ error: message } satisfies PatchActivityErrorBody, { status: 500 });
   }
 }
+
+// ---------------------------------------------------------------------------
+// DELETE — remove an activity from its day
+// ---------------------------------------------------------------------------
+
+export interface DeleteActivityResponseBody {
+  ok: true;
+}
+
+export interface DeleteActivityErrorBody {
+  error: string;
+}
+
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string; activityId: string }> }
+) {
+  const user = await getUser();
+  if (!user) {
+    return Response.json(
+      { error: "Unauthorized" } satisfies DeleteActivityErrorBody,
+      { status: 401 }
+    );
+  }
+
+  const { id: tripId, activityId } = await params;
+  if (!tripId || !activityId) {
+    return Response.json(
+      { error: "Missing trip id or activity id" } satisfies DeleteActivityErrorBody,
+      { status: 400 }
+    );
+  }
+
+  try {
+    const supabase = await createSupabaseServerClient();
+
+    // Fetch first so we can log what was removed (RLS gates access).
+    const { data: row, error: fetchError } = await supabase
+      .from("activities")
+      .select("*")
+      .eq("activity_id", activityId)
+      .single();
+
+    if (fetchError) {
+      if (fetchError.code === "PGRST116") {
+        return Response.json(
+          { error: "Activity not found" } satisfies DeleteActivityErrorBody,
+          { status: 404 }
+        );
+      }
+      throw fetchError;
+    }
+    const activity = row as Activity;
+
+    const { error: delError } = await supabase
+      .from("activities")
+      .delete()
+      .eq("activity_id", activityId);
+    if (delError) throw delError;
+
+    try {
+      await appendChangeLogEntry(
+        supabase,
+        tripId,
+        user.id,
+        "manual_edit",
+        `Removed activity "${activity.name}"`,
+        { activity_id: activityId, day_id: activity.day_id, name: activity.name },
+        null,
+        { activity_id: activityId, day_id: activity.day_id }
+      );
+    } catch {
+      // non-fatal
+    }
+
+    return Response.json({ ok: true } satisfies DeleteActivityResponseBody, {
+      status: 200,
+    });
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Failed to delete activity.";
+    return Response.json(
+      { error: message } satisfies DeleteActivityErrorBody,
+      { status: 500 }
+    );
+  }
+}
