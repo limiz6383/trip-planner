@@ -191,7 +191,7 @@ export default async function TripDetailPage({
         {/* State 3: itinerary exists — show full itinerary view and editable bookings */}
         {hasItinerary && itinerary && (
           <>
-            <ItineraryView tripId={trip.trip_id} itinerary={itinerary} />
+            <ItineraryView tripId={trip.trip_id} itinerary={itinerary} tripTitle={trip.title} />
             {/*
              * PostItineraryBookingPanel lets the user view and edit their
              * flights/accommodation at any time after generation. It starts

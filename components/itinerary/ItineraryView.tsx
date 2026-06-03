@@ -73,6 +73,8 @@ export interface ItineraryViewProps {
   tripId: string;
   /** Hydrated itinerary with days and activities attached */
   itinerary: Itinerary;
+  /** Trip title — used for export filenames/headings. */
+  tripTitle?: string;
   /** Fired after a successful in-place mutation so the parent page can revalidate */
   onItineraryUpdated?: () => void;
 }
@@ -233,6 +235,183 @@ function reassignTimeSlots(ordered: Activity[]): {
     return a;
   });
   return { acts, changed };
+}
+
+// ---------------------------------------------------------------------------
+// Export helpers (ICS calendar + printable PDF)
+// ---------------------------------------------------------------------------
+
+type ExportDay = ItineraryDay & { activities?: Activity[] };
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+/** "YYYY-MM-DD" → "YYYYMMDD" */
+function icsDate(iso: string): string {
+  return iso.slice(0, 10).replace(/-/g, "");
+}
+
+/** minutes-since-midnight → "HHMMSS" */
+function icsTime(min: number): string {
+  return pad2(Math.floor(min / 60)) + pad2(min % 60) + "00";
+}
+
+/** Add days to a "YYYY-MM-DD" (component math, TZ-safe) → "YYYYMMDD". */
+function icsDatePlus(iso: string, addDays: number): string {
+  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + addDays));
+  return `${dt.getUTCFullYear()}${pad2(dt.getUTCMonth() + 1)}${pad2(dt.getUTCDate())}`;
+}
+
+function icsStamp(d: Date): string {
+  return (
+    `${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}` +
+    `T${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}${pad2(d.getUTCSeconds())}Z`
+  );
+}
+
+/** RFC 5545 text escaping. */
+function icsEscape(s: string): string {
+  return s
+    .replace(/\\/g, "\\\\")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,")
+    .replace(/\r?\n/g, "\\n");
+}
+
+function slugify(s: string): string {
+  return (
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "trip"
+  );
+}
+
+/** Build an .ics calendar (floating local times) from the itinerary days. */
+function buildICS(days: ExportDay[], title: string): string {
+  const stamp = icsStamp(new Date());
+  const lines: string[] = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//trip-planner//itinerary//EN",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+  ];
+  if (title) lines.push("X-WR-CALNAME:" + icsEscape(title));
+
+  for (const day of days) {
+    for (const a of day.activities ?? []) {
+      lines.push("BEGIN:VEVENT");
+      lines.push(`UID:${a.activity_id}@trip-planner`);
+      lines.push("DTSTAMP:" + stamp);
+
+      const startMin = parseClock(a.start_time);
+      if (startMin != null) {
+        const durMin =
+          a.estimated_time_hours != null
+            ? Math.round(a.estimated_time_hours * 60)
+            : 60;
+        const endTotal = startMin + durMin;
+        lines.push(`DTSTART:${icsDate(day.date)}T${icsTime(startMin)}`);
+        lines.push(
+          `DTEND:${icsDatePlus(day.date, Math.floor(endTotal / 1440))}T${icsTime(
+            endTotal % 1440
+          )}`
+        );
+      } else {
+        // Untimed → all-day event on that date.
+        lines.push(`DTSTART;VALUE=DATE:${icsDate(day.date)}`);
+      }
+
+      lines.push("SUMMARY:" + icsEscape(a.name));
+      if (a.place_name) lines.push("LOCATION:" + icsEscape(a.place_name));
+      const desc: string[] = [];
+      if (a.description) desc.push(a.description);
+      if (a.estimated_cost_usd != null) desc.push(`Est. $${a.estimated_cost_usd}`);
+      if (a.source_attribution) desc.push(`via ${a.source_attribution}`);
+      if (desc.length) lines.push("DESCRIPTION:" + icsEscape(desc.join(" — ")));
+      lines.push("END:VEVENT");
+    }
+  }
+
+  lines.push("END:VCALENDAR");
+  return lines.join("\r\n");
+}
+
+/** Trigger a client-side file download. */
+function downloadFile(content: string, filename: string, mime: string): void {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/** Build a clean printable HTML document (for Save as PDF via the print dialog). */
+function buildPrintHTML(days: ExportDay[], title: string): string {
+  const esc = (s: string) =>
+    s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
+  const dayBlocks = days
+    .map((day, i) => {
+      const acts = (day.activities ?? [])
+        .map((a) => {
+          const time = formatClock(a.start_time);
+          const meta = [
+            a.estimated_time_hours != null ? formatTime(a.estimated_time_hours) : "",
+            a.estimated_cost_usd != null ? formatCost(a.estimated_cost_usd) : "",
+          ]
+            .filter(Boolean)
+            .join(" · ");
+          return `<li>
+            <div class="t">${esc(time || "")}</div>
+            <div class="b">
+              <div class="n">${esc(a.name)}</div>
+              ${a.place_name ? `<div class="p">${esc(a.place_name)}</div>` : ""}
+              ${a.description ? `<div class="d">${esc(a.description)}</div>` : ""}
+              ${meta ? `<div class="m">${esc(meta)}</div>` : ""}
+            </div>
+          </li>`;
+        })
+        .join("");
+      return `<section>
+        <h2>Day ${i + 1} — ${esc(formatDate(day.date))}</h2>
+        <ul>${acts || "<li><div class='b'><div class='d'>No activities.</div></div></li>"}</ul>
+      </section>`;
+    })
+    .join("");
+
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(
+    title
+  )}</title><style>
+    *{box-sizing:border-box}
+    body{font:14px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#18181b;margin:32px;max-width:760px}
+    h1{font-size:22px;margin:0 0 4px}
+    .sub{color:#71717a;margin:0 0 24px}
+    section{margin:0 0 20px;page-break-inside:avoid}
+    h2{font-size:15px;border-bottom:1px solid #e4e4e7;padding-bottom:4px;margin:0 0 8px}
+    ul{list-style:none;padding:0;margin:0}
+    li{display:flex;gap:12px;padding:6px 0;border-bottom:1px solid #f4f4f5}
+    .t{width:74px;flex:none;font-weight:600;color:#4f46e5}
+    .n{font-weight:600}
+    .p{color:#52525b;font-size:13px}
+    .d{color:#52525b;font-size:13px}
+    .m{color:#71717a;font-size:12px;margin-top:2px}
+    @media print{body{margin:0}}
+  </style></head><body>
+    <h1>${esc(title)}</h1>
+    <p class="sub">Itinerary</p>
+    ${dayBlocks}
+  </body></html>`;
 }
 
 function formatChangelogDate(isoString: string): string {
@@ -1465,6 +1644,7 @@ function ChangelogDrawer({ tripId, onClose }: ChangelogDrawerProps) {
 export function ItineraryView({
   tripId,
   itinerary,
+  tripTitle,
   onItineraryUpdated,
 }: ItineraryViewProps) {
   const router = useRouter();
@@ -1530,6 +1710,31 @@ export function ItineraryView({
 
   function handleTidyUp() {
     void runWholeItineraryRevise(TIDY_UP_INSTRUCTION, "tidy");
+  }
+
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportTitle = tripTitle?.trim() || "Trip itinerary";
+
+  function handleExportICS() {
+    const ics = buildICS(localDays, exportTitle);
+    downloadFile(ics, `${slugify(exportTitle)}.ics`, "text/calendar;charset=utf-8");
+    setExportOpen(false);
+  }
+
+  function handleExportPDF() {
+    const html = buildPrintHTML(localDays, exportTitle);
+    const w = window.open("", "_blank");
+    if (!w) {
+      // Popup blocked — fall back to downloading the printable HTML.
+      downloadFile(html, `${slugify(exportTitle)}.html`, "text/html");
+      setExportOpen(false);
+      return;
+    }
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(() => w.print(), 300);
+    setExportOpen(false);
   }
 
   const handleDayUpdated = useCallback(
@@ -1850,6 +2055,40 @@ export function ItineraryView({
               >
                 View changes
               </Button>
+              <div className="relative">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setExportOpen((v) => !v)}
+                  aria-expanded={exportOpen}
+                  aria-label="Export itinerary"
+                >
+                  Export
+                </Button>
+                {exportOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-10"
+                      aria-hidden="true"
+                      onClick={() => setExportOpen(false)}
+                    />
+                    <div className="absolute right-0 z-20 mt-1 w-52 rounded-lg border border-zinc-200 bg-white p-1 shadow-lg">
+                      <button
+                        onClick={handleExportPDF}
+                        className="block w-full rounded px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-100"
+                      >
+                        Save as PDF
+                      </button>
+                      <button
+                        onClick={handleExportICS}
+                        className="block w-full rounded px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-100"
+                      >
+                        Add to calendar (.ics)
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
               <StatusBadge status={itinerary.status} />
               <span className="text-xs text-zinc-400">
                 v{itinerary.version}
