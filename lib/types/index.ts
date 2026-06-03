@@ -271,6 +271,13 @@ export interface LLMActivity {
   place_name: string;
   source_attribution: string;
   activity_type: ActivityType;
+  /**
+   * Carries persisted lock state through the revision pipeline. The model never
+   * sets this — it is populated by the lock-preservation merge so locked items
+   * survive (and stay locked) when a revised itinerary is persisted as a new
+   * version. Defaults to false on persist when absent.
+   */
+  locked?: boolean;
 }
 
 /**
@@ -280,6 +287,11 @@ export interface LLMItineraryDay {
   date: string;
   activities: LLMActivity[];
   daily_cost: number;
+  /**
+   * Carries persisted day-lock state through the revision pipeline. Model never
+   * sets this; populated by the lock-preservation merge. Defaults to false.
+   */
+  locked?: boolean;
 }
 
 /**

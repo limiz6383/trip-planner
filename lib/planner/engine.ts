@@ -22,7 +22,16 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { TripBrief, Booking, Itinerary, ItineraryDay, Activity, LLMItinerary } from "@/lib/types";
+import type {
+  TripBrief,
+  Booking,
+  Itinerary,
+  ItineraryDay,
+  Activity,
+  LLMItinerary,
+  LLMItineraryDay,
+  LLMActivity,
+} from "@/lib/types";
 import type { ContentSource } from "@/lib/retrieval/source";
 import type { LLMProvider } from "@/lib/llm/provider";
 import { rankPosts } from "@/lib/retrieval/ranking";
@@ -32,6 +41,7 @@ import {
   deriveLockedConstraint,
   mergeLockedDays,
   validateLockedConstraints,
+  applyLocksToRevision,
 } from "@/lib/planner/locked-days";
 
 // ---------------------------------------------------------------------------
@@ -66,6 +76,82 @@ export interface PlannerResult {
   itinerary: LLMItinerary;
   /** Non-empty if locked constraints were violated (soft warning) */
   lockedConstraintViolations: string[];
+}
+
+/** Hydrated itinerary (header + days + activities) as loaded from the DB. */
+export type HydratedItinerary = Itinerary & {
+  days: (ItineraryDay & { activities: Activity[] })[];
+};
+
+export interface ReviseItineraryInput {
+  brief: TripBrief;
+  /** The current persisted itinerary, hydrated with days + activities. */
+  currentItinerary: HydratedItinerary;
+  /** Free-text revision instruction from the user. */
+  instruction: string;
+  booking?: Booking | null;
+  /**
+   * ISO date (YYYY-MM-DD) for today. When provided, past days are preserved in
+   * addition to explicitly locked days/activities (mid-trip revision). When
+   * omitted, only explicit locks are preserved.
+   */
+  currentDate?: string;
+}
+
+export interface ReviseActivityInput {
+  brief: TripBrief;
+  /** The activity being replaced (DB row). */
+  activity: Activity;
+  /** ISO date (YYYY-MM-DD) of the day this activity belongs to. */
+  dayDate: string;
+  /** Free-text revision instruction from the user. */
+  instruction: string;
+}
+
+// ---------------------------------------------------------------------------
+// Mappers
+// ---------------------------------------------------------------------------
+
+/**
+ * Converts a hydrated DB itinerary into the LLMItinerary shape (no DB ids),
+ * which is what the revision prompt expects as the "current itinerary".
+ *
+ * Destination and the date range are sourced from the brief / day list since
+ * the itinerary header row does not store them. Nullable DB fields are
+ * normalised to the non-null LLM shape ("" / 0 / "other").
+ */
+export function hydratedItineraryToLLM(
+  brief: TripBrief,
+  itinerary: HydratedItinerary
+): LLMItinerary {
+  const days: LLMItineraryDay[] = (itinerary.days ?? []).map((day) => ({
+    date: day.date,
+    daily_cost: day.daily_cost ?? 0,
+    locked: day.locked,
+    activities: (day.activities ?? []).map(
+      (a): LLMActivity => ({
+        name: a.name,
+        description: a.description ?? "",
+        estimated_time_hours: a.estimated_time_hours ?? 0,
+        estimated_cost_usd: a.estimated_cost_usd ?? 0,
+        place_name: a.place_name ?? "",
+        source_attribution: a.source_attribution ?? "",
+        activity_type: a.activity_type ?? "other",
+        locked: a.locked,
+      })
+    ),
+  }));
+
+  const dates = days.map((d) => d.date).sort();
+
+  return {
+    destination: brief.destination,
+    start_date: dates[0] ?? brief.start_date,
+    end_date: dates[dates.length - 1] ?? brief.end_date,
+    days,
+    total_cost_estimate: itinerary.total_cost_estimate ?? 0,
+    notes: itinerary.notes ?? "",
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -115,6 +201,63 @@ export class PlannerEngine {
     }
 
     return { itinerary: generated, lockedConstraintViolations };
+  }
+
+  /**
+   * Revises the entire current itinerary according to a free-text instruction.
+   *
+   * Mirrors the generation path (fetch posts → rank → call the model) but feeds
+   * the model the current itinerary plus the instruction instead of planning
+   * from scratch. Returns the revised LLMItinerary; the caller persists it
+   * (which creates a new version via createItineraryFromLLMOutput).
+   */
+  async reviseItinerary(input: ReviseItineraryInput): Promise<LLMItinerary> {
+    const { brief, currentItinerary, instruction, booking, currentDate } = input;
+
+    const posts = await this.source.fetchForDestination(brief.destination, {
+      limit: 200,
+    });
+    const ranked = rankPosts(posts, brief.local_touristy_dial);
+
+    // Derive locks from the current itinerary. Passing "" as the reference date
+    // when currentDate is absent means no day is treated as past, so only
+    // explicit locks are preserved.
+    const constraint = deriveLockedConstraint(currentItinerary, currentDate ?? "");
+
+    const revised = await this.llm.reviseItinerary({
+      brief,
+      booking: booking ?? null,
+      rankedPosts: ranked,
+      // hydratedItineraryToLLM carries per-day/-activity lock flags so the model
+      // is told which items to leave alone.
+      currentItinerary: hydratedItineraryToLLM(brief, currentItinerary),
+      instruction,
+    });
+
+    // Deterministically guarantee locked content survives regardless of model
+    // output, and carry lock state forward into the persisted new version.
+    return applyLocksToRevision(revised, currentItinerary, constraint);
+  }
+
+  /**
+   * Revises a single activity according to a free-text instruction. Returns a
+   * single LLMActivity replacement; the caller applies it to the DB row.
+   */
+  async reviseActivity(input: ReviseActivityInput): Promise<LLMActivity> {
+    const { brief, activity, dayDate, instruction } = input;
+
+    const posts = await this.source.fetchForDestination(brief.destination, {
+      limit: 200,
+    });
+    const ranked = rankPosts(posts, brief.local_touristy_dial);
+
+    return this.llm.reviseActivity({
+      activity,
+      instruction,
+      brief,
+      rankedPosts: ranked,
+      dayDateContext: dayDate,
+    });
   }
 }
 

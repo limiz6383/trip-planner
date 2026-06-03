@@ -16,6 +16,7 @@ import type {
   Itinerary,
   ItineraryDay,
   Activity,
+  LLMActivity,
   LLMItinerary,
   LLMItineraryDay,
   LockedDaysConstraint,
@@ -142,6 +143,129 @@ export function mergeLockedDays(
     ...generated,
     days: mergedDays,
     total_cost_estimate: mergedDays.reduce((sum, d) => sum + (d.daily_cost ?? 0), 0),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Lock-preserving merge for AI revision
+// ---------------------------------------------------------------------------
+
+/** Max activities per day kept after a revision (matches the generation cap). */
+const MAX_ACTIVITIES_PER_DAY = 4;
+
+/**
+ * Merges an AI-revised itinerary with the locks on the existing itinerary,
+ * guaranteeing that locked content survives a revision regardless of what the
+ * model returned — and carrying the lock state forward so it persists into the
+ * new version (via the `locked` field on the LLM shapes).
+ *
+ * Unlike `mergeLockedDays` (day-granular, used for mid-trip re-plan), this also
+ * preserves *individually* locked activities inside otherwise-revised days —
+ * the lock users reach for most often.
+ *
+ * Precedence per date:
+ *   - Locked day (explicit lock or past date) → existing content verbatim, day
+ *     and all its activities marked locked.
+ *   - Otherwise → revised day, with any individually-locked existing activities
+ *     re-injected (locked), de-duplicated against the revised list by name, and
+ *     the revised remainder filling the day up to the per-day cap.
+ */
+export function applyLocksToRevision(
+  revised: LLMItinerary,
+  existing: Itinerary & { days: (ItineraryDay & { activities: Activity[] })[] },
+  constraint: LockedDaysConstraint
+): LLMItinerary {
+  const lockedDateSet = new Set(constraint.lockedDates);
+  const lockedActivityIdSet = new Set(constraint.lockedActivityIds);
+
+  const existingByDate = new Map<
+    string,
+    ItineraryDay & { activities: Activity[] }
+  >();
+  for (const day of existing.days) existingByDate.set(day.date, day);
+
+  const toLLMActivity = (a: Activity, locked: boolean): LLMActivity => ({
+    name: a.name,
+    description: a.description ?? "",
+    estimated_time_hours: a.estimated_time_hours ?? 1,
+    estimated_cost_usd: a.estimated_cost_usd ?? 0,
+    place_name: a.place_name ?? "",
+    source_attribution: a.source_attribution ?? "",
+    activity_type: a.activity_type ?? "other",
+    locked,
+  });
+
+  const allDates = new Set<string>([
+    ...revised.days.map((d) => d.date),
+    ...existing.days.map((d) => d.date),
+  ]);
+  const sortedDates = Array.from(allDates).sort();
+
+  const mergedDays: LLMItineraryDay[] = sortedDates.map((date) => {
+    const existingDay = existingByDate.get(date);
+
+    // Fully locked day → preserve verbatim, mark day + activities locked.
+    if (lockedDateSet.has(date) && existingDay) {
+      return {
+        date,
+        daily_cost: existingDay.daily_cost ?? 0,
+        locked: true,
+        activities: existingDay.activities.map((a) => toLLMActivity(a, true)),
+      };
+    }
+
+    const revisedDay = revised.days.find((d) => d.date === date);
+    const lockedExisting = (existingDay?.activities ?? []).filter((a) =>
+      lockedActivityIdSet.has(a.activity_id)
+    );
+
+    // LLM dropped the day → rebuild from locked activities (or leave empty).
+    if (!revisedDay) {
+      return {
+        date,
+        daily_cost: existingDay?.daily_cost ?? 0,
+        locked: false,
+        activities: lockedExisting.map((a) => toLLMActivity(a, true)),
+      };
+    }
+
+    // No individual locks → pass the revised day through (clearing any lock
+    // flag the model may have echoed from the input; nothing here is locked).
+    if (lockedExisting.length === 0) {
+      return {
+        ...revisedDay,
+        locked: false,
+        activities: revisedDay.activities.map((a) => ({ ...a, locked: false })),
+      };
+    }
+
+    // Re-inject locked activities, drop revised dupes by name, fill to the cap.
+    const lockedNames = new Set(
+      lockedExisting.map((a) => a.name.trim().toLowerCase())
+    );
+    const revisedKept = revisedDay.activities.filter(
+      (a) => !lockedNames.has(a.name.trim().toLowerCase())
+    );
+    const fill = Math.max(0, MAX_ACTIVITIES_PER_DAY - lockedExisting.length);
+
+    return {
+      date,
+      daily_cost: revisedDay.daily_cost ?? existingDay?.daily_cost ?? 0,
+      locked: false,
+      activities: [
+        ...lockedExisting.map((a) => toLLMActivity(a, true)),
+        ...revisedKept.slice(0, fill).map((a) => ({ ...a, locked: false })),
+      ],
+    };
+  });
+
+  return {
+    ...revised,
+    days: mergedDays,
+    total_cost_estimate: mergedDays.reduce(
+      (sum, d) => sum + (d.daily_cost ?? 0),
+      0
+    ),
   };
 }
 
