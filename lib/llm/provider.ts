@@ -178,14 +178,14 @@ Generate a detailed day-by-day itinerary that:
 
 BOOKING CONSTRAINTS — apply these rules when a booking object is provided:
 
-Flight arrival (flight_arrival_date + flight_arrival_time):
+Flight arrival (flight_arrival_date + flight_arrival_time + flight_arrival_airport):
 - Day 1 of the trip starts at the arrival time, not at the beginning of the day.
-- Subtract realistic airport-to-accommodation transit time (typically 1–2 hours depending on destination).
+- Subtract realistic transit time from the SPECIFIC arrival airport to the accommodation. When flight_arrival_airport is given, use transit time for that exact airport — nearby airports can differ greatly (e.g. landing at a regional airport in town vs. a major hub 1–2 hours away). When it is not given, assume typical 1–2 hours.
 - Schedule only activities that fit in the remaining usable hours. For late arrivals (e.g. 21:00+) day 1 should contain only arrival logistics and dinner/rest — no sightseeing.
 
-Flight departure (flight_departure_date + flight_departure_time):
+Flight departure (flight_departure_date + flight_departure_time + flight_departure_airport):
 - The last day ends when the traveller must leave for the airport.
-- Allow at least 2–3 hours before departure for transit and check-in (adjust for destination norms).
+- Allow at least 2–3 hours before departure for transit and check-in, using transit time to the SPECIFIC flight_departure_airport when given (adjust for destination norms).
 - For early departures (e.g. before 10:00) the last day may have zero or only one quick activity.
 
 Accommodation location (accommodation_neighborhood, accommodation_lat, accommodation_lon):
@@ -252,12 +252,12 @@ export class AnthropicProvider implements LLMProvider {
       bookingLines.push("", "Booked logistics (fixed — do not ask about these):");
       if (b.flight_arrival_date) {
         bookingLines.push(
-          `  Flight arrival: ${b.flight_arrival_date}${b.flight_arrival_time ? " at " + b.flight_arrival_time : ""}`
+          `  Flight arrival: ${b.flight_arrival_date}${b.flight_arrival_time ? " at " + b.flight_arrival_time : ""}${b.flight_arrival_airport ? " into " + b.flight_arrival_airport : ""}`
         );
       }
       if (b.flight_departure_date) {
         bookingLines.push(
-          `  Flight departure: ${b.flight_departure_date}${b.flight_departure_time ? " at " + b.flight_departure_time : ""}`
+          `  Flight departure: ${b.flight_departure_date}${b.flight_departure_time ? " at " + b.flight_departure_time : ""}${b.flight_departure_airport ? " from " + b.flight_departure_airport : ""}`
         );
       }
       if (b.accommodation_name) {

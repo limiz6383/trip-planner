@@ -79,8 +79,10 @@ export interface Booking {
   trip_id: string;
   flight_arrival_date: string | null;
   flight_arrival_time: string | null;
+  flight_arrival_airport: string | null;
   flight_departure_date: string | null;
   flight_departure_time: string | null;
+  flight_departure_airport: string | null;
   accommodation_name: string | null;
   accommodation_neighborhood: string | null;
   accommodation_lat: number | null;
