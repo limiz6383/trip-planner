@@ -14,7 +14,7 @@
  *   onItineraryUpdated?: () => void   fired after any successful mutation
  */
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -131,6 +131,56 @@ function formatTime(hours: number | null | undefined): string {
   const m = Math.round((hours - h) * 60);
   if (m === 0) return `${h}h`;
   return `${h}h ${m}m`;
+}
+
+// ----- clock-time helpers (start_time is "HH:MM" or DB "HH:MM:SS") -----
+
+/** Parse "HH:MM"/"HH:MM:SS" to minutes-since-midnight, or null. */
+function parseClock(t: string | null | undefined): number | null {
+  if (!t) return null;
+  const [h, m] = t.split(":");
+  const hh = Number(h);
+  const mm = Number(m);
+  if (Number.isNaN(hh) || Number.isNaN(mm)) return null;
+  return hh * 60 + mm;
+}
+
+/** Minutes-since-midnight to "HH:MM" (clamped to a single day). */
+function minutesToHHMM(mins: number): string {
+  const clamped = Math.max(0, Math.min(23 * 60 + 59, Math.round(mins)));
+  const h = Math.floor(clamped / 60);
+  const m = clamped % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+/** "HH:MM(:SS)" to a friendly "12:30 PM"; "" if absent. */
+function formatClock(t: string | null | undefined): string {
+  const mins = parseClock(t);
+  if (mins == null) return "";
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  const period = h < 12 ? "AM" : "PM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${period}`;
+}
+
+/** End time (start + duration) in minutes, or null if untimed. */
+function activityEndMinutes(a: Activity): number | null {
+  const s = parseClock(a.start_time);
+  if (s == null) return null;
+  const durMin = a.estimated_time_hours != null ? a.estimated_time_hours * 60 : 0;
+  return s + durMin;
+}
+
+/** Sort comparator: by start_time (untimed last), tiebreak by sort_order. */
+function byClock(a: Activity, b: Activity): number {
+  const am = parseClock(a.start_time);
+  const bm = parseClock(b.start_time);
+  if (am == null && bm == null) return a.sort_order - b.sort_order;
+  if (am == null) return 1;
+  if (bm == null) return -1;
+  if (am !== bm) return am - bm;
+  return a.sort_order - b.sort_order;
 }
 
 function formatChangelogDate(isoString: string): string {
@@ -415,6 +465,9 @@ function ActivityEditForm({
   const [activityType, setActivityType] = useState<ActivityType | "">(
     activity.activity_type ?? ""
   );
+  const [startTime, setStartTime] = useState(
+    activity.start_time ? activity.start_time.slice(0, 5) : ""
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -434,6 +487,7 @@ function ActivityEditForm({
       estimated_time_hours:
         time.trim() !== "" && !isNaN(Number(time)) ? Number(time) : null,
       activity_type: (activityType as ActivityType) || null,
+      start_time: startTime || null,
     };
 
     try {
@@ -486,17 +540,14 @@ function ActivityEditForm({
         </div>
         <div className="grid grid-cols-2 gap-2">
           <Input
-            label="Cost (USD)"
-            type="number"
-            min="0"
-            step="0.01"
-            value={cost}
-            onChange={(e) => setCost(e.target.value)}
+            label="Start time"
+            type="time"
+            value={startTime}
+            onChange={(e) => setStartTime(e.target.value)}
             disabled={saving}
-            placeholder="e.g. 25"
           />
           <Input
-            label="Time (hours)"
+            label="Duration (hours)"
             type="number"
             min="0"
             step="0.25"
@@ -506,6 +557,19 @@ function ActivityEditForm({
             placeholder="e.g. 1.5"
           />
         </div>
+        <Input
+          label="Cost (USD)"
+          type="number"
+          min="0"
+          step="0.01"
+          value={cost}
+          onChange={(e) => setCost(e.target.value)}
+          disabled={saving}
+          placeholder="e.g. 25"
+        />
+        <p className="text-xs text-zinc-500">
+          Changing the start time or duration shifts the rest of the day.
+        </p>
         <div className="flex flex-col gap-1">
           <label className="text-sm font-medium text-zinc-700">Type</label>
           <select
@@ -566,19 +630,23 @@ interface ActivityCardProps {
 function ActivityCard({ activity, tripId, onActivityUpdated }: ActivityCardProps) {
   const [editing, setEditing] = useState(false);
   const [revising, setRevising] = useState(false);
-  const [localActivity, setLocalActivity] = useState<Activity>(activity);
   const [lockPending, setLockPending] = useState(false);
   const [lockError, setLockError] = useState<string | null>(null);
+
+  // Controlled by the parent (ItineraryView.localDays is the single source of
+  // truth, and onActivityUpdated drives all updates incl. the cascade), so the
+  // card renders straight from its prop — no derived local copy to keep in sync.
+  const act = activity;
 
   async function handleToggleLock() {
     setLockPending(true);
     setLockError(null);
-    const newLocked = !localActivity.locked;
+    const newLocked = !act.locked;
 
     try {
       const body: PatchActivityRequestBody = { locked: newLocked };
       const res = await fetch(
-        `/api/trips/${tripId}/activities/${localActivity.activity_id}`,
+        `/api/trips/${tripId}/activities/${act.activity_id}`,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -593,7 +661,6 @@ function ActivityCard({ activity, tripId, onActivityUpdated }: ActivityCardProps
       }
 
       const responseBody = (await res.json()) as PatchActivityResponseBody;
-      setLocalActivity(responseBody.activity);
       onActivityUpdated(responseBody.activity);
     } catch {
       setLockError("Network error. Please try again.");
@@ -603,18 +670,14 @@ function ActivityCard({ activity, tripId, onActivityUpdated }: ActivityCardProps
   }
 
   function handleSaved(updated: Activity) {
-    setLocalActivity(updated);
     setEditing(false);
     onActivityUpdated(updated);
   }
 
   function handleRevised(updated: Activity) {
-    setLocalActivity(updated);
     setRevising(false);
     onActivityUpdated(updated);
   }
-
-  const act = localActivity;
 
   return (
     <div
@@ -639,6 +702,13 @@ function ActivityCard({ activity, tripId, onActivityUpdated }: ActivityCardProps
         />
       ) : (
         <>
+          {/* Start time */}
+          {act.start_time && (
+            <p className="text-xs font-semibold text-indigo-600">
+              {formatClock(act.start_time)}
+            </p>
+          )}
+
           {/* Header row: name + type badge + action buttons */}
           <div className="flex items-start justify-between gap-2">
             <p className="text-sm font-medium leading-snug text-zinc-900">
@@ -1073,19 +1143,76 @@ export function ItineraryView({
     [onItineraryUpdated]
   );
 
+  // Mirror localDays into a ref so the cascade handler can read the current
+  // (pre-update) activity values without going stale across renders.
+  const localDaysRef = useRef(localDays);
+  useEffect(() => {
+    localDaysRef.current = localDays;
+  }, [localDays]);
+
   const handleActivityUpdated = useCallback(
     (updated: Activity) => {
-      setLocalDays((prev) =>
-        prev.map((d) => ({
-          ...d,
-          activities: d.activities?.map((a) =>
-            a.activity_id === updated.activity_id ? updated : a
-          ),
-        }))
+      const prev = localDaysRef.current;
+      const dayIdx = prev.findIndex((d) =>
+        (d.activities ?? []).some((a) => a.activity_id === updated.activity_id)
       );
+
+      // Activity not found in any loaded day — fall back to a plain replace.
+      if (dayIdx === -1) {
+        onItineraryUpdated?.();
+        return;
+      }
+
+      const acts = prev[dayIdx].activities ?? [];
+      const editedIdx = acts.findIndex(
+        (a) => a.activity_id === updated.activity_id
+      );
+      const old = acts[editedIdx];
+
+      // How far the edited activity's END moved (start and/or duration change).
+      const newEnd = activityEndMinutes(updated);
+      const oldEnd = old ? activityEndMinutes(old) : null;
+      const delta = newEnd != null && oldEnd != null ? newEnd - oldEnd : 0;
+
+      // Replace the edited activity; shift everything after it by the delta.
+      const downstream: { activity_id: string; start_time: string | null }[] = [];
+      let newActs = acts.map((a, i) => {
+        if (a.activity_id === updated.activity_id) return updated;
+        if (delta === 0 || i <= editedIdx) return a;
+        const s = parseClock(a.start_time);
+        if (s == null) return a;
+        const shifted = minutesToHHMM(s + delta);
+        downstream.push({ activity_id: a.activity_id, start_time: shifted });
+        return { ...a, start_time: shifted };
+      });
+
+      // Re-sort by clock time so a retimed activity lands in the right slot.
+      newActs = [...newActs].sort(byClock);
+
+      const newDays = prev.map((d, i) =>
+        i === dayIdx ? { ...d, activities: newActs } : d
+      );
+      setLocalDays(newDays);
+      localDaysRef.current = newDays;
+
+      // Persist the cascaded downstream times (the edited activity itself was
+      // already saved by whoever called this). Fire-and-forget.
+      if (downstream.length > 0) {
+        void fetch(
+          `/api/trips/${tripId}/days/${prev[dayIdx].day_id}/schedule`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ updates: downstream }),
+          }
+        ).catch(() => {
+          /* non-fatal; a refresh will reconcile from the server */
+        });
+      }
+
       onItineraryUpdated?.();
     },
-    [onItineraryUpdated]
+    [tripId, onItineraryUpdated]
   );
 
   // Compute total from day costs if total_cost_estimate is missing

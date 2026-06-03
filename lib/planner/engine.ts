@@ -132,6 +132,7 @@ export function hydratedItineraryToLLM(
       (a): LLMActivity => ({
         name: a.name,
         description: a.description ?? "",
+        start_time: a.start_time ?? "",
         estimated_time_hours: a.estimated_time_hours ?? 0,
         estimated_cost_usd: a.estimated_cost_usd ?? 0,
         place_name: a.place_name ?? "",

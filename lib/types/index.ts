@@ -150,7 +150,9 @@ export interface Activity {
   source_attribution: string | null;
   activity_type: ActivityType | null;
   locked: boolean;
-  /** 0-based position within the day; preserves the planned chronological order. */
+  /** Planned clock start time, "HH:MM" (24h), or null if untimed. */
+  start_time: string | null;
+  /** 0-based position within the day; tiebreaker when start_time is equal/absent. */
   sort_order: number;
   created_at: string;
 }
@@ -268,6 +270,8 @@ export interface LockedDaysConstraint {
 export interface LLMActivity {
   name: string;
   description: string;
+  /** Planned clock start time, "HH:MM" (24h). */
+  start_time: string;
   estimated_time_hours: number;
   estimated_cost_usd: number;
   place_name: string;

@@ -119,6 +119,7 @@ export function mergeLockedDays(
         activities: existingDay.activities.map((a) => ({
           name: a.name,
           description: a.description ?? "",
+          start_time: a.start_time ?? "",
           estimated_time_hours: a.estimated_time_hours ?? 1,
           estimated_cost_usd: a.estimated_cost_usd ?? 0,
           place_name: a.place_name ?? "",
@@ -150,8 +151,8 @@ export function mergeLockedDays(
 // Lock-preserving merge for AI revision
 // ---------------------------------------------------------------------------
 
-/** Max activities per day kept after a revision (matches the generation cap). */
-const MAX_ACTIVITIES_PER_DAY = 4;
+/** Max activities per day kept after a revision (safety ceiling; matches generation). */
+const MAX_ACTIVITIES_PER_DAY = 8;
 
 /**
  * Merges an AI-revised itinerary with the locks on the existing itinerary,
@@ -187,6 +188,7 @@ export function applyLocksToRevision(
   const toLLMActivity = (a: Activity, locked: boolean): LLMActivity => ({
     name: a.name,
     description: a.description ?? "",
+    start_time: a.start_time ?? "",
     estimated_time_hours: a.estimated_time_hours ?? 1,
     estimated_cost_usd: a.estimated_cost_usd ?? 0,
     place_name: a.place_name ?? "",

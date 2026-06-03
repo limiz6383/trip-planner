@@ -289,6 +289,8 @@ export async function getActivitiesForDay(
     .from("activities")
     .select("*")
     .eq("day_id", dayId)
+    // Chronological by clock time; untimed activities fall back to sort_order.
+    .order("start_time", { ascending: true, nullsFirst: false })
     .order("sort_order")
     .order("created_at");
 
@@ -586,6 +588,7 @@ export async function createItineraryFromLLMOutput(
         day_id: day.day_id,
         name: a.name,
         description: a.description ?? null,
+        start_time: a.start_time || null,
         estimated_time_hours: a.estimated_time_hours ?? null,
         estimated_cost_usd: a.estimated_cost_usd ?? null,
         place_name: a.place_name ?? null,
@@ -602,6 +605,7 @@ export async function createItineraryFromLLMOutput(
         .from("activities")
         .insert(activityInserts)
         .select()
+        .order("start_time", { ascending: true, nullsFirst: false })
         .order("sort_order");
 
       if (activityError) throw activityError;
