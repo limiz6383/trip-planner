@@ -637,6 +637,45 @@ export async function createItineraryFromLLMOutput(
  * @param after   - Snapshot of affected fields after the change (or null)
  * @param metadata - Any extra structured metadata (or null)
  */
+/**
+ * Returns the traveller's prior revision instructions for a trip — the
+ * free-text asks they made in earlier whole-itinerary / day / activity
+ * revisions — so later revisions can honor them as standing preferences and
+ * not silently undo earlier requests.
+ *
+ * Excludes system-issued revisions (e.g. "Tidy up", tagged metadata.kind
+ * "tidy"). De-duplicated, oldest→newest, capped to the most recent 20.
+ */
+export async function getRevisionInstructions(
+  client: SupabaseClient,
+  tripId: string
+): Promise<string[]> {
+  const { data, error } = await client
+    .from("change_log")
+    .select("metadata, created_at")
+    .eq("trip_id", tripId)
+    .eq("change_type", "revision")
+    .order("created_at", { ascending: true });
+
+  if (error) throw error;
+
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const row of (data ?? []) as { metadata: Record<string, unknown> | null }[]) {
+    const md = row.metadata;
+    if (!md || md.kind === "tidy") continue;
+    const instr = md.instruction;
+    if (typeof instr === "string" && instr.trim()) {
+      const t = instr.trim();
+      if (!seen.has(t)) {
+        seen.add(t);
+        out.push(t);
+      }
+    }
+  }
+  return out.slice(-20);
+}
+
 export async function appendChangeLogEntry(
   client: SupabaseClient,
   tripId: string,

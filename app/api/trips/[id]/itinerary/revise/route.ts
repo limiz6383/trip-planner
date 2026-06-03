@@ -26,6 +26,7 @@ import {
   getBookingForTrip,
   getCurrentItineraryHydrated,
   createItineraryFromLLMOutput,
+  getRevisionInstructions,
   appendChangeLogEntry,
 } from "@/lib/db/queries";
 import { createPlannerEngine } from "@/lib/planner/engine";
@@ -35,6 +36,11 @@ import type { Itinerary } from "@/lib/types";
 
 export interface ReviseItineraryRequestBody {
   instruction: string;
+  /**
+   * "tidy" marks a system-issued cleanup (the "Tidy up" button) so it is NOT
+   * remembered as a standing preference. Defaults to a user revision.
+   */
+  kind?: "user" | "tidy";
 }
 
 export interface ReviseItineraryResponseBody {
@@ -118,8 +124,11 @@ export async function POST(
       );
     }
 
-    // --- 3. Load the booking (optional) ---
-    const booking = await getBookingForTrip(supabase, tripId);
+    // --- 3. Load the booking (optional) + prior revision preferences ---
+    const [booking, standingPreferences] = await Promise.all([
+      getBookingForTrip(supabase, tripId),
+      getRevisionInstructions(supabase, tripId),
+    ]);
 
     // --- 4. Run the revision through the planner pipeline ---
     const engine = createPlannerEngine(supabase);
@@ -127,6 +136,7 @@ export async function POST(
       brief,
       currentItinerary,
       instruction,
+      standingPreferences,
       booking,
     });
 
@@ -152,7 +162,7 @@ export async function POST(
           destination: llmItinerary.destination,
           total_cost_estimate: llmItinerary.total_cost_estimate,
         },
-        { instruction }
+        { instruction, kind: body.kind === "tidy" ? "tidy" : "user" }
       );
     } catch {
       // Change log write failing must not break the primary response
