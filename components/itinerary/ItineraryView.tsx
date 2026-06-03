@@ -55,6 +55,12 @@ import type {
   ReviseDayResponseBody,
   ReviseDayErrorBody,
 } from "@/app/api/trips/[id]/days/[dayId]/revise/route";
+import type { RescheduleRequestBody } from "@/app/api/trips/[id]/days/[dayId]/schedule/route";
+import type {
+  MoveActivityRequestBody,
+  MoveActivityResponseBody,
+  MoveActivityErrorBody,
+} from "@/app/api/trips/[id]/activities/[activityId]/move/route";
 
 // ---------------------------------------------------------------------------
 // Prop contract — FINAL (unchanged)
@@ -72,6 +78,13 @@ export interface ItineraryViewProps {
 // ---------------------------------------------------------------------------
 // Activity type constants
 // ---------------------------------------------------------------------------
+
+/** Canned instruction for the "Tidy up trip" action (whole-itinerary revise). */
+const TIDY_UP_INSTRUCTION =
+  "Tidy up the whole trip: remove duplicate or redundant activities, fix " +
+  "scheduling conflicts and unrealistic timing, and make each day flow " +
+  "coherently. Keep the destination, dates, day count, and all locked items " +
+  "unchanged.";
 
 const ACTIVITY_TYPES: ActivityType[] = [
   "food",
@@ -630,9 +643,23 @@ interface ActivityCardProps {
   activity: Activity;
   tripId: string;
   onActivityUpdated: (updated: Activity) => void;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  onReorder: (direction: "up" | "down") => void;
+  otherDays: { day_id: string; label: string }[];
+  onMoveToDay: (targetDayId: string) => void;
 }
 
-function ActivityCard({ activity, tripId, onActivityUpdated }: ActivityCardProps) {
+function ActivityCard({
+  activity,
+  tripId,
+  onActivityUpdated,
+  canMoveUp,
+  canMoveDown,
+  onReorder,
+  otherDays,
+  onMoveToDay,
+}: ActivityCardProps) {
   const [editing, setEditing] = useState(false);
   const [revising, setRevising] = useState(false);
   const [lockPending, setLockPending] = useState(false);
@@ -722,6 +749,32 @@ function ActivityCard({ activity, tripId, onActivityUpdated }: ActivityCardProps
             <div className="flex shrink-0 items-center gap-1">
               <ActivityTypeBadge type={act.activity_type} />
 
+              {/* Reorder up */}
+              <button
+                onClick={() => onReorder("up")}
+                disabled={!canMoveUp}
+                className="rounded p-1 text-zinc-400 transition-colors hover:bg-zinc-200 hover:text-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-30"
+                title="Move earlier"
+                aria-label={`Move ${act.name} earlier`}
+              >
+                <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <path fillRule="evenodd" d="M10 5a1 1 0 01.7.29l5 5a1 1 0 01-1.4 1.42L10 7.41l-4.3 4.3a1 1 0 01-1.4-1.42l5-5A1 1 0 0110 5z" clipRule="evenodd" />
+                </svg>
+              </button>
+
+              {/* Reorder down */}
+              <button
+                onClick={() => onReorder("down")}
+                disabled={!canMoveDown}
+                className="rounded p-1 text-zinc-400 transition-colors hover:bg-zinc-200 hover:text-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-30"
+                title="Move later"
+                aria-label={`Move ${act.name} later`}
+              >
+                <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <path fillRule="evenodd" d="M10 15a1 1 0 01-.7-.29l-5-5a1 1 0 011.4-1.42L10 12.59l4.3-4.3a1 1 0 011.4 1.42l-5 5A1 1 0 0110 15z" clipRule="evenodd" />
+                </svg>
+              </button>
+
               {/* AI revise button */}
               <button
                 onClick={() => setRevising(true)}
@@ -793,6 +846,28 @@ function ActivityCard({ activity, tripId, onActivityUpdated }: ActivityCardProps
             <p className="text-xs italic text-zinc-400">
               via {act.source_attribution}
             </p>
+          )}
+
+          {/* Move to another day */}
+          {otherDays.length > 0 && (
+            <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+              <span>Move to</span>
+              <select
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) onMoveToDay(e.target.value);
+                }}
+                className="rounded border border-zinc-300 bg-white px-1.5 py-0.5 text-xs text-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                aria-label={`Move ${act.name} to another day`}
+              >
+                <option value="">day…</option>
+                {otherDays.map((o) => (
+                  <option key={o.day_id} value={o.day_id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           )}
 
           {/* Lock error */}
@@ -903,6 +978,17 @@ interface DaySectionProps {
   onDayUpdated: (updated: ItineraryDay) => void;
   onActivityUpdated: (updated: Activity) => void;
   onDayActivitiesReplaced: (dayId: string, activities: Activity[]) => void;
+  allDays: { day_id: string; label: string }[];
+  onReorderActivity: (
+    dayId: string,
+    activityId: string,
+    direction: "up" | "down"
+  ) => void;
+  onMoveToDay: (
+    activityId: string,
+    fromDayId: string,
+    targetDayId: string
+  ) => void;
 }
 
 function DaySection({
@@ -912,6 +998,9 @@ function DaySection({
   onDayUpdated,
   onActivityUpdated,
   onDayActivitiesReplaced,
+  allDays,
+  onReorderActivity,
+  onMoveToDay,
 }: DaySectionProps) {
   const [localDay, setLocalDay] = useState<ItineraryDay>(day);
   const [lockPending, setLockPending] = useState(false);
@@ -1030,12 +1119,21 @@ function DaySection({
       {/* Activity list */}
       {activities.length > 0 ? (
         <div className="flex flex-col gap-2 pl-8">
-          {activities.map((activity) => (
+          {activities.map((activity, index) => (
             <ActivityCard
               key={activity.activity_id}
               activity={activity}
               tripId={tripId}
               onActivityUpdated={onActivityUpdated}
+              canMoveUp={index > 0}
+              canMoveDown={index < activities.length - 1}
+              onReorder={(direction) =>
+                onReorderActivity(day.day_id, activity.activity_id, direction)
+              }
+              otherDays={allDays.filter((o) => o.day_id !== day.day_id)}
+              onMoveToDay={(targetDayId) =>
+                onMoveToDay(activity.activity_id, day.day_id, targetDayId)
+              }
             />
           ))}
         </div>
@@ -1209,16 +1307,11 @@ export function ItineraryView({
   const [revising, setRevising] = useState(false);
   const [reviseError, setReviseError] = useState<string | null>(null);
 
-  async function handleReviseItinerary() {
-    const trimmed = reviseInstruction.trim();
-    if (!trimmed) {
-      setReviseError("Tell the planner what to change across the trip.");
-      return;
-    }
+  async function runWholeItineraryRevise(instruction: string) {
     setRevising(true);
     setReviseError(null);
 
-    const body: ReviseItineraryRequestBody = { instruction: trimmed };
+    const body: ReviseItineraryRequestBody = { instruction };
 
     try {
       const res = await fetch(`/api/trips/${tripId}/itinerary/revise`, {
@@ -1246,6 +1339,19 @@ export function ItineraryView({
     } finally {
       setRevising(false);
     }
+  }
+
+  function handleReviseItinerary() {
+    const trimmed = reviseInstruction.trim();
+    if (!trimmed) {
+      setReviseError("Tell the planner what to change across the trip.");
+      return;
+    }
+    void runWholeItineraryRevise(trimmed);
+  }
+
+  function handleTidyUp() {
+    void runWholeItineraryRevise(TIDY_UP_INSTRUCTION);
   }
 
   const handleDayUpdated = useCallback(
@@ -1344,6 +1450,101 @@ export function ItineraryView({
     [onItineraryUpdated]
   );
 
+  // Manual reorder within a day: swap an activity's start_time with its
+  // neighbour (start_time is the primary sort key), then persist both.
+  const handleReorderActivity = useCallback(
+    (dayId: string, activityId: string, direction: "up" | "down") => {
+      const prev = localDaysRef.current;
+      const dayIdx = prev.findIndex((d) => d.day_id === dayId);
+      if (dayIdx === -1) return;
+      const acts = [...(prev[dayIdx].activities ?? [])];
+      const idx = acts.findIndex((a) => a.activity_id === activityId);
+      const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+      if (idx === -1 || swapIdx < 0 || swapIdx >= acts.length) return;
+
+      const a = acts[idx];
+      const b = acts[swapIdx];
+      acts[idx] = { ...a, start_time: b.start_time };
+      acts[swapIdx] = { ...b, start_time: a.start_time };
+      const sorted = [...acts].sort(byClock);
+
+      const newDays = prev.map((d, i) =>
+        i === dayIdx ? { ...d, activities: sorted } : d
+      );
+      setLocalDays(newDays);
+      localDaysRef.current = newDays;
+
+      const updates: RescheduleRequestBody["updates"] = [
+        { activity_id: a.activity_id, start_time: b.start_time },
+        { activity_id: b.activity_id, start_time: a.start_time },
+      ];
+      void fetch(`/api/trips/${tripId}/days/${dayId}/schedule`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ updates } satisfies RescheduleRequestBody),
+      }).catch(() => {
+        /* non-fatal; a refresh reconciles */
+      });
+      onItineraryUpdated?.();
+    },
+    [tripId, onItineraryUpdated]
+  );
+
+  // Manual move to another day (deterministic, server-validated).
+  const handleMoveToDay = useCallback(
+    async (activityId: string, fromDayId: string, targetDayId: string) => {
+      if (fromDayId === targetDayId) return;
+      try {
+        const res = await fetch(
+          `/api/trips/${tripId}/activities/${activityId}/move`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              target_day_id: targetDayId,
+            } satisfies MoveActivityRequestBody),
+          }
+        );
+        if (!res.ok) {
+          const err = (await res.json()) as MoveActivityErrorBody;
+          // Surface via console; a refresh will reconcile. (Errors here are rare.)
+          console.error("Move failed:", err.error);
+          return;
+        }
+        const { activity } = (await res.json()) as MoveActivityResponseBody;
+        setLocalDays((prev) =>
+          prev.map((d) => {
+            if (d.day_id === fromDayId) {
+              return {
+                ...d,
+                activities: (d.activities ?? []).filter(
+                  (x) => x.activity_id !== activityId
+                ),
+              };
+            }
+            if (d.day_id === targetDayId) {
+              return {
+                ...d,
+                activities: [...(d.activities ?? []), activity].sort(byClock),
+              };
+            }
+            return d;
+          })
+        );
+        onItineraryUpdated?.();
+      } catch {
+        /* network error; non-fatal */
+      }
+    },
+    [tripId, onItineraryUpdated]
+  );
+
+  // Day options for the per-activity "move to day" control.
+  const dayOptions = localDays.map((d, i) => ({
+    day_id: d.day_id,
+    label: `Day ${i + 1}`,
+  }));
+
   // Compute total from day costs if total_cost_estimate is missing
   const totalCost =
     itinerary.total_cost_estimate ??
@@ -1382,6 +1583,15 @@ export function ItineraryView({
                   <SparkleIcon />
                   Revise
                 </span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleTidyUp}
+                aria-label="Tidy up the whole trip with AI"
+                title="Remove redundancy and fix timing across the whole trip"
+              >
+                Tidy up
               </Button>
               <Button
                 variant="ghost"
@@ -1482,6 +1692,9 @@ export function ItineraryView({
                     onDayUpdated={handleDayUpdated}
                     onActivityUpdated={handleActivityUpdated}
                     onDayActivitiesReplaced={handleDayActivitiesReplaced}
+                    allDays={dayOptions}
+                    onReorderActivity={handleReorderActivity}
+                    onMoveToDay={handleMoveToDay}
                   />
                 </div>
               ))}
