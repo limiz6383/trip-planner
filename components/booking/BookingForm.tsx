@@ -41,7 +41,7 @@ import type {
 type BookingFields = Omit<Booking, "booking_id" | "trip_id" | "created_at" | "updated_at">;
 
 // ---------------------------------------------------------------------------
-// Accommodation autocomplete
+// Place autocomplete (shared by accommodation location + airports)
 // ---------------------------------------------------------------------------
 
 const INPUT_BASE =
@@ -50,19 +50,23 @@ const INPUT_BASE =
   "disabled:bg-zinc-50 disabled:text-zinc-500 disabled:cursor-not-allowed " +
   "border-zinc-300 bg-white";
 
-interface AccommodationAutocompleteProps {
+interface PlaceAutocompleteProps {
+  label: string;
+  placeholder: string;
   defaultValue?: string;
   defaultLat?: number | null;
   defaultLon?: number | null;
   onSelect: (label: string, lat: number | null, lon: number | null) => void;
 }
 
-function AccommodationAutocomplete({
+function PlaceAutocomplete({
+  label,
+  placeholder,
   defaultValue = "",
   defaultLat,
   defaultLon,
   onSelect,
-}: AccommodationAutocompleteProps) {
+}: PlaceAutocompleteProps) {
   const inputId = useId();
   const listboxId = useId();
 
@@ -178,7 +182,7 @@ function AccommodationAutocomplete({
   return (
     <div className="flex flex-col gap-1" ref={containerRef}>
       <label htmlFor={inputId} className="text-sm font-medium text-zinc-700">
-        Accommodation location
+        {label}
       </label>
       <div className="relative">
         <input
@@ -198,7 +202,7 @@ function AccommodationAutocomplete({
           value={query}
           onChange={(e) => handleChange(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Neighborhood, district, or address"
+          placeholder={placeholder}
           className={INPUT_BASE}
         />
 
@@ -319,11 +323,17 @@ export function BookingForm({
   const [flightArrivalTime, setFlightArrivalTime] = useState(
     initialBooking?.flight_arrival_time ?? ""
   );
+  const [flightArrivalAirport, setFlightArrivalAirport] = useState(
+    initialBooking?.flight_arrival_airport ?? ""
+  );
   const [flightDepartureDate, setFlightDepartureDate] = useState(
     initialBooking?.flight_departure_date ?? ""
   );
   const [flightDepartureTime, setFlightDepartureTime] = useState(
     initialBooking?.flight_departure_time ?? ""
+  );
+  const [flightDepartureAirport, setFlightDepartureAirport] = useState(
+    initialBooking?.flight_departure_airport ?? ""
   );
 
   // Accommodation fields
@@ -366,8 +376,10 @@ export function BookingForm({
     const body: BookingFields = {
       flight_arrival_date: flightArrivalDate || null,
       flight_arrival_time: flightArrivalTime || null,
+      flight_arrival_airport: flightArrivalAirport || null,
       flight_departure_date: flightDepartureDate || null,
       flight_departure_time: flightDepartureTime || null,
+      flight_departure_airport: flightDepartureAirport || null,
       accommodation_name: accommodationName || null,
       accommodation_neighborhood: accommodationNeighborhood || null,
       accommodation_lat: accommodationLat,
@@ -457,6 +469,13 @@ export function BookingForm({
           />
         </div>
 
+        <PlaceAutocomplete
+          label="Arrival airport"
+          placeholder="Which airport do you land at? e.g. SAF, Albuquerque Intl"
+          defaultValue={flightArrivalAirport}
+          onSelect={(labelText) => setFlightArrivalAirport(labelText)}
+        />
+
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Input
             label="Departure date"
@@ -472,6 +491,13 @@ export function BookingForm({
             onChange={(e) => setFlightDepartureTime(e.target.value)}
           />
         </div>
+
+        <PlaceAutocomplete
+          label="Departure airport"
+          placeholder="Which airport do you fly out of?"
+          defaultValue={flightDepartureAirport}
+          onSelect={(labelText) => setFlightDepartureAirport(labelText)}
+        />
       </div>
 
       {/* ---- Accommodation section ---- */}
@@ -489,7 +515,9 @@ export function BookingForm({
           placeholder="Hotel, Airbnb, hostel name…"
         />
 
-        <AccommodationAutocomplete
+        <PlaceAutocomplete
+          label="Accommodation location"
+          placeholder="Neighborhood, district, or address"
           defaultValue={accommodationNeighborhood}
           defaultLat={accommodationLat}
           defaultLon={accommodationLon}
