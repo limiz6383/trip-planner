@@ -56,6 +56,8 @@ interface PlaceAutocompleteProps {
   defaultValue?: string;
   defaultLat?: number | null;
   defaultLon?: number | null;
+  /** Suggestion endpoint (returns GeocodeResult[]). Defaults to general geocode. */
+  endpoint?: string;
   onSelect: (label: string, lat: number | null, lon: number | null) => void;
 }
 
@@ -65,6 +67,7 @@ function PlaceAutocomplete({
   defaultValue = "",
   defaultLat,
   defaultLon,
+  endpoint = "/api/geocode",
   onSelect,
 }: PlaceAutocompleteProps) {
   const inputId = useId();
@@ -91,7 +94,7 @@ function PlaceAutocomplete({
     }
     setLoading(true);
     try {
-      const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}`, {
+      const res = await fetch(`${endpoint}?q=${encodeURIComponent(q)}`, {
         cache: "no-store",
       });
       if (!res.ok) {
@@ -109,7 +112,7 @@ function PlaceAutocomplete({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [endpoint]);
 
   function handleChange(value: string) {
     setQuery(value);
@@ -471,7 +474,8 @@ export function BookingForm({
 
         <PlaceAutocomplete
           label="Arrival airport"
-          placeholder="Which airport do you land at? e.g. SAF, Albuquerque Intl"
+          placeholder="Airport code or name, e.g. SAF, ABQ, Albuquerque"
+          endpoint="/api/airports"
           defaultValue={flightArrivalAirport}
           onSelect={(labelText) => setFlightArrivalAirport(labelText)}
         />
@@ -494,7 +498,8 @@ export function BookingForm({
 
         <PlaceAutocomplete
           label="Departure airport"
-          placeholder="Which airport do you fly out of?"
+          placeholder="Airport code or name, e.g. JFK, Santa Fe"
+          endpoint="/api/airports"
           defaultValue={flightDepartureAirport}
           onSelect={(labelText) => setFlightDepartureAirport(labelText)}
         />
