@@ -31,6 +31,7 @@ import type {
   PatchActivityRequestBody,
   PatchActivityResponseBody,
   PatchActivityErrorBody,
+  DeleteActivityErrorBody,
 } from "@/app/api/trips/[id]/activities/[activityId]/route";
 import type {
   PatchDayRequestBody,
@@ -451,6 +452,24 @@ function ReviseActivityForm({
   );
 }
 
+function TrashIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className="h-3.5 w-3.5"
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path
+        fillRule="evenodd"
+        d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Activity edit form (inline)
 // ---------------------------------------------------------------------------
@@ -648,6 +667,7 @@ interface ActivityCardProps {
   onReorder: (direction: "up" | "down") => void;
   otherDays: { day_id: string; label: string }[];
   onMoveToDay: (targetDayId: string) => void;
+  onDeleted: () => void;
 }
 
 function ActivityCard({
@@ -659,11 +679,36 @@ function ActivityCard({
   onReorder,
   otherDays,
   onMoveToDay,
+  onDeleted,
 }: ActivityCardProps) {
   const [editing, setEditing] = useState(false);
   const [revising, setRevising] = useState(false);
   const [lockPending, setLockPending] = useState(false);
   const [lockError, setLockError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function handleDelete() {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(
+        `/api/trips/${tripId}/activities/${activity.activity_id}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) {
+        const errBody = (await res.json()) as DeleteActivityErrorBody;
+        setDeleteError(errBody.error ?? "Failed to remove activity.");
+        setDeleting(false);
+        return;
+      }
+      onDeleted(); // parent removes this card from the day
+    } catch {
+      setDeleteError("Network error. Please try again.");
+      setDeleting(false);
+    }
+  }
 
   // Controlled by the parent (ItineraryView.localDays is the single source of
   // truth, and onActivityUpdated drives all updates incl. the cascade), so the
@@ -811,8 +856,46 @@ function ActivityCard({
               >
                 <LockIcon locked={act.locked} />
               </button>
+
+              {/* Delete */}
+              <button
+                onClick={() => setConfirmingDelete(true)}
+                className="rounded p-1 text-zinc-400 transition-colors hover:bg-red-100 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                title="Remove activity"
+                aria-label={`Remove ${act.name}`}
+              >
+                <TrashIcon />
+              </button>
             </div>
           </div>
+
+          {/* Delete confirm */}
+          {confirmingDelete && (
+            <div className="flex items-center justify-between gap-2 rounded-md bg-red-50 px-2 py-1.5 text-xs text-red-700">
+              <span>Remove this activity?</span>
+              <span className="flex shrink-0 gap-1">
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="rounded bg-red-600 px-2 py-0.5 font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                >
+                  {deleting ? "Removing…" : "Remove"}
+                </button>
+                <button
+                  onClick={() => setConfirmingDelete(false)}
+                  disabled={deleting}
+                  className="rounded px-2 py-0.5 font-medium text-zinc-600 hover:bg-zinc-200"
+                >
+                  Cancel
+                </button>
+              </span>
+            </div>
+          )}
+          {deleteError && (
+            <p className="text-xs text-red-600" role="alert">
+              {deleteError}
+            </p>
+          )}
 
           {/* Place name */}
           {act.place_name && (
@@ -989,6 +1072,7 @@ interface DaySectionProps {
     fromDayId: string,
     targetDayId: string
   ) => void;
+  onActivityDeleted: (dayId: string, activityId: string) => void;
 }
 
 function DaySection({
@@ -1001,6 +1085,7 @@ function DaySection({
   allDays,
   onReorderActivity,
   onMoveToDay,
+  onActivityDeleted,
 }: DaySectionProps) {
   const [localDay, setLocalDay] = useState<ItineraryDay>(day);
   const [lockPending, setLockPending] = useState(false);
@@ -1133,6 +1218,9 @@ function DaySection({
               otherDays={allDays.filter((o) => o.day_id !== day.day_id)}
               onMoveToDay={(targetDayId) =>
                 onMoveToDay(activity.activity_id, day.day_id, targetDayId)
+              }
+              onDeleted={() =>
+                onActivityDeleted(day.day_id, activity.activity_id)
               }
             />
           ))}
@@ -1539,6 +1627,26 @@ export function ItineraryView({
     [tripId, onItineraryUpdated]
   );
 
+  // Remove an activity from its day.
+  const handleActivityDeleted = useCallback(
+    (dayId: string, activityId: string) => {
+      setLocalDays((prev) =>
+        prev.map((d) =>
+          d.day_id === dayId
+            ? {
+                ...d,
+                activities: (d.activities ?? []).filter(
+                  (a) => a.activity_id !== activityId
+                ),
+              }
+            : d
+        )
+      );
+      onItineraryUpdated?.();
+    },
+    [onItineraryUpdated]
+  );
+
   // Day options for the per-activity "move to day" control.
   const dayOptions = localDays.map((d, i) => ({
     day_id: d.day_id,
@@ -1695,6 +1803,7 @@ export function ItineraryView({
                     allDays={dayOptions}
                     onReorderActivity={handleReorderActivity}
                     onMoveToDay={handleMoveToDay}
+                    onActivityDeleted={handleActivityDeleted}
                   />
                 </div>
               ))}
