@@ -1561,6 +1561,8 @@ function ChangelogDrawer({ tripId, onClose }: ChangelogDrawerProps) {
 
 function normalizeText(s: string): string {
   return s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // fold accents: svickova etc.
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
@@ -1573,7 +1575,11 @@ function isCovered(name: string, activities: Activity[]): boolean {
   const sp = normalizeText(name.replace(/\([^)]*\)/g, " "));
   if (sp.length < 3) return false;
   return activities.some((a) => {
-    const at = normalizeText(`${a.name} ${a.place_name ?? ""}`);
+    // Include the description: dishes/spots are often named there rather than
+    // in the title (e.g. "Dinner at Lokál" whose desc mentions svíčková).
+    const at = normalizeText(
+      `${a.name} ${a.place_name ?? ""} ${a.description ?? ""}`
+    );
     if (!at) return false;
     if (at.includes(sp)) return true;
     const an = normalizeText(a.name);
