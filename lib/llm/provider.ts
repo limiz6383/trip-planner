@@ -10,7 +10,7 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import type { LLMItinerary, LLMActivity, LLMTripBrief, TripBrief, Booking, CommunityPost, Activity, DestinationGuide } from "@/lib/types";
+import type { LLMItinerary, LLMActivity, LLMTripBrief, TripBrief, Booking, CommunityPost, Activity, DestinationGuide, PreferenceProfile } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -88,6 +88,11 @@ export interface GenerateItineraryParams {
    * When null/undefined the model plans full days as if no constraints exist.
    */
   booking?: Booking | null;
+  /**
+   * Learned travel preferences from the traveller's past trips. Used to gently
+   * bias the plan; never overrides the explicit brief for THIS trip.
+   */
+  learnedPreferences?: PreferenceProfile | null;
 }
 
 /**
@@ -395,6 +400,11 @@ Accommodation location (accommodation_neighborhood, accommodation_lat, accommoda
 
 If no booking is provided, or booking fields are null, plan full days from morning to evening as normal — do not invent flight or accommodation constraints.
 
+LEARNED PREFERENCES — if a "learned_preferences" object is provided (inferred from the traveller's PAST trips), use it as a GENTLE bias, never an override:
+- Favor their liked_activity_types and lean away from disliked_activity_types when choosing between otherwise-comparable options.
+- Nudge toward their travel_pace, price_sensitivity, and locality_preference (0 local … 1 touristy) where the brief for THIS trip doesn't already specify otherwise.
+- The explicit brief for THIS trip ALWAYS wins. Never contradict it, and don't force a preference where it doesn't fit the destination.
+
 Respond ONLY with valid JSON matching this exact shape:
 {
   "destination": "string",
@@ -570,6 +580,10 @@ export class AnthropicProvider implements LLMProvider {
       // constraints. Omit the key entirely when there is no booking so the
       // model prompt remains identical to the no-booking path.
       ...(params.booking ? { booking: params.booking } : {}),
+      // Learned preferences from past trips (gentle bias only).
+      ...(params.learnedPreferences
+        ? { learned_preferences: params.learnedPreferences }
+        : {}),
     });
 
     const response = await client.messages.create({

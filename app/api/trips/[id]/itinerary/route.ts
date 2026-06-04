@@ -20,7 +20,7 @@
 import type { NextRequest } from "next/server";
 import { getUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/db/server";
-import { getTripBrief, getBookingForTrip, createItineraryFromLLMOutput, appendChangeLogEntry } from "@/lib/db/queries";
+import { getTripBrief, getBookingForTrip, createItineraryFromLLMOutput, appendChangeLogEntry, getPreferenceProfile } from "@/lib/db/queries";
 import { createPlannerEngine } from "@/lib/planner/engine";
 import type { Itinerary } from "@/lib/types";
 
@@ -75,12 +75,22 @@ export async function POST(
       );
     }
 
-    // --- 2. Load the booking (optional — null is fine; generation proceeds without it) ---
+    // --- 2. Load the booking (optional) + learned preferences from past trips ---
     const booking = await getBookingForTrip(supabase, tripId);
+    let learnedPreferences = null;
+    try {
+      learnedPreferences = await getPreferenceProfile(supabase);
+    } catch {
+      // Non-fatal — generation proceeds without the bias.
+    }
 
     // --- 3. Run the planner pipeline (fetch posts → rank → generate) ---
     const engine = createPlannerEngine(supabase);
-    const { itinerary: llmItinerary } = await engine.plan({ brief, booking });
+    const { itinerary: llmItinerary } = await engine.plan({
+      brief,
+      booking,
+      learnedPreferences,
+    });
 
     // --- 4. Persist and return the hydrated itinerary ---
     const persisted = await createItineraryFromLLMOutput(

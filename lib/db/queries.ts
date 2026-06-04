@@ -29,6 +29,8 @@ import type {
   PreferenceProfile,
   ChangeLogEntry,
   TripInvite,
+  ActivityType,
+  TripPace,
 } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -637,6 +639,92 @@ export async function createItineraryFromLLMOutput(
  * @param after   - Snapshot of affected fields after the change (or null)
  * @param metadata - Any extra structured metadata (or null)
  */
+/**
+ * Upserts the user's learned preference profile (one row per user).
+ */
+export async function upsertPreferenceProfile(
+  client: SupabaseClient,
+  userId: string,
+  fields: import("@/lib/preferences").ComputedProfile
+): Promise<PreferenceProfile> {
+  const { data, error } = await client
+    .from("preference_profiles")
+    .upsert(
+      {
+        user_id: userId,
+        liked_activity_types: fields.liked_activity_types,
+        disliked_activity_types: fields.disliked_activity_types,
+        price_sensitivity: fields.price_sensitivity,
+        travel_pace: fields.travel_pace,
+        locality_preference: fields.locality_preference,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id" }
+    )
+    .select()
+    .single();
+  if (error) throw error;
+  return data as PreferenceProfile;
+}
+
+/**
+ * Learns the user's travel preferences from ALL their past trips — the activity
+ * types they pick, their briefs (pace, budget, local/touristy), and any place
+ * reviews — then caches the result in preference_profiles. Deterministic (no
+ * LLM). Returns the persisted profile.
+ */
+export async function learnPreferenceProfile(
+  client: SupabaseClient,
+  userId: string
+): Promise<PreferenceProfile> {
+  const { computeProfile } = await import("@/lib/preferences");
+
+  const [active, archived] = await Promise.all([
+    getTripsForUser(client),
+    getArchivedTripsForUser(client),
+  ]);
+  const trips = [...active, ...archived];
+
+  const activityTypes: (ActivityType | null)[] = [];
+  const paces: (TripPace | null)[] = [];
+  const budgets: number[] = [];
+  const localityDials: number[] = [];
+  const reviews: { activity_type: ActivityType | null; rating: number }[] = [];
+
+  for (const trip of trips) {
+    const brief = await getTripBrief(client, trip.trip_id);
+    if (brief) {
+      paces.push(brief.pace);
+      if (typeof brief.daily_budget_usd === "number")
+        budgets.push(brief.daily_budget_usd);
+      if (typeof brief.local_touristy_dial === "number")
+        localityDials.push(brief.local_touristy_dial);
+    }
+
+    const itinerary = await getCurrentItinerary(client, trip.trip_id);
+    if (itinerary) {
+      const days = await getDaysForItinerary(client, itinerary.itinerary_id);
+      for (const day of days) {
+        const acts = await getActivitiesForDay(client, day.day_id);
+        for (const a of acts) activityTypes.push(a.activity_type);
+      }
+    }
+
+    const revs = await getReviewsForTrip(client, trip.trip_id);
+    for (const r of revs)
+      reviews.push({ activity_type: r.activity_type, rating: r.rating });
+  }
+
+  const computed = computeProfile({
+    activityTypes,
+    paces,
+    budgets,
+    localityDials,
+    reviews,
+  });
+  return upsertPreferenceProfile(client, userId, computed);
+}
+
 /**
  * Caches the generated destination guide on the trip. Returns nothing.
  */
