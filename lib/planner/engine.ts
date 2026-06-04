@@ -31,6 +31,7 @@ import type {
   LLMItinerary,
   LLMItineraryDay,
   LLMActivity,
+  PreferenceProfile,
 } from "@/lib/types";
 import type { ContentSource } from "@/lib/retrieval/source";
 import type { LLMProvider } from "@/lib/llm/provider";
@@ -71,6 +72,8 @@ export interface PlannerInput {
    * When null/undefined the LLM plans full days with no travel constraints.
    */
   booking?: Booking | null;
+  /** Learned preferences from past trips — gently biases generation. */
+  learnedPreferences?: PreferenceProfile | null;
 }
 
 export interface PlannerResult {
@@ -182,7 +185,8 @@ export class PlannerEngine {
   ) {}
 
   async plan(input: PlannerInput): Promise<PlannerResult> {
-    const { brief, existingItinerary, currentDate, booking } = input;
+    const { brief, existingItinerary, currentDate, booking, learnedPreferences } =
+      input;
 
     // --- Step 1: Derive locked constraints (mid-trip re-planning only) ---
     let lockedDates: string[] = [];
@@ -207,6 +211,7 @@ export class PlannerEngine {
       // Pass booking through so the LLM can apply flight/accommodation constraints.
       // Undefined when not provided — LLM plans full days with no constraints.
       booking: booking ?? null,
+      learnedPreferences: learnedPreferences ?? null,
     });
 
     // --- Step 5: Merge locked days (deterministic override of LLM output) ---

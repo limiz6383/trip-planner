@@ -1,10 +1,89 @@
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/db/server";
-import { getTripsForUser, getArchivedTripsForUser } from "@/lib/db/queries";
+import {
+  getTripsForUser,
+  getArchivedTripsForUser,
+  learnPreferenceProfile,
+} from "@/lib/db/queries";
+import { hasPreferenceSignal } from "@/lib/preferences";
 import { requireUser } from "@/lib/auth";
 import { Button } from "@/components/ui/Button";
 import { TripCard } from "@/components/TripCard";
-import type { Trip } from "@/lib/types";
+import type { Trip, PreferenceProfile, ActivityType } from "@/lib/types";
+
+// ---------------------------------------------------------------------------
+// "Your travel style" — learned from past trips
+// ---------------------------------------------------------------------------
+
+const TYPE_LABELS: Record<ActivityType, string> = {
+  food: "Food",
+  culture: "Culture",
+  outdoor: "Outdoor",
+  shopping: "Shopping",
+  transport: "Transport",
+  accommodation: "Stay",
+  entertainment: "Entertainment",
+  other: "Other",
+};
+
+function TravelStyleCard({ profile }: { profile: PreferenceProfile }) {
+  const paceLabel = profile.travel_pace
+    ? profile.travel_pace[0].toUpperCase() + profile.travel_pace.slice(1)
+    : null;
+  const priceLabel =
+    profile.price_sensitivity === "high"
+      ? "Budget-conscious"
+      : profile.price_sensitivity === "mid"
+      ? "Mid-range"
+      : profile.price_sensitivity === "low"
+      ? "Splurge-friendly"
+      : null;
+  const loc = profile.locality_preference;
+  const localityLabel =
+    loc <= 0.35 ? "Leans local" : loc >= 0.65 ? "Leans touristy" : "Balanced local/touristy";
+
+  return (
+    <div className="mb-6 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+      <div className="mb-2 text-sm font-semibold text-indigo-900">
+        Your travel style
+      </div>
+      <p className="mb-3 text-xs text-indigo-700">
+        Learned from your past trips — it gently shapes new itineraries.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {profile.liked_activity_types.map((t) => (
+          <span
+            key={t}
+            className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-indigo-700 ring-1 ring-indigo-200"
+          >
+            {TYPE_LABELS[t] ?? t}
+          </span>
+        ))}
+        {paceLabel && (
+          <span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 ring-1 ring-zinc-200">
+            {paceLabel} pace
+          </span>
+        )}
+        {priceLabel && (
+          <span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 ring-1 ring-zinc-200">
+            {priceLabel}
+          </span>
+        )}
+        <span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 ring-1 ring-zinc-200">
+          {localityLabel}
+        </span>
+      </div>
+      {profile.disliked_activity_types.length > 0 && (
+        <p className="mt-2 text-xs text-indigo-700/80">
+          Tends to skip:{" "}
+          {profile.disliked_activity_types
+            .map((t) => TYPE_LABELS[t] ?? t)
+            .join(", ")}
+        </p>
+      )}
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Empty state helper
@@ -66,7 +145,7 @@ export default async function DashboardPage({
 }: {
   searchParams: Promise<DashboardSearchParams>;
 }) {
-  await requireUser();
+  const user = await requireUser();
 
   // Next 16 App Router: searchParams is a Promise
   const { view } = await searchParams;
@@ -76,16 +155,21 @@ export default async function DashboardPage({
 
   let activeTrips: Trip[] = [];
   let archivedTrips: Trip[] = [];
+  let profile: PreferenceProfile | null = null;
 
   try {
     if (showArchived) {
       archivedTrips = await getArchivedTripsForUser(supabase);
     } else {
       activeTrips = await getTripsForUser(supabase);
+      // Learn (and cache) the travel-style profile from past trips.
+      profile = await learnPreferenceProfile(supabase, user.id);
     }
   } catch {
     // Supabase not configured — show empty state gracefully
   }
+
+  const showStyle = !showArchived && profile && hasPreferenceSignal(profile);
 
   return (
     <div>
@@ -96,6 +180,8 @@ export default async function DashboardPage({
           <Button size="sm">New trip</Button>
         </Link>
       </div>
+
+      {showStyle && profile && <TravelStyleCard profile={profile} />}
 
       {/* Active / Archived toggle */}
       <div className="mb-4 flex gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1 w-fit">
