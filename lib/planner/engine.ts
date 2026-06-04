@@ -327,6 +327,11 @@ export class PlannerEngine {
   async generateDestinationGuide(destination: string) {
     return this.llm.generateDestinationGuide(destination);
   }
+
+  /** One conversational turn about the itinerary (no changes applied). */
+  async discussItinerary(params: import("@/lib/llm/provider").DiscussItineraryParams) {
+    return this.llm.discussItinerary(params);
+  }
 }
 
 // ---------------------------------------------------------------------------

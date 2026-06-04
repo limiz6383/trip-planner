@@ -179,6 +179,25 @@ export interface LLMProvider {
    * spots people usually hit, must-try foods). Not trip-specific; cache it.
    */
   generateDestinationGuide(destination: string): Promise<DestinationGuide>;
+
+  /**
+   * One conversational turn about an existing itinerary. The model discusses
+   * and suggests but does NOT modify the plan — applying changes is a separate
+   * revise step. Returns the assistant's reply text.
+   */
+  discussItinerary(params: DiscussItineraryParams): Promise<string>;
+}
+
+/**
+ * Parameters for a conversational itinerary-planning turn.
+ */
+export interface DiscussItineraryParams {
+  /** Human-readable summary of the current plan (days, times, activities). */
+  itineraryText: string;
+  /** Optional destination highlights (spots/foods) for the model to reference. */
+  guideText?: string;
+  /** The conversation so far. */
+  messages: { role: "user" | "assistant"; content: string }[];
 }
 
 // ---------------------------------------------------------------------------
@@ -250,7 +269,7 @@ You will receive:
 - Community-sourced place recommendations
 
 Your job is to apply the instruction to produce a revised itinerary. Rules:
-1. Apply the instruction purposefully — change what the user asked to change.
+1. Apply the instruction purposefully — change what the user asked to change. When the instruction asks to ADD specific places, dishes, or activities, you MUST include them in the result on suitable days — even if a day is already busy (you may exceed the usual per-day count or replace a lower-priority, non-locked activity). NEVER silently omit something the user explicitly asked to add.
 2. STANDING PREFERENCES ARE STICKY. Everything in standing_preferences was explicitly requested earlier and must still hold in your result. Do NOT undo or compromise an earlier request while satisfying the new one — only drop a standing preference if the current instruction directly contradicts it. (e.g. if they earlier asked to add a specific restaurant, keep it when they later say "make it cheaper".)
 3. Keep what the user did NOT ask to change where reasonable; preserve good activities that are unaffected by the instruction.
 3. LOCKED ITEMS ARE NON-NEGOTIABLE. Any day or activity marked "locked": true in the current itinerary represents a committed plan (e.g. a booking the user cannot move). Reproduce it EXACTLY — do not change, reword, reprice, reorder, or remove it — and plan the rest of the trip around it.
@@ -348,6 +367,17 @@ Respond ONLY with valid JSON matching this exact shape:
     }
   ]
 }`;
+
+/** System prompt for conversational itinerary planning ("discuss, then apply") */
+const DISCUSS_SYSTEM_PROMPT = `You are a warm, knowledgeable travel-planning companion helping the traveller refine an EXISTING itinerary by talking it through.
+
+You can see their current plan and (often) a guide to the destination. Your job is to DISCUSS — bounce ideas, suggest specific spots/dishes/timing, flag tradeoffs ("day 2 is already pretty full — want to swap something?"), and help them decide.
+
+Rules:
+- Keep replies short and conversational — 2-5 sentences, no headings or lists unless they ask.
+- Be specific and grounded in their actual plan and the destination (name real places/dishes).
+- DO NOT rewrite the itinerary or output JSON. You are only talking.
+- When the traveller has settled on changes, tell them to hit "Apply changes" to update the plan, and briefly recap what will change.`;
 
 /** System prompt for the destination overview/guide */
 const DESTINATION_GUIDE_SYSTEM_PROMPT = `You are a seasoned local travel guide. Given a destination, produce a concise overview a traveller can use as a reference for the area's highlights.
@@ -861,6 +891,34 @@ export class AnthropicProvider implements LLMProvider {
         ? guide.must_try_foods
         : [],
     };
+  }
+
+  async discussItinerary(params: DiscussItineraryParams): Promise<string> {
+    const client = this.getClient();
+
+    const context = [
+      "--- CURRENT ITINERARY ---",
+      params.itineraryText,
+      ...(params.guideText
+        ? ["", "--- DESTINATION HIGHLIGHTS ---", params.guideText]
+        : []),
+    ].join("\n");
+
+    const response = await client.messages.create({
+      model: ITINERARY_MODEL,
+      max_tokens: 700,
+      system: `${DISCUSS_SYSTEM_PROMPT}\n\n${context}`,
+      messages: params.messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+      })),
+    });
+
+    return response.content
+      .filter((block): block is Anthropic.TextBlock => block.type === "text")
+      .map((block) => block.text)
+      .join("")
+      .trim();
   }
 }
 
