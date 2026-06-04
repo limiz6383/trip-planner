@@ -1756,6 +1756,23 @@ export function ItineraryView({
   const [chatSending, setChatSending] = useState(false);
   const [revising, setRevising] = useState(false); // Apply overlay
   const [chatError, setChatError] = useState<string | null>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Keep the transcript pinned to the latest message.
+  useEffect(() => {
+    const el = chatScrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [chatMessages, chatSending]);
+
+  // Auto-grow the composer so a multi-line message is fully visible (up to a cap).
+  useEffect(() => {
+    const el = chatInputRef.current;
+    if (el) {
+      el.style.height = "auto";
+      el.style.height = `${Math.min(el.scrollHeight, 128)}px`;
+    }
+  }, [chatInput]);
 
   async function handleSendChat() {
     const text = chatInput.trim();
@@ -2251,7 +2268,10 @@ export function ItineraryView({
                   <span className="font-medium">Apply changes</span>.
                 </p>
               ) : (
-                <div className="flex max-h-72 flex-col gap-2 overflow-y-auto rounded-lg bg-white p-2">
+                <div
+                  ref={chatScrollRef}
+                  className="flex max-h-72 flex-col gap-2 overflow-y-auto rounded-lg bg-white p-2"
+                >
                   {chatMessages.map((m, i) => (
                     <div
                       key={i}
@@ -2284,8 +2304,9 @@ export function ItineraryView({
               )}
 
               {/* Composer */}
-              <div className="flex gap-2">
-                <input
+              <div className="flex items-end gap-2">
+                <textarea
+                  ref={chatInputRef}
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   onKeyDown={(e) => {
@@ -2296,8 +2317,9 @@ export function ItineraryView({
                   }}
                   disabled={chatSending}
                   autoFocus
-                  className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:bg-zinc-50"
-                  placeholder="Ask or suggest something…"
+                  rows={1}
+                  className="min-w-0 flex-1 resize-none overflow-y-auto rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm leading-relaxed text-zinc-900 placeholder:text-zinc-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:bg-zinc-50"
+                  placeholder="Ask or suggest something…  (Enter to send, Shift+Enter for a new line)"
                 />
                 <Button
                   variant="secondary"
