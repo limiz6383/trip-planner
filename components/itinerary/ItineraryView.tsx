@@ -55,6 +55,11 @@ import type {
   ReviseItineraryErrorBody,
 } from "@/app/api/trips/[id]/itinerary/revise/route";
 import type {
+  ChatRequestBody,
+  ChatResponseBody,
+  ChatErrorBody,
+} from "@/app/api/trips/[id]/itinerary/chat/route";
+import type {
   ReviseDayRequestBody,
   ReviseDayResponseBody,
   ReviseDayErrorBody,
@@ -1742,56 +1747,82 @@ export function ItineraryView({
 
   const [changelogOpen, setChangelogOpen] = useState(false);
 
-  // Whole-itinerary AI revision
-  const [reviseOpen, setReviseOpen] = useState(false);
-  const [reviseInstruction, setReviseInstruction] = useState("");
-  const [revising, setRevising] = useState(false);
-  const [reviseError, setReviseError] = useState<string | null>(null);
+  // Conversational planner: discuss, then apply.
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<
+    { role: "user" | "assistant"; content: string }[]
+  >([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatSending, setChatSending] = useState(false);
+  const [revising, setRevising] = useState(false); // Apply overlay
+  const [chatError, setChatError] = useState<string | null>(null);
 
-  async function runWholeItineraryRevise(
-    instruction: string,
-    kind: "user" | "tidy" = "user"
-  ) {
+  async function handleSendChat() {
+    const text = chatInput.trim();
+    if (!text || chatSending) return;
+    const next = [...chatMessages, { role: "user" as const, content: text }];
+    setChatMessages(next);
+    setChatInput("");
+    setChatSending(true);
+    setChatError(null);
+    try {
+      const res = await fetch(`/api/trips/${tripId}/itinerary/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: next } satisfies ChatRequestBody),
+      });
+      if (!res.ok) {
+        const e = (await res.json()) as ChatErrorBody;
+        setChatError(e.error ?? "Chat failed.");
+        return;
+      }
+      const { reply } = (await res.json()) as ChatResponseBody;
+      setChatMessages((prev) => [...prev, { role: "assistant", content: reply }]);
+    } catch {
+      setChatError("Network error. Please try again.");
+    } finally {
+      setChatSending(false);
+    }
+  }
+
+  // Apply the conversation as a single revise (creates a new version).
+  async function handleApplyChat() {
+    const asks = chatMessages
+      .filter((m) => m.role === "user")
+      .map((m) => m.content.trim())
+      .filter(Boolean);
+    if (asks.length === 0) {
+      setChatError("Chat about what you'd like to change first.");
+      return;
+    }
+    const instruction =
+      "Apply the changes the traveller asked for in our conversation:\n" +
+      asks.map((a) => `- ${a}`).join("\n");
+
     setRevising(true);
-    setReviseError(null);
-
-    const body: ReviseItineraryRequestBody = { instruction, kind };
-
+    setChatError(null);
     try {
       const res = await fetch(`/api/trips/${tripId}/itinerary/revise`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ instruction } satisfies ReviseItineraryRequestBody),
       });
-
       if (!res.ok) {
         const errBody = (await res.json()) as ReviseItineraryErrorBody;
-        setReviseError(errBody.error ?? "Failed to revise the itinerary.");
+        setChatError(errBody.error ?? "Failed to apply changes.");
         return;
       }
-
-      // Revision creates a NEW current version. Refresh so the server component
-      // re-fetches and renders it. router.refresh() does NOT remount this
-      // client component, so `revising` must be reset explicitly (in finally) —
-      // otherwise the overlay would stay up forever.
-      setReviseInstruction("");
-      setReviseOpen(false);
+      // New version persisted — refresh so the server re-renders it. The
+      // itinerary_id change resets the day list (see the sync above).
+      setChatMessages([]);
+      setChatOpen(false);
       onItineraryUpdated?.();
       router.refresh();
     } catch {
-      setReviseError("Network error. Please try again.");
+      setChatError("Network error. Please try again.");
     } finally {
       setRevising(false);
     }
-  }
-
-  function handleReviseItinerary() {
-    const trimmed = reviseInstruction.trim();
-    if (!trimmed) {
-      setReviseError("Tell the planner what to change across the trip.");
-      return;
-    }
-    void runWholeItineraryRevise(trimmed);
   }
 
   const [exportOpen, setExportOpen] = useState(false);
@@ -2123,15 +2154,15 @@ export function ItineraryView({
                 variant="ghost"
                 size="sm"
                 onClick={() => {
-                  setReviseError(null);
-                  setReviseOpen((v) => !v);
+                  setChatError(null);
+                  setChatOpen((v) => !v);
                 }}
-                aria-expanded={reviseOpen}
-                aria-label="Revise itinerary with AI"
+                aria-expanded={chatOpen}
+                aria-label="Plan with AI"
               >
                 <span className="flex items-center gap-1.5">
                   <SparkleIcon />
-                  Revise
+                  Plan with AI
                 </span>
               </Button>
               <Button
@@ -2194,49 +2225,108 @@ export function ItineraryView({
             </div>
           </CardHeader>
 
-          {/* Whole-itinerary AI revision panel */}
-          {reviseOpen && (
+          {/* Conversational planner: discuss, then apply */}
+          {chatOpen && (
             <div className="mb-3 flex flex-col gap-2 rounded-lg border border-violet-200 bg-violet-50 p-3">
-              <label className="flex items-center gap-1.5 text-sm font-medium text-violet-800">
-                <SparkleIcon />
-                Revise the whole trip
-              </label>
-              <textarea
-                value={reviseInstruction}
-                onChange={(e) => setReviseInstruction(e.target.value)}
-                rows={2}
-                autoFocus
-                className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-violet-500"
-                placeholder="e.g. make it cheaper, more outdoorsy, less walking on day 2"
-              />
-              {reviseError && (
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-sm font-medium text-violet-800">
+                  <SparkleIcon />
+                  Plan with AI
+                </span>
+                <button
+                  onClick={() => setChatOpen(false)}
+                  className="rounded p-1 text-violet-400 hover:bg-violet-100 hover:text-violet-700"
+                  aria-label="Close planner"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Transcript */}
+              {chatMessages.length === 0 ? (
+                <p className="text-xs text-violet-700/80">
+                  Bounce ideas about your trip — e.g. &ldquo;add svíčková for a
+                  dinner&rdquo; or &ldquo;what&apos;s a good rainy-day swap for
+                  day 2?&rdquo; When you&apos;re happy, hit{" "}
+                  <span className="font-medium">Apply changes</span>.
+                </p>
+              ) : (
+                <div className="flex max-h-72 flex-col gap-2 overflow-y-auto rounded-lg bg-white p-2">
+                  {chatMessages.map((m, i) => (
+                    <div
+                      key={i}
+                      className={[
+                        "max-w-[85%] rounded-lg px-3 py-2 text-sm",
+                        m.role === "user"
+                          ? "self-end bg-violet-600 text-white"
+                          : "self-start bg-zinc-100 text-zinc-800",
+                      ].join(" ")}
+                    >
+                      {m.content}
+                    </div>
+                  ))}
+                  {chatSending && (
+                    <div className="self-start rounded-lg bg-zinc-100 px-3 py-2 text-sm text-zinc-400">
+                      <span className="inline-flex gap-1">
+                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400" />
+                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 [animation-delay:120ms]" />
+                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 [animation-delay:240ms]" />
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {chatError && (
                 <p className="text-xs text-red-600" role="alert">
-                  {reviseError}
+                  {chatError}
                 </p>
               )}
+
+              {/* Composer */}
               <div className="flex gap-2">
+                <input
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      void handleSendChat();
+                    }
+                  }}
+                  disabled={chatSending}
+                  autoFocus
+                  className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:bg-zinc-50"
+                  placeholder="Ask or suggest something…"
+                />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleSendChat}
+                  loading={chatSending}
+                  disabled={chatSending || !chatInput.trim()}
+                >
+                  Send
+                </Button>
+              </div>
+
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-violet-700/70">
+                  Chatting doesn&apos;t change your plan. Locked activities are
+                  kept; Apply creates a new version.
+                </p>
                 <Button
                   variant="primary"
                   size="sm"
-                  onClick={handleReviseItinerary}
+                  onClick={handleApplyChat}
+                  disabled={
+                    chatSending ||
+                    chatMessages.filter((m) => m.role === "user").length === 0
+                  }
                 >
-                  Revise itinerary
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setReviseOpen(false);
-                    setReviseError(null);
-                  }}
-                >
-                  Cancel
+                  Apply changes
                 </Button>
               </div>
-              <p className="text-xs text-violet-700/70">
-                Locked activities are kept as-is. Creates a new version — your
-                current plan stays in history.
-              </p>
             </div>
           )}
 
