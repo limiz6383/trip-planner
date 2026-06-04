@@ -1727,6 +1727,19 @@ export function ItineraryView({
     (ItineraryDay & { activities?: Activity[] })[]
   >(itinerary.days ?? []);
 
+  // When a revise/regenerate produces a NEW version, router.refresh() feeds a
+  // new itinerary as props WITHOUT remounting this component — so reset the
+  // day state to the new version. (Without this, only the prop-driven header
+  // updated and the day list stayed stale.) Within a version, local edits
+  // (reorder/cascade) are preserved because the itinerary_id is unchanged.
+  const [syncedItineraryId, setSyncedItineraryId] = useState(
+    itinerary.itinerary_id
+  );
+  if (itinerary.itinerary_id !== syncedItineraryId) {
+    setSyncedItineraryId(itinerary.itinerary_id);
+    setLocalDays(itinerary.days ?? []);
+  }
+
   const [changelogOpen, setChangelogOpen] = useState(false);
 
   // Whole-itinerary AI revision
