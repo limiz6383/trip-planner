@@ -125,6 +125,32 @@ export interface Booking {
   updated_at: string;
 }
 
+/** One flight in a trip's (optional, multi-city) flight list. */
+export interface TripFlight {
+  flight_id: string;
+  trip_id: string;
+  from_airport: string | null;
+  to_airport: string | null;
+  depart_date: string | null;
+  depart_time: string | null;
+  sort_order: number;
+  created_at: string;
+}
+
+/** One lodging in a trip's (optional, multi-city) accommodation list. */
+export interface TripAccommodation {
+  accommodation_id: string;
+  trip_id: string;
+  name: string | null;
+  neighborhood: string | null;
+  lat: number | null;
+  lon: number | null;
+  check_in: string | null;
+  check_out: string | null;
+  sort_order: number;
+  created_at: string;
+}
+
 // ----- Itineraries -----
 
 export type ItineraryStatus = "draft" | "proposed" | "confirmed";
