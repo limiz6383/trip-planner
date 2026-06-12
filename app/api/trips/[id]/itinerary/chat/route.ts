@@ -13,7 +13,11 @@
 import type { NextRequest } from "next/server";
 import { getUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/db/server";
-import { getTripById, getCurrentItineraryHydrated } from "@/lib/db/queries";
+import {
+  getTripById,
+  getCurrentItineraryHydrated,
+  getLegsForTrip,
+} from "@/lib/db/queries";
 import { createPlannerEngine } from "@/lib/planner/engine";
 import type { DestinationGuide } from "@/lib/types";
 
@@ -100,10 +104,13 @@ export async function POST(
   try {
     const supabase = await createSupabaseServerClient();
 
-    const [trip, itinerary] = await Promise.all([
+    const [trip, itinerary, legs] = await Promise.all([
       getTripById(supabase, tripId),
       getCurrentItineraryHydrated(supabase, tripId),
+      getLegsForTrip(supabase, tripId).catch(() => []),
     ]);
+
+    const multiCity = new Set(legs.map((l) => l.city)).size > 1;
 
     const itineraryText =
       itinerary && itinerary.days.length > 0
@@ -115,12 +122,22 @@ export async function POST(
                   return `${t ? t + " " : ""}${a.name}`;
                 })
                 .join("; ");
-              return `Day ${i + 1} (${d.date}): ${acts || "—"}`;
+              // Tag each day with its city so the assistant reasons per-city.
+              const cityTag = multiCity && d.city ? ` · ${d.city}` : "";
+              return `Day ${i + 1} (${d.date})${cityTag}: ${acts || "—"}`;
             })
             .join("\n")
         : "No itinerary generated yet.";
 
-    const guideText = guideToText(trip?.destination_guide ?? null);
+    // Guide context: per-city for multi-city trips (labeled by city), else the
+    // single trip-level guide.
+    const legGuides = legs
+      .filter((l) => l.destination_guide)
+      .map((l) => `## ${l.city}\n${guideToText(l.destination_guide)}`);
+    const guideText =
+      legGuides.length > 0
+        ? legGuides.join("\n\n")
+        : guideToText(trip?.destination_guide ?? null);
 
     const engine = createPlannerEngine(supabase);
     const reply = await engine.discussItinerary({
