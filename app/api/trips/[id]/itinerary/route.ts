@@ -20,7 +20,7 @@
 import type { NextRequest } from "next/server";
 import { getUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/db/server";
-import { getTripBrief, getBookingForTrip, createItineraryFromLLMOutput, appendChangeLogEntry, getPreferenceProfile, getLegsForTrip } from "@/lib/db/queries";
+import { getTripBrief, getBookingForTrip, createItineraryFromLLMOutput, appendChangeLogEntry, getPreferenceProfile, getLegsForTrip, getFlightsForTrip, getAccommodationsForTrip } from "@/lib/db/queries";
 import { createPlannerEngine } from "@/lib/planner/engine";
 import type { Itinerary } from "@/lib/types";
 
@@ -90,6 +90,21 @@ export async function POST(
       // Non-fatal — pre-migration / single-city falls back to brief.destination.
     }
 
+    // Optional multi-city flights + accommodations. Non-fatal: a trip with none
+    // generates exactly as before (single-booking fallback).
+    let flights = undefined;
+    try {
+      flights = await getFlightsForTrip(supabase, tripId);
+    } catch {
+      // Non-fatal — falls back to the single booking's flight bounds.
+    }
+    let accommodations = undefined;
+    try {
+      accommodations = await getAccommodationsForTrip(supabase, tripId);
+    } catch {
+      // Non-fatal — falls back to the single booking's accommodation.
+    }
+
     // --- 3. Run the planner pipeline (fetch posts → rank → generate) ---
     const engine = createPlannerEngine(supabase);
     const { itinerary: llmItinerary } = await engine.plan({
@@ -97,6 +112,8 @@ export async function POST(
       booking,
       learnedPreferences,
       legs,
+      flights,
+      accommodations,
     });
 
     // --- 4. Persist and return the hydrated itinerary ---

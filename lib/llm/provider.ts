@@ -10,7 +10,7 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import type { LLMItinerary, LLMActivity, LLMTripBrief, TripBrief, Booking, CommunityPost, Activity, DestinationGuide, PreferenceProfile } from "@/lib/types";
+import type { LLMItinerary, LLMActivity, LLMTripBrief, TripBrief, Booking, CommunityPost, Activity, DestinationGuide, PreferenceProfile, TripFlight, TripAccommodation } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -99,6 +99,21 @@ export interface GenerateItineraryParams {
    * transit on transition days. Single-city trips omit this or pass one leg.
    */
   legs?: LegContext[];
+  /**
+   * Optional multi-city flight list (ordered). When non-empty this is the REAL
+   * flight schedule and supersedes the single `booking` arrival/departure rules:
+   * the earliest flight bounds day-1's start, the last flight bounds the final
+   * day's end, and a flight dated mid-trip is an inter-city transfer the model
+   * schedules as a transport activity, splitting that day across the two cities.
+   */
+  flights?: TripFlight[];
+  /**
+   * Optional multi-city accommodation list (possibly one per city). When
+   * non-empty the model clusters each day's activities near the accommodation
+   * whose [check_in, check_out] window covers that day, accounting for
+   * check-in/out timing.
+   */
+  accommodations?: TripAccommodation[];
 }
 
 /** A city leg passed to the model for multi-city planning. */
@@ -449,6 +464,20 @@ MULTI-CITY — if a "legs" array is provided, the trip visits multiple cities in
 - Source each day's activities from the community_posts whose "destination" matches that day's city, and cluster them within that city. Never put one city's sights on another city's day.
 - Respect each leg's dates exactly; do not move a city's days outside its range.
 
+MULTI-CITY FLIGHTS — if a "flights" array is provided (each: from_airport, to_airport, depart_date, depart_time, sort_order), it is the REAL flight schedule and SUPERSEDES the single "booking" arrival/departure rules above:
+- The EARLIEST flight (by depart_date/depart_time) is the inbound flight: its arrival bounds the START of day 1. Subtract realistic transit from to_airport to the first accommodation, and schedule only activities that fit the remaining usable hours (late arrivals = arrival logistics + dinner/rest only).
+- The LAST flight is the outbound flight: the final day ends when the traveller must leave for from_airport. Allow 2-3 hours before depart_time for transit + check-in; early departures leave the last day with zero or one quick activity.
+- A flight whose depart_date falls MID-TRIP is an INTER-CITY TRANSFER. Schedule it as a transport activity (activity_type "transport") on that day at its depart_time, and SPLIT that day's activities around it: activities in the DEPARTING city (near from_airport) before the flight, activities in the ARRIVING city (near to_airport) after arrival + transit. Subtract the flight + transfer time from that day's usable hours.
+- Use depart_time when present; if a flight has no time, assume typical 1-2 hour transit and reasonable hours.
+- When "flights" is provided, IGNORE the single booking's flight_arrival_*/flight_departure_* fields — the flight list is authoritative.
+
+MULTI-CITY ACCOMMODATIONS — if an "accommodations" array is provided (each: name, neighborhood, lat, lon, check_in, check_out, sort_order), there may be one per city:
+- For each day, find the accommodation whose [check_in, check_out] window covers that day and cluster that day's activities geographically near it (use neighborhood/lat/lon); note proximity in descriptions when known.
+- Account for check-in timing on the day a stay's window begins (don't schedule a stay-dependent activity before check-in) and check-out timing on the day it ends.
+- When "accommodations" is provided, use it instead of the single booking's accommodation_* fields.
+
+If BOTH "flights" and "accommodations" are empty or absent, fall back to the single "booking" behavior described above, unchanged.
+
 LEARNED PREFERENCES — if a "learned_preferences" object is provided (inferred from the traveller's PAST trips), use it as a GENTLE bias, never an override:
 - Favor their liked_activity_types and lean away from disliked_activity_types when choosing between otherwise-comparable options.
 - Nudge toward their travel_pace, price_sensitivity, and locality_preference (0 local … 1 touristy) where the brief for THIS trip doesn't already specify otherwise.
@@ -635,6 +664,16 @@ export class AnthropicProvider implements LLMProvider {
         : {}),
       // Multi-city legs (cities + date ranges).
       ...(params.legs && params.legs.length > 1 ? { legs: params.legs } : {}),
+      // Multi-city flight list — the real schedule; supersedes single-booking
+      // arrival/departure bounds when present. Omitted when empty.
+      ...(params.flights && params.flights.length > 0
+        ? { flights: params.flights }
+        : {}),
+      // Multi-city accommodation list — clusters each day near the stay whose
+      // window covers it. Omitted when empty.
+      ...(params.accommodations && params.accommodations.length > 0
+        ? { accommodations: params.accommodations }
+        : {}),
     });
 
     const response = await client.messages.create({

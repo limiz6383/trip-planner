@@ -33,6 +33,8 @@ import type {
   LLMActivity,
   PreferenceProfile,
   TripLeg,
+  TripFlight,
+  TripAccommodation,
 } from "@/lib/types";
 import type { ContentSource } from "@/lib/retrieval/source";
 import type { LLMProvider } from "@/lib/llm/provider";
@@ -77,6 +79,17 @@ export interface PlannerInput {
   learnedPreferences?: PreferenceProfile | null;
   /** Multi-city legs (ordered). When >1, generation plans per-city. */
   legs?: TripLeg[];
+  /**
+   * Optional multi-city flight list. When non-empty it is the real schedule and
+   * supersedes the single booking's arrival/departure bounds. Passed through to
+   * the LLM unchanged.
+   */
+  flights?: TripFlight[];
+  /**
+   * Optional multi-city accommodation list (possibly one per city). Passed
+   * through to the LLM to cluster each day near the covering stay.
+   */
+  accommodations?: TripAccommodation[];
 }
 
 export interface PlannerResult {
@@ -196,6 +209,8 @@ export class PlannerEngine {
       booking,
       learnedPreferences,
       legs,
+      flights,
+      accommodations,
     } = input;
 
     // --- Step 1: Derive locked constraints (mid-trip re-planning only) ---
@@ -240,6 +255,10 @@ export class PlannerEngine {
         arrival_date: l.arrival_date,
         departure_date: l.departure_date,
       })),
+      // Multi-city flights + accommodations (optional). Pass through unchanged;
+      // when empty the LLM falls back to the single-booking path.
+      flights,
+      accommodations,
     });
 
     // --- Step 5: Merge locked days (deterministic override of LLM output) ---

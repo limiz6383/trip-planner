@@ -3,18 +3,22 @@
 /**
  * BookingForm
  *
- * Mobile-first form to capture flight and accommodation details before itinerary
- * generation. All fields are optional — the user may not have everything booked.
+ * Mobile-first form to capture flight and accommodation logistics before
+ * itinerary generation. Supports OPTIONAL, MULTIPLE flights and accommodations
+ * (multi-city). The user may add zero, one, or many of each.
  *
- * On submit it POSTs to /api/trips/[id]/booking, then:
- *   - "Save & generate itinerary" calls onSaveAndGenerate after a successful save
- *   - "Skip — generate without bookings" calls onSkip directly (no save)
+ * On mount it loads existing logistics via GET /api/trips/[id]/logistics and
+ * prefills both lists. On save it POSTs the full lists to
+ * POST /api/trips/[id]/logistics (which replaces both), then invokes the
+ * relevant action callback depending on the mode the wrappers select:
+ *   - "preplan"  → onContinueToConsult after save (onSkipToConsult skips, no save)
+ *   - "generate" → onSaveAndGenerate after save (onSkip skips, no save)
+ *   - "save"     → onSaveOnly after save
  *
- * Prefills from an existing Booking when one is passed in.
- *
- * Accommodation location reuses the geocode autocomplete pattern so
- * accommodation_lat/lon are captured when a suggestion is picked.
- * Free-typed neighborhood text is also accepted, with null lat/lon.
+ * Airport fields reuse PlaceAutocomplete with endpoint="/api/airports".
+ * Accommodation location reuses PlaceAutocomplete with the default /api/geocode
+ * endpoint so neighborhood + lat/lon are captured when a suggestion is picked.
+ * Free-typed text is also accepted, with null lat/lon.
  */
 
 import {
@@ -30,15 +34,60 @@ import { Button } from "@/components/ui/Button";
 import type { Booking } from "@/lib/types";
 import type { GeocodeResult } from "@/app/api/geocode/route";
 import type {
-  BookingResponseBody,
-  BookingErrorBody,
-} from "@/app/api/trips/[id]/booking/route";
+  LogisticsResponseBody,
+  LogisticsErrorBody,
+} from "@/app/api/trips/[id]/logistics/route";
+import type { FlightInput, AccommodationInput } from "@/lib/db/queries";
 
 // ---------------------------------------------------------------------------
-// Sub-types
+// Row types (client-side editable rows, each with a stable local key)
 // ---------------------------------------------------------------------------
 
-type BookingFields = Omit<Booking, "booking_id" | "trip_id" | "created_at" | "updated_at">;
+interface FlightRow {
+  key: string;
+  from_airport: string;
+  to_airport: string;
+  depart_date: string;
+  depart_time: string;
+}
+
+interface AccommodationRow {
+  key: string;
+  name: string;
+  neighborhood: string;
+  lat: number | null;
+  lon: number | null;
+  check_in: string;
+  check_out: string;
+}
+
+let rowKeyCounter = 0;
+function nextKey(prefix: string): string {
+  rowKeyCounter += 1;
+  return `${prefix}-${rowKeyCounter}`;
+}
+
+function emptyFlightRow(): FlightRow {
+  return {
+    key: nextKey("flight"),
+    from_airport: "",
+    to_airport: "",
+    depart_date: "",
+    depart_time: "",
+  };
+}
+
+function emptyAccommodationRow(): AccommodationRow {
+  return {
+    key: nextKey("stay"),
+    name: "",
+    neighborhood: "",
+    lat: null,
+    lon: null,
+    check_in: "",
+    check_out: "",
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Place autocomplete (shared by accommodation location + airports)
@@ -276,35 +325,38 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 
 export interface BookingFormProps {
   tripId: string;
-  /** Pre-fill from an existing booking record, if one exists. */
+  /**
+   * Legacy prop kept for wrapper compatibility. The form now self-loads its
+   * lists from GET /api/trips/[id]/logistics, so this value is ignored.
+   */
   initialBooking?: Booking | null;
   /**
-   * Called after booking is saved AND itinerary generation should proceed.
+   * Called after logistics are saved AND itinerary generation should proceed.
    * Required when used in State 2 (pre-itinerary).
    * Omit when used in State 3 (post-itinerary) — use onSaveOnly instead.
    */
   onSaveAndGenerate?: () => void;
   /**
-   * Called when the user wants to skip booking entry and generate directly.
+   * Called when the user wants to skip logistics entry and generate directly.
    * Required when used in State 2 (pre-itinerary).
    */
   onSkip?: () => void;
   /**
-   * Called after booking is saved without triggering generation.
+   * Called after logistics are saved without triggering generation.
    * Used in State 3 (post-itinerary) where the user may save without
    * regenerating. When provided, renders a "Save bookings" primary action
    * instead of "Save & generate itinerary".
    */
   onSaveOnly?: () => void;
   /**
-   * Called after booking is saved (or skipped) in the pre-brief logistics step.
+   * Called after logistics are saved (or skipped) in the pre-brief step.
    * When provided, the primary action reads "Continue to consultation" and the
    * secondary action reads "Skip for now". Distinct from onSaveAndGenerate so
    * existing State 2 usages are not affected.
    */
   onContinueToConsult?: () => void;
   /**
-   * Called when the user wants to skip booking entry in the pre-brief step.
+   * Called when the user wants to skip logistics entry in the pre-brief step.
    * Companion to onContinueToConsult. Used only when mode === "preplan".
    */
   onSkipToConsult?: () => void;
@@ -312,6 +364,7 @@ export interface BookingFormProps {
 
 export function BookingForm({
   tripId,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   initialBooking,
   onSaveAndGenerate,
   onSkip,
@@ -319,93 +372,146 @@ export function BookingForm({
   onContinueToConsult,
   onSkipToConsult,
 }: BookingFormProps) {
-  // Flight fields
-  const [flightArrivalDate, setFlightArrivalDate] = useState(
-    initialBooking?.flight_arrival_date ?? ""
-  );
-  const [flightArrivalTime, setFlightArrivalTime] = useState(
-    initialBooking?.flight_arrival_time ?? ""
-  );
-  const [flightArrivalAirport, setFlightArrivalAirport] = useState(
-    initialBooking?.flight_arrival_airport ?? ""
-  );
-  const [flightDepartureDate, setFlightDepartureDate] = useState(
-    initialBooking?.flight_departure_date ?? ""
-  );
-  const [flightDepartureTime, setFlightDepartureTime] = useState(
-    initialBooking?.flight_departure_time ?? ""
-  );
-  const [flightDepartureAirport, setFlightDepartureAirport] = useState(
-    initialBooking?.flight_departure_airport ?? ""
-  );
+  const [flights, setFlights] = useState<FlightRow[]>([]);
+  const [stays, setStays] = useState<AccommodationRow[]>([]);
 
-  // Accommodation fields
-  const [accommodationName, setAccommodationName] = useState(
-    initialBooking?.accommodation_name ?? ""
-  );
-  const [accommodationNeighborhood, setAccommodationNeighborhood] = useState(
-    initialBooking?.accommodation_neighborhood ?? ""
-  );
-  const [accommodationLat, setAccommodationLat] = useState<number | null>(
-    initialBooking?.accommodation_lat ?? null
-  );
-  const [accommodationLon, setAccommodationLon] = useState<number | null>(
-    initialBooking?.accommodation_lon ?? null
-  );
-  const [accommodationCheckIn, setAccommodationCheckIn] = useState(
-    initialBooking?.accommodation_check_in ?? ""
-  );
-  const [accommodationCheckOut, setAccommodationCheckOut] = useState(
-    initialBooking?.accommodation_check_out ?? ""
-  );
-
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function handleLocationSelect(
-    label: string,
-    lat: number | null,
-    lon: number | null
-  ) {
-    setAccommodationNeighborhood(label);
-    setAccommodationLat(lat);
-    setAccommodationLon(lon);
+  // ---- Load existing logistics on mount ----
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/trips/${tripId}/logistics`, {
+          cache: "no-store",
+        });
+        if (!res.ok) {
+          // Non-fatal: start with empty lists.
+          if (!cancelled) setLoading(false);
+          return;
+        }
+        const data = (await res.json()) as LogisticsResponseBody;
+        if (cancelled) return;
+        setFlights(
+          data.flights.map((f) => ({
+            key: nextKey("flight"),
+            from_airport: f.from_airport ?? "",
+            to_airport: f.to_airport ?? "",
+            depart_date: f.depart_date ?? "",
+            depart_time: f.depart_time ?? "",
+          }))
+        );
+        setStays(
+          data.accommodations.map((a) => ({
+            key: nextKey("stay"),
+            name: a.name ?? "",
+            neighborhood: a.neighborhood ?? "",
+            lat: a.lat,
+            lon: a.lon,
+            check_in: a.check_in ?? "",
+            check_out: a.check_out ?? "",
+          }))
+        );
+      } catch {
+        // Non-fatal: start with empty lists.
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [tripId]);
+
+  // ---- Flight row mutators ----
+  function updateFlight(key: string, patch: Partial<FlightRow>) {
+    setFlights((rows) =>
+      rows.map((r) => (r.key === key ? { ...r, ...patch } : r))
+    );
+  }
+  function addFlight() {
+    setFlights((rows) => [...rows, emptyFlightRow()]);
+  }
+  function removeFlight(key: string) {
+    setFlights((rows) => rows.filter((r) => r.key !== key));
   }
 
-  async function saveBooking(): Promise<boolean> {
+  // ---- Accommodation row mutators ----
+  function updateStay(key: string, patch: Partial<AccommodationRow>) {
+    setStays((rows) =>
+      rows.map((r) => (r.key === key ? { ...r, ...patch } : r))
+    );
+  }
+  function addStay() {
+    setStays((rows) => [...rows, emptyAccommodationRow()]);
+  }
+  function removeStay(key: string) {
+    setStays((rows) => rows.filter((r) => r.key !== key));
+  }
+
+  // ---- Save ----
+  async function saveLogistics(): Promise<boolean> {
     setSaving(true);
     setError(null);
 
-    const body: BookingFields = {
-      flight_arrival_date: flightArrivalDate || null,
-      flight_arrival_time: flightArrivalTime || null,
-      flight_arrival_airport: flightArrivalAirport || null,
-      flight_departure_date: flightDepartureDate || null,
-      flight_departure_time: flightDepartureTime || null,
-      flight_departure_airport: flightDepartureAirport || null,
-      accommodation_name: accommodationName || null,
-      accommodation_neighborhood: accommodationNeighborhood || null,
-      accommodation_lat: accommodationLat,
-      accommodation_lon: accommodationLon,
-      accommodation_check_in: accommodationCheckIn || null,
-      accommodation_check_out: accommodationCheckOut || null,
-    };
+    const flightPayload: FlightInput[] = flights.map((f) => ({
+      from_airport: f.from_airport || null,
+      to_airport: f.to_airport || null,
+      depart_date: f.depart_date || null,
+      depart_time: f.depart_time || null,
+    }));
+    const stayPayload: AccommodationInput[] = stays.map((a) => ({
+      name: a.name || null,
+      neighborhood: a.neighborhood || null,
+      lat: a.lat,
+      lon: a.lon,
+      check_in: a.check_in || null,
+      check_out: a.check_out || null,
+    }));
 
     try {
-      const res = await fetch(`/api/trips/${tripId}/booking`, {
+      const res = await fetch(`/api/trips/${tripId}/logistics`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          flights: flightPayload,
+          accommodations: stayPayload,
+        }),
       });
 
       if (!res.ok) {
-        const err = (await res.json()) as BookingErrorBody;
-        setError(err.error ?? "Failed to save booking. Please try again.");
+        const err = (await res.json()) as LogisticsErrorBody;
+        setError(err.error ?? "Failed to save. Please try again.");
         return false;
       }
 
-      // Verify shape; discard result — we just need confirmation it saved.
-      const _data = (await res.json()) as BookingResponseBody;
+      // Re-sync local rows with the server's canonical response so subsequent
+      // saves replace cleanly.
+      const data = (await res.json()) as LogisticsResponseBody;
+      setFlights(
+        data.flights.map((f) => ({
+          key: nextKey("flight"),
+          from_airport: f.from_airport ?? "",
+          to_airport: f.to_airport ?? "",
+          depart_date: f.depart_date ?? "",
+          depart_time: f.depart_time ?? "",
+        }))
+      );
+      setStays(
+        data.accommodations.map((a) => ({
+          key: nextKey("stay"),
+          name: a.name ?? "",
+          neighborhood: a.neighborhood ?? "",
+          lat: a.lat,
+          lon: a.lon,
+          check_in: a.check_in ?? "",
+          check_out: a.check_out ?? "",
+        }))
+      );
       return true;
     } catch {
       setError("Network error. Please check your connection and try again.");
@@ -416,31 +522,24 @@ export function BookingForm({
   }
 
   async function handleSaveAndGenerate() {
-    const ok = await saveBooking();
+    const ok = await saveLogistics();
     if (ok) onSaveAndGenerate?.();
   }
 
   async function handleSaveOnly() {
-    const ok = await saveBooking();
+    const ok = await saveLogistics();
     if (ok) onSaveOnly?.();
   }
 
-  /**
-   * Pre-brief logistics step: save any filled fields then advance to the
-   * consultation stage. If all fields are empty the save is a no-op (POST
-   * would still create an empty booking row, which is fine — the route
-   * handles upsert idempotently). We still call through so the consultant
-   * always has an up-to-date booking record.
-   */
   async function handleSaveAndContinueToConsult() {
-    const ok = await saveBooking();
+    const ok = await saveLogistics();
     if (ok) onContinueToConsult?.();
   }
 
   // Determine which action mode is active:
-  //   "preplan"  — Pre-brief logistics step: show "Continue to consultation" + "Skip for now"
-  //   "generate" — State 2 (pre-itinerary): show "Save & generate" + "Skip"
-  //   "save"     — State 3 (post-itinerary): show "Save bookings" only
+  //   "preplan"  — Pre-brief logistics step: "Continue to consultation" + "Skip for now"
+  //   "generate" — State 2 (pre-itinerary): "Save & generate" + "Skip"
+  //   "save"     — State 3 (post-itinerary): "Save bookings" only
   const mode: "preplan" | "generate" | "save" = onContinueToConsult
     ? "preplan"
     : onSaveOnly
@@ -449,99 +548,178 @@ export function BookingForm({
 
   return (
     <div className="flex flex-col gap-6">
-      {/* ---- Flight section ---- */}
+      {/* ---- Flights section ---- */}
       <div className="flex flex-col gap-4">
-        <SectionHeading>Flight details</SectionHeading>
+        <SectionHeading>Flights</SectionHeading>
         <p className="text-xs text-zinc-500 -mt-2">
-          Your arrival and departure times let us plan around your actual travel hours.
+          Add each flight in your trip. Your travel times let us plan around
+          your actual schedule. All optional.
         </p>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Input
-            label="Arrival date"
-            type="date"
-            value={flightArrivalDate}
-            onChange={(e) => setFlightArrivalDate(e.target.value)}
-            placeholder="YYYY-MM-DD"
-          />
-          <Input
-            label="Arrival time"
-            type="time"
-            value={flightArrivalTime}
-            onChange={(e) => setFlightArrivalTime(e.target.value)}
-          />
+        {flights.length === 0 && (
+          <p className="text-sm text-zinc-400">No flights added yet.</p>
+        )}
+
+        {flights.map((flight, index) => (
+          <div
+            key={flight.key}
+            className="flex flex-col gap-4 rounded-lg border border-zinc-200 bg-zinc-50/50 p-4"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                Flight {index + 1}
+              </span>
+              <button
+                type="button"
+                onClick={() => removeFlight(flight.key)}
+                disabled={saving}
+                className="text-sm font-medium text-red-600 hover:text-red-700 disabled:opacity-50"
+              >
+                Remove
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <PlaceAutocomplete
+                label="From airport"
+                placeholder="Airport code or name, e.g. JFK, Santa Fe"
+                endpoint="/api/airports"
+                defaultValue={flight.from_airport}
+                onSelect={(labelText) =>
+                  updateFlight(flight.key, { from_airport: labelText })
+                }
+              />
+              <PlaceAutocomplete
+                label="To airport"
+                placeholder="Airport code or name, e.g. SAF, ABQ"
+                endpoint="/api/airports"
+                defaultValue={flight.to_airport}
+                onSelect={(labelText) =>
+                  updateFlight(flight.key, { to_airport: labelText })
+                }
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Input
+                label="Departure date"
+                type="date"
+                value={flight.depart_date}
+                onChange={(e) =>
+                  updateFlight(flight.key, { depart_date: e.target.value })
+                }
+                placeholder="YYYY-MM-DD"
+              />
+              <Input
+                label="Departure time"
+                type="time"
+                value={flight.depart_time}
+                onChange={(e) =>
+                  updateFlight(flight.key, { depart_time: e.target.value })
+                }
+              />
+            </div>
+          </div>
+        ))}
+
+        <div>
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={addFlight}
+            disabled={saving}
+            className="w-full sm:w-auto"
+          >
+            + Add flight
+          </Button>
         </div>
-
-        <PlaceAutocomplete
-          label="Arrival airport"
-          placeholder="Airport code or name, e.g. SAF, ABQ, Albuquerque"
-          endpoint="/api/airports"
-          defaultValue={flightArrivalAirport}
-          onSelect={(labelText) => setFlightArrivalAirport(labelText)}
-        />
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Input
-            label="Departure date"
-            type="date"
-            value={flightDepartureDate}
-            onChange={(e) => setFlightDepartureDate(e.target.value)}
-            placeholder="YYYY-MM-DD"
-          />
-          <Input
-            label="Departure time"
-            type="time"
-            value={flightDepartureTime}
-            onChange={(e) => setFlightDepartureTime(e.target.value)}
-          />
-        </div>
-
-        <PlaceAutocomplete
-          label="Departure airport"
-          placeholder="Airport code or name, e.g. JFK, Santa Fe"
-          endpoint="/api/airports"
-          defaultValue={flightDepartureAirport}
-          onSelect={(labelText) => setFlightDepartureAirport(labelText)}
-        />
       </div>
 
-      {/* ---- Accommodation section ---- */}
+      {/* ---- Accommodations section ---- */}
       <div className="flex flex-col gap-4">
-        <SectionHeading>Accommodation</SectionHeading>
+        <SectionHeading>Accommodations</SectionHeading>
         <p className="text-xs text-zinc-500 -mt-2">
-          Your lodging location helps us cluster activities nearby and factor in transit.
+          Add each place you&apos;re staying. Lodging locations help us cluster
+          activities nearby and factor in transit. All optional.
         </p>
 
-        <Input
-          label="Property name"
-          type="text"
-          value={accommodationName}
-          onChange={(e) => setAccommodationName(e.target.value)}
-          placeholder="Hotel, Airbnb, hostel name…"
-        />
+        {stays.length === 0 && (
+          <p className="text-sm text-zinc-400">No accommodations added yet.</p>
+        )}
 
-        <PlaceAutocomplete
-          label="Accommodation location"
-          placeholder="Neighborhood, district, or address"
-          defaultValue={accommodationNeighborhood}
-          defaultLat={accommodationLat}
-          defaultLon={accommodationLon}
-          onSelect={handleLocationSelect}
-        />
+        {stays.map((stay, index) => (
+          <div
+            key={stay.key}
+            className="flex flex-col gap-4 rounded-lg border border-zinc-200 bg-zinc-50/50 p-4"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                Stay {index + 1}
+              </span>
+              <button
+                type="button"
+                onClick={() => removeStay(stay.key)}
+                disabled={saving}
+                className="text-sm font-medium text-red-600 hover:text-red-700 disabled:opacity-50"
+              >
+                Remove
+              </button>
+            </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Input
-            label="Check-in date"
-            type="date"
-            value={accommodationCheckIn}
-            onChange={(e) => setAccommodationCheckIn(e.target.value)}
-          />
-          <Input
-            label="Check-out date"
-            type="date"
-            value={accommodationCheckOut}
-            onChange={(e) => setAccommodationCheckOut(e.target.value)}
-          />
+            <Input
+              label="Property name"
+              type="text"
+              value={stay.name}
+              onChange={(e) => updateStay(stay.key, { name: e.target.value })}
+              placeholder="Hotel, Airbnb, hostel name…"
+            />
+
+            <PlaceAutocomplete
+              label="Location"
+              placeholder="Neighborhood, district, or address"
+              defaultValue={stay.neighborhood}
+              defaultLat={stay.lat}
+              defaultLon={stay.lon}
+              onSelect={(labelText, lat, lon) =>
+                updateStay(stay.key, {
+                  neighborhood: labelText,
+                  lat,
+                  lon,
+                })
+              }
+            />
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Input
+                label="Check-in date"
+                type="date"
+                value={stay.check_in}
+                onChange={(e) =>
+                  updateStay(stay.key, { check_in: e.target.value })
+                }
+              />
+              <Input
+                label="Check-out date"
+                type="date"
+                value={stay.check_out}
+                onChange={(e) =>
+                  updateStay(stay.key, { check_out: e.target.value })
+                }
+              />
+            </div>
+          </div>
+        ))}
+
+        <div>
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={addStay}
+            disabled={saving}
+            className="w-full sm:w-auto"
+          >
+            + Add stay
+          </Button>
         </div>
       </div>
 
@@ -560,6 +738,7 @@ export function BookingForm({
               variant="primary"
               size="lg"
               loading={saving}
+              disabled={loading}
               onClick={handleSaveAndContinueToConsult}
               className="w-full sm:w-auto"
             >
@@ -582,6 +761,7 @@ export function BookingForm({
               variant="primary"
               size="lg"
               loading={saving}
+              disabled={loading}
               onClick={handleSaveAndGenerate}
               className="w-full sm:w-auto"
             >
@@ -603,6 +783,7 @@ export function BookingForm({
             variant="primary"
             size="lg"
             loading={saving}
+            disabled={loading}
             onClick={handleSaveOnly}
             className="w-full sm:w-auto"
           >
