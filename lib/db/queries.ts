@@ -32,6 +32,8 @@ import type {
   ActivityType,
   TripPace,
   TripLeg,
+  TripFlight,
+  TripAccommodation,
 } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -826,6 +828,112 @@ export async function setLegDestinationGuide(
     .update({ destination_guide: guide })
     .eq("leg_id", legId);
   if (error) throw error;
+}
+
+// ---------------------------------------------------------------------------
+// Trip flights + accommodations (optional, multi-city)
+// ---------------------------------------------------------------------------
+
+export interface FlightInput {
+  from_airport: string | null;
+  to_airport: string | null;
+  depart_date: string | null;
+  depart_time: string | null;
+}
+
+export interface AccommodationInput {
+  name: string | null;
+  neighborhood: string | null;
+  lat: number | null;
+  lon: number | null;
+  check_in: string | null;
+  check_out: string | null;
+}
+
+export async function getFlightsForTrip(
+  client: SupabaseClient,
+  tripId: string
+): Promise<TripFlight[]> {
+  const { data, error } = await client
+    .from("trip_flights")
+    .select("*")
+    .eq("trip_id", tripId)
+    .order("sort_order");
+  if (error) throw error;
+  return (data as TripFlight[]) ?? [];
+}
+
+/** Replaces a trip's whole flight list (delete-all then insert in order). */
+export async function replaceFlightsForTrip(
+  client: SupabaseClient,
+  tripId: string,
+  flights: FlightInput[]
+): Promise<TripFlight[]> {
+  const { error: delError } = await client
+    .from("trip_flights")
+    .delete()
+    .eq("trip_id", tripId);
+  if (delError) throw delError;
+  if (flights.length === 0) return [];
+  const rows = flights.map((f, i) => ({
+    trip_id: tripId,
+    from_airport: f.from_airport || null,
+    to_airport: f.to_airport || null,
+    depart_date: f.depart_date || null,
+    depart_time: f.depart_time || null,
+    sort_order: i,
+  }));
+  const { data, error } = await client
+    .from("trip_flights")
+    .insert(rows)
+    .select()
+    .order("sort_order");
+  if (error) throw error;
+  return (data as TripFlight[]) ?? [];
+}
+
+export async function getAccommodationsForTrip(
+  client: SupabaseClient,
+  tripId: string
+): Promise<TripAccommodation[]> {
+  const { data, error } = await client
+    .from("trip_accommodations")
+    .select("*")
+    .eq("trip_id", tripId)
+    .order("sort_order");
+  if (error) throw error;
+  return (data as TripAccommodation[]) ?? [];
+}
+
+/** Replaces a trip's whole accommodation list (delete-all then insert in order). */
+export async function replaceAccommodationsForTrip(
+  client: SupabaseClient,
+  tripId: string,
+  stays: AccommodationInput[]
+): Promise<TripAccommodation[]> {
+  const { error: delError } = await client
+    .from("trip_accommodations")
+    .delete()
+    .eq("trip_id", tripId);
+  if (delError) throw delError;
+  if (stays.length === 0) return [];
+  const rows = stays.map((s, i) => ({
+    trip_id: tripId,
+    name: s.name || null,
+    neighborhood: s.neighborhood || null,
+    lat: s.lat,
+    lon: s.lon,
+    check_in: s.check_in || null,
+    check_out: s.check_out || null,
+    sort_order: i,
+  }));
+  const { data, error } = await client
+    .from("trip_accommodations")
+    .insert(rows)
+    .select()
+    .order("sort_order");
+  if (error) throw error;
+  return (data as TripAccommodation[]) ?? [];
 }
 
 /**
