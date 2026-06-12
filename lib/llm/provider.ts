@@ -93,6 +93,19 @@ export interface GenerateItineraryParams {
    * bias the plan; never overrides the explicit brief for THIS trip.
    */
   learnedPreferences?: PreferenceProfile | null;
+  /**
+   * Multi-city legs (ordered). When present (>1), the model assigns each day to
+   * a city by its date range, emits `city` per day, and plans inter-city
+   * transit on transition days. Single-city trips omit this or pass one leg.
+   */
+  legs?: LegContext[];
+}
+
+/** A city leg passed to the model for multi-city planning. */
+export interface LegContext {
+  city: string;
+  arrival_date: string;
+  departure_date: string;
 }
 
 /**
@@ -430,6 +443,12 @@ Accommodation location (accommodation_neighborhood, accommodation_lat, accommoda
 
 If no booking is provided, or booking fields are null, plan full days from morning to evening as normal — do not invent flight or accommodation constraints.
 
+MULTI-CITY — if a "legs" array is provided, the trip visits multiple cities in order, each with its own date range:
+- Assign EVERY day to exactly one city and emit it as "city" on the day object. A day's city is the leg whose [arrival_date, departure_date] contains that day's date.
+- On a day where the traveller moves between cities (one leg's departure_date = the next leg's arrival_date), schedule the inter-city transfer (flight/ferry/train as appropriate for the route, e.g. an Athens→Santorini ferry) as the day's first activity (activity_type "transport"), subtract its duration + transfer time from that day's usable hours, and place that day's remaining activities in the ARRIVING city.
+- Source each day's activities from the community_posts whose "destination" matches that day's city, and cluster them within that city. Never put one city's sights on another city's day.
+- Respect each leg's dates exactly; do not move a city's days outside its range.
+
 LEARNED PREFERENCES — if a "learned_preferences" object is provided (inferred from the traveller's PAST trips), use it as a GENTLE bias, never an override:
 - Favor their liked_activity_types and lean away from disliked_activity_types when choosing between otherwise-comparable options.
 - Nudge toward their travel_pace, price_sensitivity, and locality_preference (0 local … 1 touristy) where the brief for THIS trip doesn't already specify otherwise.
@@ -614,6 +633,8 @@ export class AnthropicProvider implements LLMProvider {
       ...(params.learnedPreferences
         ? { learned_preferences: params.learnedPreferences }
         : {}),
+      // Multi-city legs (cities + date ranges).
+      ...(params.legs && params.legs.length > 1 ? { legs: params.legs } : {}),
     });
 
     const response = await client.messages.create({

@@ -564,6 +564,31 @@ export async function createItineraryFromLLMOutput(
   if (itineraryError) throw itineraryError;
   const itinerary = itineraryRow as Itinerary;
 
+  // Resolve each day to its leg (city). Map by date range first (a day falls in
+  // the leg whose [arrival, departure] contains it), then by the day's `city`.
+  // Non-fatal if legs aren't available (pre-migration / single-city).
+  let legs: TripLeg[] = [];
+  try {
+    legs = await getLegsForTrip(client, tripId);
+  } catch {
+    /* trip_legs unavailable — days get no leg_id */
+  }
+  const legForDay = (llmDay: import("@/lib/types").LLMItineraryDay): string | null => {
+    if (legs.length === 0) return null;
+    const byDate = legs.find(
+      (l) => llmDay.date >= l.arrival_date && llmDay.date <= l.departure_date
+    );
+    if (byDate) return byDate.leg_id;
+    if (llmDay.city) {
+      const c = llmDay.city.trim().toLowerCase();
+      const byCity = legs.find(
+        (l) => l.city.trim().toLowerCase() === c || c.includes(l.city.split(",")[0].trim().toLowerCase())
+      );
+      if (byCity) return byCity.leg_id;
+    }
+    return legs.length === 1 ? legs[0].leg_id : null;
+  };
+
   // --- 4. Insert days and activities, collecting hydrated results ---
   const hydratedDays: (ItineraryDay & { activities: Activity[] })[] = [];
 
@@ -577,6 +602,7 @@ export async function createItineraryFromLLMOutput(
         // Lock state is carried forward by the revision pipeline; defaults to
         // false for fresh generation (where llmDay.locked is undefined).
         locked: llmDay.locked ?? false,
+        leg_id: legForDay(llmDay),
       })
       .select()
       .single();

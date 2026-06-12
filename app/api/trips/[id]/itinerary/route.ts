@@ -20,7 +20,7 @@
 import type { NextRequest } from "next/server";
 import { getUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/db/server";
-import { getTripBrief, getBookingForTrip, createItineraryFromLLMOutput, appendChangeLogEntry, getPreferenceProfile } from "@/lib/db/queries";
+import { getTripBrief, getBookingForTrip, createItineraryFromLLMOutput, appendChangeLogEntry, getPreferenceProfile, getLegsForTrip } from "@/lib/db/queries";
 import { createPlannerEngine } from "@/lib/planner/engine";
 import type { Itinerary } from "@/lib/types";
 
@@ -75,13 +75,19 @@ export async function POST(
       );
     }
 
-    // --- 2. Load the booking (optional) + learned preferences from past trips ---
+    // --- 2. Load booking + learned preferences + city legs ---
     const booking = await getBookingForTrip(supabase, tripId);
     let learnedPreferences = null;
     try {
       learnedPreferences = await getPreferenceProfile(supabase);
     } catch {
       // Non-fatal — generation proceeds without the bias.
+    }
+    let legs = undefined;
+    try {
+      legs = await getLegsForTrip(supabase, tripId);
+    } catch {
+      // Non-fatal — pre-migration / single-city falls back to brief.destination.
     }
 
     // --- 3. Run the planner pipeline (fetch posts → rank → generate) ---
@@ -90,6 +96,7 @@ export async function POST(
       brief,
       booking,
       learnedPreferences,
+      legs,
     });
 
     // --- 4. Persist and return the hydrated itinerary ---
