@@ -32,6 +32,7 @@ import type {
   LLMItineraryDay,
   LLMActivity,
   PreferenceProfile,
+  TripLeg,
 } from "@/lib/types";
 import type { ContentSource } from "@/lib/retrieval/source";
 import type { LLMProvider } from "@/lib/llm/provider";
@@ -74,6 +75,8 @@ export interface PlannerInput {
   booking?: Booking | null;
   /** Learned preferences from past trips — gently biases generation. */
   learnedPreferences?: PreferenceProfile | null;
+  /** Multi-city legs (ordered). When >1, generation plans per-city. */
+  legs?: TripLeg[];
 }
 
 export interface PlannerResult {
@@ -147,6 +150,7 @@ export function hydratedItineraryToLLM(
     date: day.date,
     daily_cost: day.daily_cost ?? 0,
     locked: day.locked,
+    ...(day.city ? { city: day.city } : {}),
     activities: (day.activities ?? []).map(
       (a): LLMActivity => ({
         name: a.name,
@@ -185,8 +189,14 @@ export class PlannerEngine {
   ) {}
 
   async plan(input: PlannerInput): Promise<PlannerResult> {
-    const { brief, existingItinerary, currentDate, booking, learnedPreferences } =
-      input;
+    const {
+      brief,
+      existingItinerary,
+      currentDate,
+      booking,
+      learnedPreferences,
+      legs,
+    } = input;
 
     // --- Step 1: Derive locked constraints (mid-trip re-planning only) ---
     let lockedDates: string[] = [];
@@ -195,13 +205,26 @@ export class PlannerEngine {
       lockedDates = constraint.lockedDates;
     }
 
-    // --- Step 2: Fetch candidate posts ---
-    const posts = await this.source.fetchForDestination(brief.destination, {
-      limit: 200,
-    });
-
-    // --- Step 3: Rank posts by authenticity + dial alignment ---
-    const ranked = rankPosts(posts, brief.local_touristy_dial);
+    // --- Step 2+3: Fetch + rank candidate posts (per city for multi-city) ---
+    const multiCity = !!legs && legs.length > 1;
+    let ranked;
+    if (multiCity) {
+      // Fetch + rank each city's posts independently and take a top slice per
+      // city, so every leg gets fair representation in the capped context.
+      const perCity = await Promise.all(
+        legs!.map((leg) =>
+          this.source
+            .fetchForDestination(leg.city, { limit: 120 })
+            .then((p) => rankPosts(p, brief.local_touristy_dial).slice(0, 18))
+        )
+      );
+      ranked = perCity.flat();
+    } else {
+      const posts = await this.source.fetchForDestination(brief.destination, {
+        limit: 200,
+      });
+      ranked = rankPosts(posts, brief.local_touristy_dial);
+    }
 
     // --- Step 4: Generate itinerary via LLM ---
     let generated = await this.llm.generateItinerary({
@@ -212,6 +235,11 @@ export class PlannerEngine {
       // Undefined when not provided — LLM plans full days with no constraints.
       booking: booking ?? null,
       learnedPreferences: learnedPreferences ?? null,
+      legs: legs?.map((l) => ({
+        city: l.city,
+        arrival_date: l.arrival_date,
+        departure_date: l.departure_date,
+      })),
     });
 
     // --- Step 5: Merge locked days (deterministic override of LLM output) ---
