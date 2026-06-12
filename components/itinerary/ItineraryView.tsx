@@ -66,6 +66,10 @@ import type {
 } from "@/app/api/trips/[id]/days/[dayId]/revise/route";
 import type { RescheduleRequestBody } from "@/app/api/trips/[id]/days/[dayId]/schedule/route";
 import type {
+  GuideResponseBody,
+  CityGuide,
+} from "@/app/api/trips/[id]/guide/route";
+import type {
   MoveActivityRequestBody,
   MoveActivityResponseBody,
   MoveActivityErrorBody,
@@ -1601,48 +1605,20 @@ function CheckDot({ on }: { on: boolean }) {
   );
 }
 
+/**
+ * One collapsible "About {city}" card. Coverage (the ✓/○ dots and the
+ * "your plan covers X of N" counts) is computed against `activities` — the
+ * caller scopes these to the city's own days (falling back to all activities
+ * for single-city trips). Styling/behaviour is identical to the original card.
+ */
 function DestinationGuideCard({
-  tripId,
+  guide,
   activities,
 }: {
-  tripId: string;
+  guide: DestinationGuide;
   activities: Activity[];
 }) {
-  const [guide, setGuide] = useState<DestinationGuide | null>(null);
-  const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(`/api/trips/${tripId}/guide`);
-        if (!res.ok) return; // no guide (e.g. not migrated) — hide silently
-        const body = (await res.json()) as { guide: DestinationGuide };
-        if (!cancelled) setGuide(body.guide);
-      } catch {
-        /* network error — hide */
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [tripId]);
-
-  if (loading) {
-    return (
-      <Card>
-        <div className="flex items-center gap-2 text-sm text-zinc-500">
-          <span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-300 border-t-indigo-600" />
-          Loading destination highlights…
-        </div>
-      </Card>
-    );
-  }
-
-  if (!guide) return null;
 
   const spotsHit = guide.top_spots.filter((s) => isCovered(s.name, activities)).length;
   const foodsHit = guide.must_try_foods.filter((f) =>
@@ -1721,6 +1697,84 @@ function DestinationGuideCard({
         </div>
       )}
     </Card>
+  );
+}
+
+/**
+ * Fetches the per-city destination guides and renders one card per city,
+ * each with its coverage scoped to that city's own days.
+ *
+ * Coverage scoping: for each guide we collect the activities of the days whose
+ * `.city` matches the guide's city (case-insensitively). If a guide's city
+ * matches no day — or there's only a single guide — we fall back to ALL
+ * activities, so single-city trips behave exactly as before.
+ */
+function DestinationGuides({
+  tripId,
+  days,
+}: {
+  tripId: string;
+  days: (ItineraryDay & { activities?: Activity[] })[];
+}) {
+  const [guides, setGuides] = useState<CityGuide[] | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/trips/${tripId}/guide`);
+        if (!res.ok) return; // no guide (e.g. not migrated) — hide silently
+        const body = (await res.json()) as GuideResponseBody;
+        if (!cancelled) setGuides(body.guides);
+      } catch {
+        /* network error — hide */
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tripId]);
+
+  if (loading) {
+    return (
+      <Card>
+        <div className="flex items-center gap-2 text-sm text-zinc-500">
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-300 border-t-indigo-600" />
+          Loading destination highlights…
+        </div>
+      </Card>
+    );
+  }
+
+  if (!guides || guides.length === 0) return null;
+
+  const allActivities = days.flatMap((d) => d.activities ?? []);
+
+  /** Activities of the days whose city matches `city` (case-insensitive). */
+  function activitiesForCity(city: string): Activity[] {
+    const target = city.trim().toLowerCase();
+    const matched = days.filter(
+      (d) => (d.city ?? "").trim().toLowerCase() === target
+    );
+    // No day tagged with this city (or single-guide trip): fall back to all
+    // activities so coverage behaves exactly as the old single-card view.
+    if (matched.length === 0 || guides!.length === 1) return allActivities;
+    return matched.flatMap((d) => d.activities ?? []);
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {guides.map((cg) => (
+        <DestinationGuideCard
+          key={cg.city}
+          guide={cg.guide}
+          activities={activitiesForCity(cg.city)}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -2430,11 +2484,8 @@ export function ItineraryView({
           </div>
         </Card>
 
-        {/* ---- Destination guide (overview + coverage) ---- */}
-        <DestinationGuideCard
-          tripId={tripId}
-          activities={localDays.flatMap((d) => d.activities ?? [])}
-        />
+        {/* ---- Destination guide(s) (overview + per-city coverage) ---- */}
+        <DestinationGuides tripId={tripId} days={localDays} />
 
         {/* ---- Day-by-day list ---- */}
         {localDays.length > 0 ? (
