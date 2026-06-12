@@ -32,6 +32,22 @@ export interface Trip {
   updated_at: string;
 }
 
+/**
+ * A leg of a multi-city trip: one city with its own date range and order.
+ * Single-city trips have exactly one leg (leg_order 0).
+ */
+export interface TripLeg {
+  leg_id: string;
+  trip_id: string;
+  city: string;
+  arrival_date: string; // YYYY-MM-DD
+  departure_date: string; // YYYY-MM-DD
+  leg_order: number; // 0-based
+  destination_guide: DestinationGuide | null;
+  created_at: string;
+  updated_at: string;
+}
+
 /** A highlight (spot or dish) in the destination guide. */
 export interface GuideHighlight {
   name: string;
@@ -140,9 +156,13 @@ export interface ItineraryDay {
   date: string; // ISO date YYYY-MM-DD
   daily_cost: number | null;
   locked: boolean;
+  /** The leg (city) this day belongs to; null for legacy/unassigned days. */
+  leg_id: string | null;
   created_at: string;
   // Populated via joins
   activities?: Activity[];
+  /** Hydrated convenience: the city of this day's leg. */
+  city?: string | null;
 }
 
 export type ActivityType =
@@ -307,6 +327,8 @@ export interface LLMActivity {
  */
 export interface LLMItineraryDay {
   date: string;
+  /** City this day is spent in (multi-city). Single-city plans may omit it. */
+  city?: string;
   activities: LLMActivity[];
   daily_cost: number;
   /**
