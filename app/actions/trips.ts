@@ -3,10 +3,22 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/db/server";
-import { createTrip, setTripArchived, deleteTrip } from "@/lib/db/queries";
+import {
+  createTrip,
+  createTripLegs,
+  setTripArchived,
+  deleteTrip,
+  type TripLegInput,
+} from "@/lib/db/queries";
 import { requireUser } from "@/lib/auth";
 
 export type TripActionState = { error?: string } | undefined;
+
+interface LegDraft {
+  city: string;
+  arrival: string;
+  departure: string;
+}
 
 export async function createTripAction(
   _prevState: TripActionState,
@@ -16,17 +28,35 @@ export async function createTripAction(
   const user = await requireUser();
 
   const title = String(formData.get("title") ?? "").trim();
-  const destination = String(formData.get("destination") ?? "").trim();
-  const startDate = String(formData.get("start_date") ?? "").trim();
-  const endDate = String(formData.get("end_date") ?? "").trim();
 
-  if (!title || !destination || !startDate || !endDate) {
-    return { error: "All fields are required." };
+  // Parse the city legs (multi-city). The form always submits a `legs` JSON array.
+  let legs: LegDraft[];
+  try {
+    legs = JSON.parse(String(formData.get("legs") ?? "[]")) as LegDraft[];
+  } catch {
+    return { error: "Could not read the cities. Please try again." };
   }
 
-  if (endDate < startDate) {
-    return { error: "End date must be on or after start date." };
+  legs = (Array.isArray(legs) ? legs : [])
+    .map((l) => ({
+      city: String(l.city ?? "").trim(),
+      arrival: String(l.arrival ?? "").trim(),
+      departure: String(l.departure ?? "").trim(),
+    }))
+    .filter((l) => l.city && l.arrival && l.departure);
+
+  if (!title) return { error: "Trip name is required." };
+  if (legs.length === 0) return { error: "Add at least one city with dates." };
+  if (legs.some((l) => l.departure < l.arrival)) {
+    return { error: "Each city's departure must be on or after its arrival." };
   }
+
+  // Chronological order = leg order. Trip dates are the outer envelope.
+  legs.sort((a, b) => a.arrival.localeCompare(b.arrival));
+  const startDate = legs[0].arrival;
+  const endDate = legs[legs.length - 1].departure;
+  // Denormalized label, e.g. "Athens → Santorini" (city part before any comma).
+  const destination = legs.map((l) => l.city.split(",")[0].trim()).join(" → ");
 
   const supabase = await createSupabaseServerClient();
 
@@ -39,6 +69,12 @@ export async function createTripAction(
       end_date: endDate,
       owner_id: user.id,
     });
+    const legInputs: TripLegInput[] = legs.map((l) => ({
+      city: l.city,
+      arrival_date: l.arrival,
+      departure_date: l.departure,
+    }));
+    await createTripLegs(supabase, trip.trip_id, legInputs);
   } catch (err) {
     // Supabase/Postgrest errors are plain objects, not Error instances —
     // log the full shape so the real cause (RLS, constraint, etc.) is visible.

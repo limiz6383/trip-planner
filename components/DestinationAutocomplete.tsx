@@ -15,6 +15,15 @@ interface DestinationAutocompleteProps {
   defaultValue?: string;
   required?: boolean;
   placeholder?: string;
+  /** Field label (default "Destination"). */
+  label?: string;
+  /** Show the label (default true). */
+  showLabel?: boolean;
+  /** Hidden input name for plain-form submission; pass null when controlled. */
+  name?: string | null;
+  /** Controlled value — when provided with onValueChange, parent owns the value. */
+  value?: string;
+  onValueChange?: (label: string) => void;
 }
 
 // Input field classes mirroring components/ui/Input.tsx exactly.
@@ -28,14 +37,28 @@ export function DestinationAutocomplete({
   defaultValue = "",
   required,
   placeholder,
+  label = "Destination",
+  showLabel = true,
+  name = "destination",
+  value,
+  onValueChange,
 }: DestinationAutocompleteProps) {
   const inputId = useId();
   const listboxId = useId();
 
+  const controlled = onValueChange !== undefined;
+
   // The visible text the user is typing.
-  const [query, setQuery] = useState(defaultValue);
-  // The committed value that goes into the hidden form field.
+  const [query, setQuery] = useState(controlled ? value ?? "" : defaultValue);
+  // The committed value that goes into the hidden form field (uncontrolled mode).
   const [committed, setCommitted] = useState(defaultValue);
+
+  // Controlled: sync internal query when the parent's value changes.
+  const [prevValue, setPrevValue] = useState(value);
+  if (controlled && value !== prevValue) {
+    setPrevValue(value);
+    setQuery(value ?? "");
+  }
 
   const [suggestions, setSuggestions] = useState<GeocodeResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -78,20 +101,22 @@ export function DestinationAutocomplete({
 
   // When the user types, update the visible query and schedule a fetch.
   // The committed value tracks the typed text until the user picks a suggestion.
-  function handleChange(value: string) {
-    setQuery(value);
-    setCommitted(value); // free-typed value is always valid for submission
+  function handleChange(v: string) {
+    setQuery(v);
+    if (controlled) onValueChange!(v);
+    else setCommitted(v); // free-typed value is always valid for submission
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      fetchSuggestions(value);
+      fetchSuggestions(v);
     }, 250);
   }
 
   // Commit a specific suggestion.
   function commit(result: GeocodeResult) {
     setQuery(result.label);
-    setCommitted(result.label);
+    if (controlled) onValueChange!(result.label);
+    else setCommitted(result.label);
     setSuggestions([]);
     setOpen(false);
     setActiveIndex(-1);
@@ -148,13 +173,15 @@ export function DestinationAutocomplete({
 
   return (
     <div className="flex flex-col gap-1" ref={containerRef}>
-      <label
-        htmlFor={inputId}
-        className="text-sm font-medium text-zinc-700"
-      >
-        Destination
-        {required && <span className="sr-only"> (required)</span>}
-      </label>
+      {showLabel && (
+        <label
+          htmlFor={inputId}
+          className="text-sm font-medium text-zinc-700"
+        >
+          {label}
+          {required && <span className="sr-only"> (required)</span>}
+        </label>
+      )}
 
       <div className="relative">
         {/* Visible text input — drives the autocomplete UI */}
@@ -179,13 +206,10 @@ export function DestinationAutocomplete({
           className={INPUT_BASE}
         />
 
-        {/* Hidden input that the server action reads as formData.get("destination") */}
-        <input
-          type="hidden"
-          name="destination"
-          required={required}
-          value={committed}
-        />
+        {/* Hidden input for plain-form submission (uncontrolled mode only) */}
+        {name && !controlled && (
+          <input type="hidden" name={name} required={required} value={committed} />
+        )}
 
         {/* Loading indicator — subtle spinner inside the right edge */}
         {loading && (
