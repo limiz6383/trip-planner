@@ -2156,6 +2156,24 @@ export function ItineraryView({
       ? localDays.reduce((sum, d) => sum + (d.daily_cost ?? 0), 0)
       : null);
 
+  // Multi-city: a header before the first day of each city block ("Athens · Days 1–3").
+  const distinctCities = new Set(
+    localDays.map((d) => d.city).filter((c): c is string => !!c)
+  );
+  const multiCity = distinctCities.size > 1;
+  const cityHeaderAt = new Map<number, { city: string; from: number; to: number }>();
+  if (multiCity) {
+    let i = 0;
+    while (i < localDays.length) {
+      const city = localDays[i].city ?? null;
+      let j = i;
+      while (j + 1 < localDays.length && (localDays[j + 1].city ?? null) === city)
+        j++;
+      if (city) cityHeaderAt.set(i, { city, from: i + 1, to: j + 1 });
+      i = j + 1;
+    }
+  }
+
   // While a whole-itinerary revision is in flight, replace the view with the
   // prominent overlay (revision regenerates the plan — takes 10-20s). The
   // overlay stays up through router.refresh(), which remounts this component
@@ -2427,6 +2445,18 @@ export function ItineraryView({
                   key={day.day_id}
                   className={index === 0 ? "" : "pt-6"}
                 >
+                  {cityHeaderAt.has(index) && (
+                    <div className="mb-3 flex items-baseline gap-2 border-l-4 border-indigo-500 pl-3">
+                      <span className="text-base font-bold text-zinc-900">
+                        {cityHeaderAt.get(index)!.city.split(",")[0]}
+                      </span>
+                      <span className="text-xs font-medium text-zinc-500">
+                        {cityHeaderAt.get(index)!.from === cityHeaderAt.get(index)!.to
+                          ? `Day ${cityHeaderAt.get(index)!.from}`
+                          : `Days ${cityHeaderAt.get(index)!.from}–${cityHeaderAt.get(index)!.to}`}
+                      </span>
+                    </div>
+                  )}
                   <DaySection
                     day={day}
                     dayNumber={index + 1}
