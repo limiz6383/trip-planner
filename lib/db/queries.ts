@@ -31,6 +31,7 @@ import type {
   TripInvite,
   ActivityType,
   TripPace,
+  TripLeg,
 } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -740,6 +741,67 @@ export async function setTripDestinationGuide(
   if (error) throw error;
 }
 
+// ---------------------------------------------------------------------------
+// Trip legs (multi-city)
+// ---------------------------------------------------------------------------
+
+/** Returns a trip's legs (cities) ordered by leg_order. */
+export async function getLegsForTrip(
+  client: SupabaseClient,
+  tripId: string
+): Promise<TripLeg[]> {
+  const { data, error } = await client
+    .from("trip_legs")
+    .select("*")
+    .eq("trip_id", tripId)
+    .order("leg_order");
+  if (error) throw error;
+  return (data as TripLeg[]) ?? [];
+}
+
+/** Input for one leg when creating a trip. */
+export interface TripLegInput {
+  city: string;
+  arrival_date: string;
+  departure_date: string;
+}
+
+/** Inserts a trip's legs in order (leg_order assigned from array position). */
+export async function createTripLegs(
+  client: SupabaseClient,
+  tripId: string,
+  legs: TripLegInput[]
+): Promise<TripLeg[]> {
+  if (legs.length === 0) return [];
+  const rows = legs.map((l, i) => ({
+    trip_id: tripId,
+    city: l.city,
+    arrival_date: l.arrival_date,
+    departure_date: l.departure_date,
+    leg_order: i,
+  }));
+  const { data, error } = await client
+    .from("trip_legs")
+    .insert(rows)
+    .select()
+    .order("leg_order");
+  if (error) throw error;
+  return (data as TripLeg[]) ?? [];
+}
+
+/** Caches a per-city destination guide on its leg. */
+export async function setLegDestinationGuide(
+  client: SupabaseClient,
+  legId: string,
+  guide: import("@/lib/types").DestinationGuide
+): Promise<void> {
+  const { error } = await client
+    .from("trip_legs")
+    .update({ destination_guide: guide })
+    .eq("leg_id", legId);
+  if (error) throw error;
+}
+
 /**
  * Returns the traveller's prior revision instructions for a trip — the
  * free-text asks they made in earlier whole-itinerary / day / activity
@@ -943,11 +1005,23 @@ export async function getCurrentItineraryHydrated(
   const itinerary = await getCurrentItinerary(client, tripId);
   if (!itinerary) return null;
 
+  // Map leg_id -> city so each day carries its city (multi-city display).
+  // Non-fatal: if the trip_legs migration isn't applied yet, days just have no
+  // city and the rest of the itinerary still loads.
+  let cityByLeg = new Map<string, string>();
+  try {
+    const legs = await getLegsForTrip(client, tripId);
+    cityByLeg = new Map(legs.map((l) => [l.leg_id, l.city]));
+  } catch {
+    /* trip_legs not available — degrade to no city labels */
+  }
+
   const days = await getDaysForItinerary(client, itinerary.itinerary_id);
   const hydratedDays = await Promise.all(
     days.map(async (day) => {
       const activities = await getActivitiesForDay(client, day.day_id);
-      return { ...day, activities };
+      const city = day.leg_id ? cityByLeg.get(day.leg_id) ?? null : null;
+      return { ...day, activities, city };
     })
   );
 
