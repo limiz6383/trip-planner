@@ -2,30 +2,45 @@
  * GET /api/trips/[id]/guide
  *
  * Returns a destination overview (what the city is known for, the spots people
- * usually hit, must-try foods) shown alongside the itinerary. Generated once
- * per trip via the LLM and cached on the trip row, so repeat views cost
- * nothing. Auth-gated.
+ * usually hit, must-try foods) shown alongside the itinerary. For multi-city
+ * trips this returns ONE guide per city (per leg); each guide is generated once
+ * via the LLM and cached on its leg row, so repeat views cost nothing. Trips
+ * with no legs (pre-migration / fallback) get a single guide cached on the trip
+ * row. Auth-gated.
  *
- * Response (200): { guide: DestinationGuide }
- * Errors: 401 unauthorized, 400 missing trip/destination, 500 (incl. the
- * destination_guide column not yet migrated — the UI treats this as "no guide"
- * and simply hides the panel).
+ * Response (200): { guides: CityGuide[] }
+ * Errors: 401 unauthorized, 404 trip not found, 500 (incl. ANTHROPIC_API_KEY
+ * not configured, or the destination_guide column not yet migrated — the UI
+ * treats failures as "no guide" and simply hides the panel).
  */
 
 import type { NextRequest } from "next/server";
 import { getUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/db/server";
-import { getTripById, setTripDestinationGuide } from "@/lib/db/queries";
+import {
+  getTripById,
+  getLegsForTrip,
+  setLegDestinationGuide,
+  setTripDestinationGuide,
+} from "@/lib/db/queries";
 import { createPlannerEngine } from "@/lib/planner/engine";
 import type { DestinationGuide } from "@/lib/types";
 
-export interface GuideResponseBody {
+export interface CityGuide {
+  city: string;
   guide: DestinationGuide;
+}
+
+export interface GuideResponseBody {
+  guides: CityGuide[];
 }
 
 export interface GuideErrorBody {
   error: string;
 }
+
+const MISSING_KEY_MESSAGE =
+  "ANTHROPIC_API_KEY is not configured on the server.";
 
 export async function GET(
   _request: NextRequest,
@@ -57,17 +72,56 @@ export async function GET(
       );
     }
 
-    // Cached → return immediately (no LLM call).
+    const engine = createPlannerEngine(supabase);
+    const legs = await getLegsForTrip(supabase, tripId);
+
+    // --- Multi-city: one guide per leg, generated + cached per leg ---
+    if (legs.length > 0) {
+      const guides: CityGuide[] = [];
+
+      for (const leg of legs) {
+        // Cache hit → no LLM call.
+        if (leg.destination_guide) {
+          guides.push({ city: leg.city, guide: leg.destination_guide });
+          continue;
+        }
+
+        if (!process.env.ANTHROPIC_API_KEY) {
+          return Response.json(
+            { error: MISSING_KEY_MESSAGE } satisfies GuideErrorBody,
+            { status: 500 }
+          );
+        }
+
+        const guide = await engine.generateDestinationGuide(leg.city);
+        // Cache on the leg (non-fatal: if the column isn't migrated yet this
+        // throws and is caught below — the client hides the panel).
+        await setLegDestinationGuide(supabase, leg.leg_id, guide);
+        guides.push({ city: leg.city, guide });
+      }
+
+      return Response.json(
+        { guides } satisfies GuideResponseBody,
+        { status: 200 }
+      );
+    }
+
+    // --- Fallback (pre-migration / no legs): single guide on the trip row ---
+    // Cache hit → no LLM call.
     if (trip.destination_guide) {
       return Response.json(
-        { guide: trip.destination_guide } satisfies GuideResponseBody,
+        {
+          guides: [
+            { city: trip.destination, guide: trip.destination_guide },
+          ],
+        } satisfies GuideResponseBody,
         { status: 200 }
       );
     }
 
     if (!process.env.ANTHROPIC_API_KEY) {
       return Response.json(
-        { error: "ANTHROPIC_API_KEY is not configured on the server." } satisfies GuideErrorBody,
+        { error: MISSING_KEY_MESSAGE } satisfies GuideErrorBody,
         { status: 500 }
       );
     }
@@ -78,15 +132,13 @@ export async function GET(
       );
     }
 
-    const engine = createPlannerEngine(supabase);
     const guide = await engine.generateDestinationGuide(trip.destination);
-
-    // Cache it (non-fatal: if the column isn't migrated yet this throws and is
-    // caught below — the client still gets nothing and hides the panel).
     await setTripDestinationGuide(supabase, tripId, guide);
 
     return Response.json(
-      { guide } satisfies GuideResponseBody,
+      {
+        guides: [{ city: trip.destination, guide }],
+      } satisfies GuideResponseBody,
       { status: 200 }
     );
   } catch (err) {
