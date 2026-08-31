@@ -86,10 +86,18 @@ interface Template {
   hours: number;
   cost: number;
   blurb: string;
+  /** Centres on meat. Dropped for vegetarian/vegan travellers. */
+  meat?: boolean;
+  /** Centres on fish or shellfish. Kept for pescatarians, dropped for vegans. */
+  fish?: boolean;
+  /** Involves a climb or rough ground. Dropped when mobility is a constraint. */
+  steep?: boolean;
+  /** Contains dairy or eggs. Dropped for vegans. */
+  dairy?: boolean;
 }
 
 const BREAKFAST: Template[] = [
-  { label: "Breakfast at a neighbourhood bakery", type: "food", time: "08:30", hours: 1, cost: 12, blurb: "Pastries and strong coffee a short walk from the flat." },
+  { label: "Breakfast at a neighbourhood bakery", type: "food", time: "08:30", hours: 1, cost: 12, blurb: "Pastries and strong coffee a short walk from the flat.", dairy: true },
   { label: "Morning market breakfast", type: "food", time: "08:15", hours: 1, cost: 14, blurb: "Fresh fruit and something hot from a market stall." },
 ];
 
@@ -101,24 +109,29 @@ const MORNING: Template[] = [
 ];
 
 const LUNCH: Template[] = [
-  { label: "Lunch at a family-run taverna", type: "food", time: "13:00", hours: 1, cost: 22, blurb: "Small menu, packed with locals at midday." },
-  { label: "Street-food lunch", type: "food", time: "12:45", hours: 1, cost: 15, blurb: "Quick, cheap, and the best bite of the day." },
+  { label: "Lunch at a family-run taverna", type: "food", time: "13:00", hours: 1, cost: 22, blurb: "Small menu, packed with locals at midday.", meat: true },
+  { label: "Street-food lunch", type: "food", time: "12:45", hours: 1, cost: 15, blurb: "Quick, cheap, and the best bite of the day.", meat: true },
+  { label: "Vegetarian mezze lunch", type: "food", time: "13:00", hours: 1, cost: 18, blurb: "Small sharing plates, all plant-based.", dairy: true },
+  { label: "Market salad and flatbread lunch", type: "food", time: "12:45", hours: 1, cost: 14, blurb: "Built from whatever the morning market had." },
 ];
 
 const AFTERNOON: Template[] = [
   { label: "Neighbourhood browse", type: "shopping", time: "15:00", hours: 1.5, cost: 25, blurb: "Independent shops and a few makers' studios." },
-  { label: "Viewpoint climb", type: "outdoor", time: "15:30", hours: 1.5, cost: 5, blurb: "Steep but short, best light in late afternoon." },
+  { label: "Viewpoint climb", type: "outdoor", time: "15:30", hours: 1.5, cost: 5, blurb: "Steep but short, best light in late afternoon.", steep: true },
   { label: "Gallery district", type: "culture", time: "14:45", hours: 2, cost: 12, blurb: "Contemporary spaces clustered within a few blocks." },
   { label: "Swim and beach time", type: "outdoor", time: "15:00", hours: 2, cost: 0, blurb: "Flat water and easy entry, quiet on weekdays." },
 ];
 
 const DINNER: Template[] = [
-  { label: "Dinner at a local favourite", type: "food", time: "19:30", hours: 1.5, cost: 38, blurb: "Book ahead — it fills up by eight." },
-  { label: "Seafood dinner by the water", type: "food", time: "19:45", hours: 1.5, cost: 45, blurb: "Whatever came in that morning, simply grilled." },
+  { label: "Dinner at a local favourite", type: "food", time: "19:30", hours: 1.5, cost: 38, blurb: "Book ahead — it fills up by eight.", meat: true },
+  { label: "Seafood dinner by the water", type: "food", time: "19:45", hours: 1.5, cost: 45, blurb: "Whatever came in that morning, simply grilled.", fish: true },
+  { label: "Vegetarian kitchen dinner", type: "food", time: "19:30", hours: 1.5, cost: 32, blurb: "A set menu built around what is in season.", dairy: true },
+  { label: "Garden-to-table dinner", type: "food", time: "19:45", hours: 1.5, cost: 30, blurb: "Everything grown within a few miles; entirely plant-based." },
 ];
 
 const EVENING: Template[] = [
   { label: "Wine bar nightcap", type: "entertainment", time: "21:30", hours: 1, cost: 18, blurb: "Natural wine list and a short, good snack menu." },
+  { label: "Dessert and mint tea", type: "food", time: "21:30", hours: 1, cost: 12, blurb: "A sweet stop on the way back to the flat.", dairy: true },
   { label: "Evening square people-watching", type: "other", time: "21:15", hours: 1, cost: 6, blurb: "The square comes alive after dinner." },
 ];
 
@@ -243,6 +256,85 @@ function insertPick(day: LLMItineraryDay, pick: GuidePick): void {
   day.activities.push(activity);
 }
 
+/**
+ * Narrows the template pools to what the brief actually allows.
+ *
+ * Vegetarian/vegan/pescatarian filter the meal pools outright — offering a
+ * vegetarian "Seafood dinner by the water" is the most visible way to look
+ * like the answers were ignored. Halal/kosher/gluten-free instead annotate the
+ * meal, since the constraint is about how a dish is prepared rather than
+ * whether the meal happens. Mobility needs drop anything that involves a climb.
+ */
+function poolsFor(
+  dietary: string[] | undefined,
+  accessibility: string[] | undefined
+): Record<string, Template[]> {
+  const diet = (dietary ?? []).map((d) => d.toLowerCase());
+  const access = (accessibility ?? []).map((a) => a.toLowerCase());
+
+  const vegan = diet.includes("vegan");
+  const vegetarian = vegan || diet.includes("vegetarian");
+  const pescatarian = diet.includes("pescatarian");
+  const limitedMobility = access.some((a) =>
+    /walk|mobility|wheelchair|stair|stroller/.test(a)
+  );
+
+  const allowFood = (t: Template) => {
+    if (vegan && (t.meat || t.fish || t.dairy)) return false;
+    if (vegetarian && (t.meat || t.fish)) return false;
+    if (pescatarian && t.meat) return false;
+    return true;
+  };
+  const allowPlace = (t: Template) => !(limitedMobility && t.steep);
+
+  // Never return an empty pool — falling back to the unfiltered list is better
+  // than generating a day with no lunch.
+  const narrow = (list: Template[], ok: (t: Template) => boolean) => {
+    const kept = list.filter(ok);
+    return kept.length > 0 ? kept : list;
+  };
+
+  return {
+    breakfast: narrow(BREAKFAST, allowFood),
+    morning: narrow(MORNING, allowPlace),
+    lunch: narrow(LUNCH, allowFood),
+    afternoon: narrow(AFTERNOON, (t) => allowPlace(t) && allowFood(t)),
+    dinner: narrow(DINNER, allowFood),
+    evening: narrow(EVENING, allowFood),
+  };
+}
+
+/**
+ * Nudges a day's costs toward the traveller's stated daily budget.
+ *
+ * Without this a $50/day brief and a $500/day brief produce identical plans,
+ * which is the clearest possible sign the brief was ignored. Transport is left
+ * alone — a flight transfer does not get cheaper because the budget is lower.
+ */
+function applyBudget(day: LLMItineraryDay, dailyBudget: number | undefined): void {
+  if (!dailyBudget || dailyBudget <= 0) return;
+
+  const flexible = day.activities.filter((a) => a.activity_type !== "transport");
+  const fixedCost = day.activities
+    .filter((a) => a.activity_type === "transport")
+    .reduce((sum, a) => sum + (a.estimated_cost_usd ?? 0), 0);
+  const rawFlexible = flexible.reduce(
+    (sum, a) => sum + (a.estimated_cost_usd ?? 0),
+    0
+  );
+  if (rawFlexible <= 0) return;
+
+  const target = Math.max(dailyBudget - fixedCost, dailyBudget * 0.25);
+  const factor = Math.min(Math.max(target / rawFlexible, 0.25), 4);
+
+  for (const a of flexible) {
+    a.estimated_cost_usd = Math.max(
+      1,
+      Math.round((a.estimated_cost_usd ?? 0) * factor)
+    );
+  }
+}
+
 function toActivity(t: Template, city: string, seed: string): LLMActivity {
   return {
     name: t.label,
@@ -254,6 +346,190 @@ function toActivity(t: Template, city: string, seed: string): LLMActivity {
     source_attribution: hash(seed) % 3 === 0 ? "Community post" : "",
     activity_type: t.type,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Reading the traveller's answers
+// ---------------------------------------------------------------------------
+
+/**
+ * What the traveller has actually told us, pulled out of their own words.
+ *
+ * Re-derived from the whole conversation on every turn rather than accumulated
+ * turn by turn: that way a later correction ("actually make it $60") simply
+ * wins, and a client that mis-round-trips the partial brief can't strand a
+ * stale value.
+ */
+interface Extracted {
+  daily_budget_usd?: number;
+  party_composition?: { adults: number; children?: number; infants?: number };
+  pace?: "relaxed" | "moderate" | "fast";
+  dietary_constraints?: string[];
+  accessibility_needs?: string[];
+  vibe_keywords?: string[];
+  local_touristy_dial?: number;
+}
+
+const DIETARY_PATTERNS: [RegExp, string][] = [
+  [/\bvegan\b/, "vegan"],
+  [/\bvegetarian\b|\bveggie\b|\bno meat\b|\bdon'?t eat meat\b/, "vegetarian"],
+  [/\bpescatarian\b/, "pescatarian"],
+  [/\bgluten[- ]?free\b|\bceliac\b|\bcoeliac\b/, "gluten-free"],
+  [/\bhalal\b/, "halal"],
+  [/\bkosher\b/, "kosher"],
+  [/\bdairy[- ]?free\b|\blactose\b/, "dairy-free"],
+  [/\bnut allerg|\ballergic to nuts\b/, "nut allergy"],
+  [/\bshellfish\b/, "no shellfish"],
+  [/\bno pork\b/, "no pork"],
+];
+
+const ACCESS_PATTERNS: [RegExp, string][] = [
+  [/\bwheelchair\b|\bstep[- ]?free\b/, "wheelchair access"],
+  // Catches "rather not do a lot of walking", "avoid too much walking",
+  // "can't walk far" — the negation and the word "walking" are often several
+  // words apart, so match across the gap rather than requiring adjacency.
+  [/\b(?:not|avoid|less|no|limit|minimal|hate|dislike)\b[^.!?]{0,24}\bwalk/, "limited walking"],
+  [/\bcan'?t walk far\b|\btoo much walking\b/, "limited walking"],
+  [/\bbad knee|\bbad back|\bbad hip|\bsore (?:knee|feet|back)\b/, "limited walking"],
+  [/\bmobility\b/, "limited mobility"],
+  [/\bstroller\b|\bpushchair\b|\bpram\b/, "stroller access"],
+  [/\bno stairs\b|\bavoid stairs\b/, "no stairs"],
+];
+
+const VIBE_PATTERNS: [RegExp, string][] = [
+  [/\bfood\b|\bfoodie\b|\beat|\brestaurant|\bculinary\b/, "food"],
+  [/\bart\b|\bgaller/, "art"],
+  [/\bmuseum/, "museums"],
+  [/\bhistor|\bancient\b|\bruins\b/, "history"],
+  [/\bnature\b|\boutdoor|\bhik|\bpark\b/, "outdoors"],
+  [/\bbeach|\bswim|\bsea\b|\bcoast/, "coastal"],
+  [/\bnightlife\b|\bbars?\b|\bclub|\bdrink/, "nightlife"],
+  [/\bshopping\b|\bmarket/, "shopping"],
+  [/\barchitect/, "architecture"],
+  [/\bromantic\b|\bhoneymoon\b|\banniversary\b/, "romantic"],
+  [/\bwalkab|\bwander|\bstroll/, "walkable"],
+];
+
+function extractFromText(text: string): Extracted {
+  const t = text.toLowerCase();
+  const out: Extracted = {};
+
+  // --- budget -------------------------------------------------------------
+  // "$60 a day", "60 per day", "around 200 a night", "budget of 150"
+  const perDay =
+    t.match(/\$?\s*(\d{2,5})\s*(?:usd|dollars?|bucks|\$)?\s*(?:a|per|each|\/)\s*(?:day|night|person|pp)/) ??
+    t.match(/(?:budget|spend|around|about|roughly|up to|max)\s*(?:of|is|:)?\s*\$?\s*(\d{2,5})/) ??
+    t.match(/\$\s*(\d{2,5})\b/);
+  if (perDay) {
+    const n = Number(perDay[1]);
+    if (n >= 10 && n <= 100000) out.daily_budget_usd = n;
+  } else if (/\bcheap\b|\bbudget\b|\bshoestring\b|\bbackpack/.test(t)) {
+    out.daily_budget_usd = 80;
+  } else if (/\bluxur|\bsplurge\b|\bhigh[- ]end\b|\bno budget\b|\bmoney (?:is )?no object\b/.test(t)) {
+    out.daily_budget_usd = 450;
+  }
+
+  // --- party --------------------------------------------------------------
+  const adultsMatch = t.match(/(\d+)\s*(?:adults?|of us|people|persons?|travell?ers?)/);
+  const kidsMatch = t.match(/(\d+)\s*(?:kids?|children|child)/);
+  const infantsMatch = t.match(/(\d+)\s*(?:infants?|babies|baby|toddlers?)/);
+  if (adultsMatch) {
+    out.party_composition = { adults: Math.min(Number(adultsMatch[1]), 12) };
+  } else if (/\bjust me\b|\bsolo\b|\balone\b|\bmyself\b|\bi'?m travell?ing alone\b|\bon my own\b/.test(t)) {
+    out.party_composition = { adults: 1 };
+  } else if (/\bcouple\b|\btwo of us\b|\bmy (?:partner|wife|husband|girlfriend|boyfriend)\b|\bme and my\b/.test(t)) {
+    out.party_composition = { adults: 2 };
+  }
+  if (kidsMatch) {
+    out.party_composition = {
+      adults: out.party_composition?.adults ?? 2,
+      children: Math.min(Number(kidsMatch[1]), 10),
+    };
+  }
+  if (infantsMatch) {
+    out.party_composition = {
+      adults: out.party_composition?.adults ?? 2,
+      ...(out.party_composition?.children
+        ? { children: out.party_composition.children }
+        : {}),
+      infants: Math.min(Number(infantsMatch[1]), 5),
+    };
+  }
+
+  // --- pace ---------------------------------------------------------------
+  if (/\brelax|\bslow\b|\bchill\b|\beasy\b|\bleisurel|\bunhurried\b|\btake it easy\b|\blaid[- ]back\b/.test(t)) {
+    out.pace = "relaxed";
+  } else if (/\bfast\b|\bpacked\b|\bcover a lot\b|\bsee everything\b|\bas much as\b|\bbusy\b|\bwhirlwind\b|\bcram\b/.test(t)) {
+    out.pace = "fast";
+  } else if (/\bmoderate\b|\bbalanced\b|\bin between\b|\bmix of both\b/.test(t)) {
+    out.pace = "moderate";
+  }
+
+  // --- constraints --------------------------------------------------------
+  const diet = DIETARY_PATTERNS.filter(([re]) => re.test(t)).map(([, v]) => v);
+  if (diet.length > 0) out.dietary_constraints = diet;
+
+  const access = ACCESS_PATTERNS.filter(([re]) => re.test(t)).map(([, v]) => v);
+  if (access.length > 0) out.accessibility_needs = Array.from(new Set(access));
+
+  const vibes = VIBE_PATTERNS.filter(([re]) => re.test(t)).map(([, v]) => v);
+  if (vibes.length > 0) out.vibe_keywords = Array.from(new Set(vibes));
+
+  // --- local vs touristy --------------------------------------------------
+  if (/\blocal\b|\boff the beaten\b|\bauthentic\b|\bnon[- ]tourist|\bavoid tourist|\bhidden gem/.test(t)) {
+    out.local_touristy_dial = 0.2;
+  } else if (/\bhighlights?\b|\bmain sights?\b|\bfirst time\b|\bclassics?\b|\bmust[- ]see|\bbucket list\b/.test(t)) {
+    out.local_touristy_dial = 0.8;
+  }
+
+  return out;
+}
+
+/** Later statements win, so a correction mid-conversation takes effect. */
+function extractFromConversation(messages: string[]): Extracted {
+  const merged: Extracted = {};
+  for (const m of messages) {
+    const e = extractFromText(m);
+    if (e.daily_budget_usd !== undefined) merged.daily_budget_usd = e.daily_budget_usd;
+    if (e.party_composition) merged.party_composition = e.party_composition;
+    if (e.pace) merged.pace = e.pace;
+    if (e.local_touristy_dial !== undefined) merged.local_touristy_dial = e.local_touristy_dial;
+    // Constraints accumulate — mentioning a second one shouldn't erase the first.
+    if (e.dietary_constraints) {
+      merged.dietary_constraints = Array.from(
+        new Set([...(merged.dietary_constraints ?? []), ...e.dietary_constraints])
+      );
+    }
+    if (e.accessibility_needs) {
+      merged.accessibility_needs = Array.from(
+        new Set([...(merged.accessibility_needs ?? []), ...e.accessibility_needs])
+      );
+    }
+    if (e.vibe_keywords) {
+      merged.vibe_keywords = Array.from(
+        new Set([...(merged.vibe_keywords ?? []), ...e.vibe_keywords])
+      );
+    }
+  }
+  return merged;
+}
+
+/** Human-readable restatement, so the traveller can see they were heard. */
+function echoBrief(e: Extracted): string {
+  const bits: string[] = [];
+  if (e.daily_budget_usd) bits.push(`about $${e.daily_budget_usd} a day`);
+  if (e.party_composition) {
+    const { adults, children, infants } = e.party_composition;
+    const parts = [`${adults} adult${adults === 1 ? "" : "s"}`];
+    if (children) parts.push(`${children} child${children === 1 ? "" : "ren"}`);
+    if (infants) parts.push(`${infants} infant${infants === 1 ? "" : "s"}`);
+    bits.push(adults === 1 && !children && !infants ? "just you" : parts.join(" and "));
+  }
+  if (e.pace) bits.push(`a ${e.pace} pace`);
+  if (e.dietary_constraints?.length) bits.push(e.dietary_constraints.join(" and "));
+  if (e.accessibility_needs?.length) bits.push(e.accessibility_needs.join(" and "));
+  if (e.vibe_keywords?.length) bits.push(`leaning ${e.vibe_keywords.slice(0, 3).join(", ")}`);
+  return bits.join(", ");
 }
 
 // ---------------------------------------------------------------------------
@@ -271,48 +547,104 @@ export class MockProvider implements LLMProvider {
       params.knownTrip.start_date,
       params.knownTrip.end_date
     ).length;
-    const turn = params.history.filter((m) => m.role === "user").length;
 
-    // Three scripted turns, then the brief completes. Enough to show the
-    // consulting loop without making a visitor type through a real interview.
-    if (turn === 0) {
+    // Everything the traveller has said, including this turn. The client sends
+    // history WITHOUT the in-flight message, so append it here.
+    const said = [
+      ...params.history.filter((m) => m.role === "user").map((m) => m.content),
+      params.userMessage,
+    ].filter((m) => m && !m.startsWith("__"));
+
+    const turn = said.length;
+    const heard = extractFromConversation(said);
+
+    const brief = {
+      ...params.partialBrief,
+      ...params.knownTrip,
+      ...heard,
+    };
+
+    // Opening turn: greet and ask the two things that shape a plan most.
+    if (turn <= 1 && !heard.daily_budget_usd && !heard.pace) {
       return {
-        assistantMessage: `Let's plan your ${days}-day trip to ${city}. Two things to start: roughly what daily budget are you working with, and what kind of trip is this — relaxed and food-led, or are you trying to cover a lot of ground?`,
-        updatedBrief: { ...params.partialBrief, ...params.knownTrip },
+        assistantMessage: `Let's plan your ${days}-day trip to ${city}. Two things to start: roughly what are you happy to spend per day, and what kind of trip is this — relaxed and food-led, or trying to cover a lot of ground?`,
+        updatedBrief: brief,
         briefComplete: false,
       };
     }
 
-    if (turn === 1) {
+    // Ask about whatever is still missing, most load-bearing first.
+    const missing: string[] = [];
+    if (heard.daily_budget_usd === undefined)
+      missing.push("roughly what you're happy to spend per day");
+    if (!heard.party_composition) missing.push("who's travelling with you");
+    if (!heard.pace)
+      missing.push("whether you'd rather take it slow or pack the days");
+    if (!heard.dietary_constraints && !heard.accessibility_needs && turn < 3)
+      missing.push(
+        "anything I should plan around — dietary needs, or anything that makes a lot of walking hard"
+      );
+
+    const ack = echoBrief(heard);
+    const acknowledgement = ack ? `Got it — ${ack}.` : "Understood.";
+
+    // Hard floor: never trap someone who won't answer. After four turns, fill
+    // the gaps with sensible defaults and say so.
+    const forced = turn >= 4;
+    const ready = missing.length === 0;
+
+    if (!ready && !forced) {
+      const asks = missing.slice(0, 2);
+      const question =
+        asks.length === 1
+          ? `And ${asks[0]}?`
+          : `A couple more things: ${asks[0]}, and ${asks[1]}?`;
       return {
-        assistantMessage: `Got it. Who's travelling, and is there anything I should plan around — dietary needs, accessibility, or anything you'd rather skip?`,
-        updatedBrief: {
-          ...params.partialBrief,
-          ...params.knownTrip,
-          daily_budget_usd: 180,
-          vibe_keywords: ["food", "walkable", "coastal"],
-        },
+        assistantMessage: `${acknowledgement} ${question}`,
+        updatedBrief: brief,
         briefComplete: false,
       };
     }
+
+    // Complete. Every TripBrief field is required downstream, so fill any gap
+    // rather than handing the confirm step a partial object.
+    const defaulted: string[] = [];
+    if (heard.daily_budget_usd === undefined) defaulted.push("a $150/day budget");
+    if (!heard.party_composition) defaulted.push("two adults");
+    if (!heard.pace) defaulted.push("a moderate pace");
+
+    const finalBrief = {
+      ...brief,
+      daily_budget_usd: heard.daily_budget_usd ?? 150,
+      party_composition: heard.party_composition ?? { adults: 2 },
+      pace: heard.pace ?? ("moderate" as const),
+      vibe_keywords: heard.vibe_keywords ?? ["food", "walkable"],
+      local_touristy_dial: heard.local_touristy_dial ?? 0.4,
+      dietary_constraints: heard.dietary_constraints ?? [],
+      accessibility_needs: heard.accessibility_needs ?? [],
+    };
+
+    const summary = echoBrief({
+      daily_budget_usd: finalBrief.daily_budget_usd,
+      party_composition: finalBrief.party_composition,
+      pace: finalBrief.pace,
+      dietary_constraints: finalBrief.dietary_constraints,
+      accessibility_needs: finalBrief.accessibility_needs,
+      vibe_keywords: finalBrief.vibe_keywords,
+    });
+
+    const assumed =
+      defaulted.length > 0
+        ? ` I've assumed ${defaulted.join(" and ")} — change it and regenerate if that's off.`
+        : "";
 
     return {
-      assistantMessage: `That's everything I need. Here's the brief for your ${days} days in ${city}: a moderate pace, around $180 a day, leaning local rather than touristy, with food as the through-line. Generate the itinerary whenever you're ready.
+      assistantMessage: `That's everything I need. For your ${days} days in ${city}: ${summary}.${assumed} Generate the itinerary whenever you're ready.
 
 \`\`\`json
 { "brief_complete": true }
 \`\`\``,
-      updatedBrief: {
-        ...params.partialBrief,
-        ...params.knownTrip,
-        daily_budget_usd: 180,
-        vibe_keywords: ["food", "walkable", "coastal"],
-        party_composition: { adults: 2 },
-        local_touristy_dial: 0.35,
-        dietary_constraints: [],
-        accessibility_needs: [],
-        pace: "moderate",
-      },
+      updatedBrief: finalBrief,
       briefComplete: true,
     };
   }
@@ -333,6 +665,7 @@ export class MockProvider implements LLMProvider {
     const dates = datesBetween(brief.start_date, brief.end_date);
     const legs = params.legs ?? [];
     const perDay = activityCountFor(brief.pace);
+    const pools = poolsFor(brief.dietary_constraints, brief.accessibility_needs);
 
     const days: LLMItineraryDay[] = dates.map((date, index) => {
       const isFirst = index === 0;
@@ -388,11 +721,11 @@ export class MockProvider implements LLMProvider {
           source_attribution: "",
           activity_type: "transport",
         });
-        activities.push(toActivity(pick(LUNCH, date + city), city, date + "l"));
+        activities.push(toActivity(pick(pools.lunch, date + city), city, date + "l"));
         activities.push(
-          toActivity(pick(AFTERNOON, date + city), city, date + "a")
+          toActivity(pick(pools.afternoon, date + city), city, date + "a")
         );
-        activities.push(toActivity(pick(DINNER, date + city), city, date + "d"));
+        activities.push(toActivity(pick(pools.dinner, date + city), city, date + "d"));
       } else if (isFirst) {
         // Arrival day starts mid-afternoon — no morning, no lunch.
         activities.push({
@@ -406,21 +739,21 @@ export class MockProvider implements LLMProvider {
           activity_type: "transport",
         });
         activities.push(
-          toActivity(pick(AFTERNOON, date + city), city, date + "a")
+          toActivity(pick(pools.afternoon, date + city), city, date + "a")
         );
-        activities.push(toActivity(pick(DINNER, date + city), city, date + "d"));
-        activities.push(toActivity(pick(EVENING, date + city), city, date + "e"));
+        activities.push(toActivity(pick(pools.dinner, date + city), city, date + "d"));
+        activities.push(toActivity(pick(pools.evening, date + city), city, date + "e"));
       } else {
         activities.push(
-          toActivity(pick(BREAKFAST, date + city), city, date + "b")
+          toActivity(pick(pools.breakfast, date + city), city, date + "b")
         );
-        activities.push(toActivity(pick(MORNING, date + city), city, date + "m"));
-        activities.push(toActivity(pick(LUNCH, date + city), city, date + "l"));
+        activities.push(toActivity(pick(pools.morning, date + city), city, date + "m"));
+        activities.push(toActivity(pick(pools.lunch, date + city), city, date + "l"));
         activities.push(
-          toActivity(pick(AFTERNOON, date + city), city, date + "a")
+          toActivity(pick(pools.afternoon, date + city), city, date + "a")
         );
-        activities.push(toActivity(pick(DINNER, date + city), city, date + "d"));
-        activities.push(toActivity(pick(EVENING, date + city), city, date + "e"));
+        activities.push(toActivity(pick(pools.dinner, date + city), city, date + "d"));
+        activities.push(toActivity(pick(pools.evening, date + city), city, date + "e"));
       }
 
       // The array order IS the schedule, so guarantee it is chronological.
@@ -428,15 +761,18 @@ export class MockProvider implements LLMProvider {
         .sort((a, b) => a.start_time.localeCompare(b.start_time))
         .slice(0, Math.max(perDay, isFirst || isLast || isTransfer ? 4 : perDay));
 
-      return {
+      const built: LLMItineraryDay = {
         date,
         city: shortCity(city),
         activities: ordered,
-        daily_cost: ordered.reduce(
-          (sum, a) => sum + (a.estimated_cost_usd ?? 0),
-          0
-        ),
+        daily_cost: 0,
       };
+      applyBudget(built, brief.daily_budget_usd);
+      built.daily_cost = ordered.reduce(
+        (sum, a) => sum + (a.estimated_cost_usd ?? 0),
+        0
+      );
+      return built;
     });
 
     const total = days.reduce((sum, d) => sum + (d.daily_cost ?? 0), 0);
@@ -449,9 +785,23 @@ export class MockProvider implements LLMProvider {
       total_cost_estimate: total,
       notes:
         note ??
-        `A ${dates.length}-day ${brief.pace ?? "moderate"}-paced plan${
-          cities.length > 1 ? ` across ${cities.join(" and ")}` : ""
-        }, built around food and walkable neighbourhoods. Generated in demo mode — no model was called.`,
+        [
+          `A ${dates.length}-day ${brief.pace ?? "moderate"}-paced plan`,
+          cities.length > 1 ? ` across ${cities.join(" and ")}` : "",
+          brief.daily_budget_usd
+            ? `, budgeted around $${brief.daily_budget_usd} a day`
+            : "",
+          brief.dietary_constraints?.length
+            ? `, ${brief.dietary_constraints.join(" and ")} throughout`
+            : "",
+          brief.accessibility_needs?.length
+            ? `, keeping ${brief.accessibility_needs.join(" and ")} in mind`
+            : "",
+          brief.vibe_keywords?.length
+            ? `, leaning ${brief.vibe_keywords.slice(0, 3).join(", ")}`
+            : "",
+          ". Generated in demo mode — no model was called.",
+        ].join(""),
       days,
     };
   }
