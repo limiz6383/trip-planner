@@ -20,6 +20,7 @@ import type {
   ReviseDayParams,
   DiscussItineraryParams,
 } from "./provider";
+import { findCityGuide } from "@/lib/mock/city-guides";
 import type {
   LLMItinerary,
   LLMItineraryDay,
@@ -160,23 +161,69 @@ function activityMatches(a: LLMActivity, name: string): boolean {
 }
 
 /**
- * Splices a ticked guide item into a day at a slot that suits its kind: a dish
- * lands at dinner, a spot mid-afternoon. If the day is already at the cap, the
- * lowest-value non-locked activity in that part of the day gives way — dropping
- * the traveller's explicit pick would be the worse failure.
+ * Where a ticked dish belongs in the day. A pastry is not a dinner, and a
+ * liqueur is not a lunch — slotting everything as "Dinner — X" reads as broken
+ * the moment someone ticks a custard tart.
+ */
+function foodSlot(name: string): {
+  time: string;
+  label: (n: string) => string;
+  hours: number;
+  cost: number;
+} {
+  const n = name.toLowerCase();
+
+  if (
+    /pastry|pastel|tart|doughnut|donut|croissant|bagel|simit|bread|bun|cake|torte|strudel|churro|baklava|gelato|ice|bingsu|sweet|biscuit|cantucci|loukoumades|yatsuhashi|trdelník|trdelnik/.test(n)
+  ) {
+    return {
+      time: "10:30",
+      label: (x) => `Coffee stop — ${x}`,
+      hours: 0.75,
+      cost: 8,
+    };
+  }
+
+  if (/breakfast|brunch/.test(n)) {
+    return { time: "08:30", label: (x) => `Breakfast — ${x}`, hours: 1, cost: 14 };
+  }
+
+  if (
+    /wine|beer|port|vermut|vermouth|liqueur|ginjinha|souma|coffee|melange|radler|pilsner|mezcal|tea|aperitif|raki|soju/.test(n)
+  ) {
+    return {
+      time: "18:00",
+      label: (x) => `Drinks — ${x}`,
+      hours: 1,
+      cost: 16,
+    };
+  }
+
+  if (/sandwich|bifana|snack|street|simit|elote|esquites|supplì|suppli|taco|slice|skewer|kebab|souvlaki|lampredotto|bocadillo/.test(n)) {
+    return { time: "13:00", label: (x) => `Lunch — ${x}`, hours: 1, cost: 18 };
+  }
+
+  return { time: "19:30", label: (x) => `Dinner — ${x}`, hours: 1.5, cost: 34 };
+}
+
+/**
+ * Splices a ticked guide item into a day at a slot that suits it: a dish lands
+ * at the right time of day for what it actually is, a spot mid-afternoon. If
+ * the day is already at the cap, the lowest-value non-locked activity gives way
+ * — dropping the traveller's explicit pick would be the worse failure.
  */
 function insertPick(day: LLMItineraryDay, pick: GuidePick): void {
   const isFood = pick.kind === "food";
-  const slot = isFood ? "19:30" : "15:00";
+  const slot = isFood ? foodSlot(pick.name) : null;
 
   const activity: LLMActivity = {
-    name: isFood ? `Dinner — ${pick.name}` : `Visit ${pick.name}`,
+    name: slot ? slot.label(pick.name) : `Visit ${pick.name}`,
     description: isFood
-      ? `${pick.name}, the dish you picked from the guide.`
+      ? `${pick.name} — the dish you picked from the guide.`
       : `${pick.name} — added because you picked it from the guide.`,
-    start_time: slot,
-    estimated_time_hours: isFood ? 1.5 : 2,
-    estimated_cost_usd: isFood ? 34 : 16,
+    start_time: slot ? slot.time : "15:00",
+    estimated_time_hours: slot ? slot.hours : 2,
+    estimated_cost_usd: slot ? slot.cost : 16,
     place_name: pick.name,
     source_attribution: "Your picks",
     activity_type: isFood ? "food" : "culture",
@@ -584,6 +631,19 @@ export class MockProvider implements LLMProvider {
   ): Promise<DestinationGuide> {
     await pause(1200);
     const city = shortCity(destination);
+
+    // Real highlights for every city the demo's autocomplete offers. Falls back
+    // to a generic shape for anything else so an unknown destination still
+    // renders a usable guide rather than failing.
+    const curated = findCityGuide(destination);
+    if (curated) {
+      return {
+        destination,
+        known_for: curated.known_for,
+        top_spots: curated.top_spots,
+        must_try_foods: curated.must_try_foods,
+      };
+    }
 
     return {
       destination,
