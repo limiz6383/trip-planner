@@ -30,6 +30,7 @@ import type { ConversationMessage } from "@/lib/llm/provider";
 import type { LLMTripBrief } from "@/lib/types";
 import { createSupabaseServerClient } from "@/lib/db/server";
 import { getTripById, getBookingForTrip } from "@/lib/db/queries";
+import { isLLMConfigured } from "@/lib/llm/availability";
 
 // ---- request / response shapes (exported so the client component can import) ----
 
@@ -89,7 +90,7 @@ export async function POST(
 
   // Guard: ANTHROPIC_API_KEY must be present — fail with a clear 500 instead
   // of crashing the module at import time (the provider reads the key lazily).
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!isLLMConfigured()) {
     return Response.json(
       {
         error:

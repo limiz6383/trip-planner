@@ -10,6 +10,8 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import { IS_MOCK } from "@/lib/mock/flag";
+import { MockProvider } from "./mock-provider";
 import type { LLMItinerary, LLMActivity, LLMTripBrief, TripBrief, Booking, CommunityPost, Activity, DestinationGuide, PreferenceProfile, TripFlight, TripAccommodation } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -986,5 +988,11 @@ export class AnthropicProvider implements LLMProvider {
  * Default provider singleton.
  * The planner engine imports this rather than instantiating directly,
  * making it easy to swap providers in tests.
+ *
+ * In demo mode this resolves to MockProvider, so no Anthropic call is ever
+ * issued and no API key is required. Safe to evaluate at import time —
+ * AnthropicProvider reads the key lazily, inside getClient().
  */
-export const defaultProvider: LLMProvider = new AnthropicProvider();
+export const defaultProvider: LLMProvider = IS_MOCK
+  ? new MockProvider()
+  : new AnthropicProvider();

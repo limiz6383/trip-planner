@@ -31,6 +31,7 @@ import {
 } from "@/lib/db/queries";
 import { createPlannerEngine } from "@/lib/planner/engine";
 import type { Itinerary } from "@/lib/types";
+import { isLLMConfigured } from "@/lib/llm/availability";
 
 // ---- request / response shapes (exported so client components can import) ----
 
@@ -93,7 +94,7 @@ export async function POST(
   }
 
   // Guard: ANTHROPIC_API_KEY must be present — fail clearly instead of crashing
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!isLLMConfigured()) {
     return Response.json(
       {
         error:

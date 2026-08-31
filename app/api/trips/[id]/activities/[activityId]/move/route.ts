@@ -27,6 +27,7 @@ import {
   getDayById,
   getActivitiesForDay,
   appendChangeLogEntry,
+  moveActivityToDay,
 } from "@/lib/db/queries";
 import type { Activity } from "@/lib/types";
 
@@ -125,14 +126,12 @@ export async function POST(
         ? Math.max(...targetActivities.map((a) => a.sort_order)) + 1
         : 0;
 
-    const { data: movedRow, error: moveError } = await supabase
-      .from("activities")
-      .update({ day_id: targetDayId, sort_order: nextSortOrder })
-      .eq("activity_id", activityId)
-      .select()
-      .single();
-    if (moveError) throw moveError;
-    const moved = movedRow as Activity;
+    const moved = await moveActivityToDay(
+      supabase,
+      activityId,
+      targetDayId,
+      nextSortOrder
+    );
 
     try {
       await appendChangeLogEntry(

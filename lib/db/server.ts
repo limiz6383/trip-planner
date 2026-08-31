@@ -1,5 +1,31 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { IS_MOCK } from "@/lib/mock/flag";
+
+/**
+ * Inert stand-in returned in demo mode. The demo query layer ignores its
+ * client argument entirely, so this only needs to satisfy the type and fail
+ * loudly if anything ever tries to issue a real query through it.
+ */
+function mockClient() {
+  return new Proxy(
+    {},
+    {
+      get(_t, prop) {
+        // `await` probes for `.then` to decide whether this is a thenable, and
+        // various runtime internals probe for symbols. Report "absent" for
+        // those rather than throwing, or awaiting the client itself explodes.
+        if (typeof prop === "symbol") return undefined;
+        if (prop === "then" || prop === "catch" || prop === "finally") {
+          return undefined;
+        }
+        throw new Error(
+          `[demo] Supabase is not available in demo mode (tried to access "${String(prop)}").`
+        );
+      },
+    }
+  ) as unknown as ReturnType<typeof createServerClient>;
+}
 
 /**
  * Server-side Supabase client using the anon key + cookie-based session.
@@ -15,6 +41,8 @@ import { cookies } from "next/headers";
  * succeeds without real credentials in place.
  */
 export async function createSupabaseServerClient() {
+  if (IS_MOCK) return mockClient();
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -65,6 +93,8 @@ export async function createSupabaseServerClient() {
  * Never expose this client to the browser or include it in Client Components.
  */
 export function createSupabaseServiceClient() {
+  if (IS_MOCK) return mockClient();
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 

@@ -20,6 +20,7 @@ import {
 } from "@/lib/db/queries";
 import { createPlannerEngine } from "@/lib/planner/engine";
 import type { DestinationGuide } from "@/lib/types";
+import { isLLMConfigured } from "@/lib/llm/availability";
 
 export interface ChatMessage {
   role: "user" | "assistant";
@@ -94,7 +95,7 @@ export async function POST(
     });
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!isLLMConfigured()) {
     return Response.json(
       { error: "ANTHROPIC_API_KEY is not configured on the server." } satisfies ChatErrorBody,
       { status: 500 }

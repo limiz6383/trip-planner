@@ -1,4 +1,6 @@
 import type { NextRequest } from "next/server";
+import { IS_MOCK } from "@/lib/mock/flag";
+import { searchPlaces } from "@/lib/mock/places";
 
 // Shape returned to the client for each autocomplete suggestion.
 export interface GeocodeResult {
@@ -56,6 +58,11 @@ export async function GET(request: NextRequest) {
 
   if (q.trim().length < 2) {
     return Response.json([] satisfies GeocodeResult[]);
+  }
+
+  // Demo mode: serve suggestions from a local list instead of calling Photon.
+  if (IS_MOCK) {
+    return Response.json(searchPlaces(q) satisfies GeocodeResult[]);
   }
 
   const url =

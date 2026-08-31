@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/db/server";
+import { IS_MOCK } from "@/lib/mock/flag";
 
 export type AuthActionState = { error?: string } | undefined;
 
@@ -90,6 +91,11 @@ export async function signInWithMagicLink(
 // ---------------------------------------------------------------------------
 
 export async function signOut() {
+  // Demo mode has no session to end, and /login just bounces back here.
+  if (IS_MOCK) {
+    redirect("/dashboard");
+  }
+
   const supabase = await createSupabaseServerClient();
   await supabase.auth.signOut();
   redirect("/login");
