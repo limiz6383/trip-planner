@@ -962,7 +962,11 @@ export async function getRevisionInstructions(
   const out: string[] = [];
   for (const row of (data ?? []) as { metadata: Record<string, unknown> | null }[]) {
     const md = row.metadata;
-    if (!md || md.kind === "tidy") continue;
+    // "tidy" is a system-issued cleanup. "picks" is a guide-selector rebuild:
+    // its instruction names the ticked items, so replaying it as a standing
+    // preference would contradict a later un-tick ("keep X" vs "remove X").
+    // Picks are already durable in metadata.include and restored from there.
+    if (!md || md.kind === "tidy" || md.kind === "picks") continue;
     const instr = md.instruction;
     if (typeof instr === "string" && instr.trim()) {
       const t = instr.trim();

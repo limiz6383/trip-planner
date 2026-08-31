@@ -35,6 +35,7 @@ import type {
   TripLeg,
   TripFlight,
   TripAccommodation,
+  GuidePick,
 } from "@/lib/types";
 import type { ContentSource } from "@/lib/retrieval/source";
 import type { LLMProvider } from "@/lib/llm/provider";
@@ -111,6 +112,10 @@ export interface ReviseItineraryInput {
   instruction: string;
   /** Earlier revision asks to keep honoring. */
   standingPreferences?: string[];
+  /** Guide items the traveller ticked — each must appear in the result. */
+  mustInclude?: GuidePick[];
+  /** Guide items the traveller un-ticked — none may appear in the result. */
+  mustExclude?: GuidePick[];
   booking?: Booking | null;
   /**
    * ISO date (YYYY-MM-DD) for today. When provided, past days are preserved in
@@ -140,6 +145,10 @@ export interface ReviseDayInput {
   instruction: string;
   /** Earlier revision asks to keep honoring. */
   standingPreferences?: string[];
+  /** Guide items the traveller ticked — each must appear in the result. */
+  mustInclude?: GuidePick[];
+  /** Guide items the traveller un-ticked — none may appear in the result. */
+  mustExclude?: GuidePick[];
   booking?: Booking | null;
 }
 
@@ -281,7 +290,7 @@ export class PlannerEngine {
    * (which creates a new version via createItineraryFromLLMOutput).
    */
   async reviseItinerary(input: ReviseItineraryInput): Promise<LLMItinerary> {
-    const { brief, currentItinerary, instruction, booking, currentDate, standingPreferences } = input;
+    const { brief, currentItinerary, instruction, booking, currentDate, standingPreferences, mustInclude, mustExclude } = input;
 
     const posts = await this.source.fetchForDestination(brief.destination, {
       limit: 200,
@@ -302,6 +311,8 @@ export class PlannerEngine {
       currentItinerary: hydratedItineraryToLLM(brief, currentItinerary),
       instruction,
       standingPreferences,
+      mustInclude,
+      mustExclude,
     });
 
     // Deterministically guarantee locked content survives regardless of model

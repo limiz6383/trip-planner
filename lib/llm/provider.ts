@@ -12,7 +12,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { IS_MOCK } from "@/lib/mock/flag";
 import { MockProvider } from "./mock-provider";
-import type { LLMItinerary, LLMActivity, LLMTripBrief, TripBrief, Booking, CommunityPost, Activity, DestinationGuide, PreferenceProfile, TripFlight, TripAccommodation } from "@/lib/types";
+import type { LLMItinerary, LLMActivity, LLMTripBrief, TripBrief, Booking, CommunityPost, Activity, DestinationGuide, GuidePick, PreferenceProfile, TripFlight, TripAccommodation } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -138,6 +138,17 @@ export interface ReviseItineraryParams {
   instruction: string;
   /** Earlier revision asks to keep honoring unless the current one overrides. */
   standingPreferences?: string[];
+  /**
+   * Named spots/dishes the traveller ticked in the destination guide. Each MUST
+   * appear in the revised plan. Stronger than the free-text instruction: these
+   * are explicit picks, not a hint.
+   */
+  mustInclude?: GuidePick[];
+  /**
+   * Named spots/dishes the traveller un-ticked. Each must NOT appear in the
+   * revised plan unless it is locked.
+   */
+  mustExclude?: GuidePick[];
 }
 
 /**
@@ -296,9 +307,20 @@ You will receive:
 - The current itinerary (day-by-day with activities)
 - A revision instruction from the user (e.g. "make it cheaper", "more outdoorsy", "less walking on day 2")
 - standing_preferences: things the traveller asked for in EARLIER revisions
+- must_include: named spots/dishes the traveller explicitly ticked in the destination guide
+- must_exclude: named spots/dishes the traveller explicitly un-ticked
 - Community-sourced place recommendations
 
 Your job is to apply the instruction to produce a revised itinerary. Rules:
+
+0. MUST_INCLUDE AND MUST_EXCLUDE ARE THE STRONGEST SIGNAL. Every entry in
+   must_include has to appear in the result as a real activity on a sensible day
+   — a dish becomes a meal (activity_type "food") at the right time of day, a
+   spot becomes a visit in a morning or afternoon slot. Name it so it is
+   recognisable (e.g. "Dinner at Lokál — svíčková"). If a day is already full,
+   replace a lower-priority non-locked activity rather than dropping the ask.
+   Nothing in must_exclude may appear anywhere in the result unless it is locked.
+   Where these conflict with the free-text instruction, these win.
 1. Apply the instruction purposefully — change what the user asked to change. When the instruction asks to ADD specific places, dishes, or activities, you MUST include them in the result on suitable days — even if a day is already busy (you may exceed the usual per-day count or replace a lower-priority, non-locked activity). NEVER silently omit something the user explicitly asked to add.
 2. STANDING PREFERENCES ARE STICKY. Everything in standing_preferences was explicitly requested earlier and must still hold in your result. Do NOT undo or compromise an earlier request while satisfying the new one — only drop a standing preference if the current instruction directly contradicts it. (e.g. if they earlier asked to add a specific restaurant, keep it when they later say "make it cheaper".)
 3. Keep what the user did NOT ask to change where reasonable; preserve good activities that are unaffected by the instruction.
@@ -743,6 +765,14 @@ export class AnthropicProvider implements LLMProvider {
       current_itinerary: params.currentItinerary,
       revision_instruction: params.instruction,
       standing_preferences: params.standingPreferences ?? [],
+      // Omit when empty so the prompt is unchanged for revisions that do not
+      // come from the guide picker.
+      ...(params.mustInclude && params.mustInclude.length > 0
+        ? { must_include: params.mustInclude }
+        : {}),
+      ...(params.mustExclude && params.mustExclude.length > 0
+        ? { must_exclude: params.mustExclude }
+        : {}),
       community_posts: params.rankedPosts.slice(0, 30),
       ...(params.booking ? { booking: params.booking } : {}),
     });
