@@ -38,7 +38,19 @@ Without this, friends' sign-up / login / email confirmation will fail.
 Your Supabase already has these applied. For a **fresh** Supabase project, run
 the SQL in `supabase/migrations/` in order (SQL editor):
 `0001_init.sql` → `0002` airports* → `0003` sort_order → `0004` start_time →
-`0005` destination_guide. (Plus the `supabase/fix_*.sql` constraints.)
+`0005` destination_guide → `0006` trip_legs → `0007` flights_accommodations.
+(Plus the `supabase/fix_*.sql` constraints.)
+
+## Deploying the demo instead (no keys, no cost)
+
+To share a link that costs nothing and cannot break when Supabase sleeps, set
+`NEXT_PUBLIC_MOCK_MODE=1` in the Vercel environment variables and leave every
+other variable unset. The build is self-contained — no database, no Anthropic
+key, no signup — so there is nothing to keep warm and nothing to bill.
+
+Note that demo writes are per-instance and in-memory, so a visitor's changes do
+not survive across serverless instances. That is fine for a walkthrough; do not
+present it as persistence.
 
 ## ⚠️ Cost — read before sharing widely
 Every itinerary **generate / revise / day-revise / activity-revise / chat /

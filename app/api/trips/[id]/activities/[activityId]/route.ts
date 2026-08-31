@@ -28,7 +28,12 @@
 import type { NextRequest } from "next/server";
 import { getUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/db/server";
-import { appendChangeLogEntry } from "@/lib/db/queries";
+import {
+  appendChangeLogEntry,
+  getActivityById,
+  updateActivityFields,
+  deleteActivity,
+} from "@/lib/db/queries";
 import type { Activity, ActivityType } from "@/lib/types";
 
 // ---- request / response shapes ----
@@ -103,32 +108,13 @@ export async function PATCH(
     const supabase = await createSupabaseServerClient();
 
     // --- 1. Fetch current row (RLS ensures the user can access this activity) ---
-    const { data: currentRow, error: fetchError } = await supabase
-      .from("activities")
-      .select("*")
-      .eq("activity_id", activityId)
-      .single();
-
-    if (fetchError) {
-      if (fetchError.code === "PGRST116") {
-        return Response.json({ error: "Activity not found" } satisfies PatchActivityErrorBody, { status: 404 });
-      }
-      throw fetchError;
+    const before = await getActivityById(supabase, activityId);
+    if (!before) {
+      return Response.json({ error: "Activity not found" } satisfies PatchActivityErrorBody, { status: 404 });
     }
 
-    const before = currentRow as Activity;
-
     // --- 2. Apply the update ---
-    const { data: updatedRow, error: updateError } = await supabase
-      .from("activities")
-      .update(patch)
-      .eq("activity_id", activityId)
-      .select()
-      .single();
-
-    if (updateError) throw updateError;
-
-    const after = updatedRow as Activity;
+    const after = await updateActivityFields(supabase, activityId, patch);
 
     // --- 3. Build before/after snapshots — only changed fields ---
     const beforeSnapshot: Record<string, unknown> = {};
@@ -208,28 +194,15 @@ export async function DELETE(
     const supabase = await createSupabaseServerClient();
 
     // Fetch first so we can log what was removed (RLS gates access).
-    const { data: row, error: fetchError } = await supabase
-      .from("activities")
-      .select("*")
-      .eq("activity_id", activityId)
-      .single();
-
-    if (fetchError) {
-      if (fetchError.code === "PGRST116") {
-        return Response.json(
-          { error: "Activity not found" } satisfies DeleteActivityErrorBody,
-          { status: 404 }
-        );
-      }
-      throw fetchError;
+    const activity = await getActivityById(supabase, activityId);
+    if (!activity) {
+      return Response.json(
+        { error: "Activity not found" } satisfies DeleteActivityErrorBody,
+        { status: 404 }
+      );
     }
-    const activity = row as Activity;
 
-    const { error: delError } = await supabase
-      .from("activities")
-      .delete()
-      .eq("activity_id", activityId);
-    if (delError) throw delError;
+    await deleteActivity(supabase, activityId);
 
     try {
       await appendChangeLogEntry(

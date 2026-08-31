@@ -1,5 +1,6 @@
 import { requireUser } from "@/lib/auth";
 import { AppNav } from "@/components/AppNav";
+import { DemoBanner } from "@/components/DemoBanner";
 
 // Authenticated routes depend on the user's session (cookies) and must never be
 // statically prerendered at build time — doing so would run client code (the
@@ -21,6 +22,7 @@ export default async function AppLayout({
 
   return (
     <div className="flex min-h-svh flex-col bg-zinc-50">
+      <DemoBanner />
       <AppNav userEmail={user.email ?? ""} />
       <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-6">
         {children}

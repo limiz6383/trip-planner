@@ -33,6 +33,7 @@ import {
 } from "@/lib/db/queries";
 import { createPlannerEngine } from "@/lib/planner/engine";
 import type { Activity } from "@/lib/types";
+import { isLLMConfigured } from "@/lib/llm/availability";
 
 export interface ReviseDayRequestBody {
   instruction: string;
@@ -84,7 +85,7 @@ export async function POST(
     );
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!isLLMConfigured()) {
     return Response.json(
       {
         error:

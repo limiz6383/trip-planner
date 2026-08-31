@@ -22,7 +22,10 @@
 import type { NextRequest } from "next/server";
 import { getUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/db/server";
-import { getActivitiesForDay } from "@/lib/db/queries";
+import {
+  getActivitiesForDay,
+  setActivityStartTime,
+} from "@/lib/db/queries";
 import type { Activity } from "@/lib/types";
 
 export interface RescheduleRequestBody {
@@ -81,12 +84,7 @@ export async function PATCH(
     // be retimed. RLS additionally gates on trip ownership/collaboration.
     for (const u of body.updates) {
       if (!u || typeof u.activity_id !== "string") continue;
-      const { error } = await supabase
-        .from("activities")
-        .update({ start_time: u.start_time || null })
-        .eq("activity_id", u.activity_id)
-        .eq("day_id", dayId);
-      if (error) throw error;
+      await setActivityStartTime(supabase, u.activity_id, dayId, u.start_time);
     }
 
     const activities = await getActivitiesForDay(supabase, dayId);

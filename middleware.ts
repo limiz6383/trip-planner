@@ -12,8 +12,22 @@
 
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { IS_MOCK } from "@/lib/mock/flag";
 
 export async function middleware(request: NextRequest) {
+  // Demo mode has no session to refresh and no auth service to reach. Checked
+  // before the env-var guard below, because a developer running the demo on
+  // their own machine still has a populated .env.local.
+  if (IS_MOCK) {
+    const { pathname } = request.nextUrl;
+    // The demo is always authenticated, so the login/signup pages would be a
+    // dead end — send visitors straight into the product.
+    if (pathname === "/login" || pathname === "/signup") {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
+    return NextResponse.next();
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 

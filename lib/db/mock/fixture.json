@@ -1,0 +1,1701 @@
+{
+ "demo_user_id": "00000000-0000-4000-8000-000000000001",
+ "trips": [
+  {
+   "trip_id": "52979ee0-af40-4777-93b6-6f9f707559f7",
+   "owner_id": "00000000-0000-4000-8000-000000000001",
+   "title": "greece 2026",
+   "destination": "Paros Municipality \u2192 Athens",
+   "start_date": "2026-08-24",
+   "end_date": "2026-08-29",
+   "status": "planned",
+   "created_at": "2026-06-12T20:12:04.568605+00:00",
+   "updated_at": "2026-06-12T20:12:04.568605+00:00",
+   "archived": false,
+   "destination_guide": null
+  }
+ ],
+ "trip_legs": [
+  {
+   "leg_id": "cb5cf3de-5447-48b8-859f-4cfc5ae1d903",
+   "trip_id": "52979ee0-af40-4777-93b6-6f9f707559f7",
+   "city": "Paros Municipality, Aegean, Greece",
+   "arrival_date": "2026-08-24",
+   "departure_date": "2026-08-27",
+   "leg_order": 0,
+   "destination_guide": {
+    "known_for": "Paros is a quintessential Cycladic island renowned for its pristine white-washed villages, golden beaches, and traditional charm without the overwhelming crowds of Santorini or Mykonos. The island has been famous since antiquity for its fine marble, used in classical masterpieces like the Venus de Milo. Today it attracts travelers seeking authentic Greek island life, excellent windsurfing conditions, and picturesque harbors lined with fishing boats and waterfront tavernas.",
+    "top_spots": [
+     {
+      "why": "Charming fishing village with a scenic Venetian harbor, cobblestone streets, excellent tavernas, and vibrant nightlife",
+      "name": "Naoussa"
+     },
+     {
+      "why": "The island's capital and port, featuring the historic Panagia Ekatontapiliani church, windmill-dotted waterfront, and lively Old Town",
+      "name": "Parikia"
+     },
+     {
+      "why": "Beautiful mountain village with traditional Cycladic architecture, marble-paved streets, and the Byzantine Trail hiking route",
+      "name": "Lefkes"
+     },
+     {
+      "why": "Stunning beach famous for its unique granite rock formations sculpted by wind and waves into smooth, rounded shapes",
+      "name": "Kolymbithres Beach"
+     },
+     {
+      "why": "Long sandy beach on the east coast, considered one of Europe's best windsurfing and kitesurfing destinations",
+      "name": "Golden Beach (Chrissi Akti)"
+     },
+     {
+      "why": "Small island day trip accessible by quick ferry, known for its impressive stalactite cave and laid-back village atmosphere",
+      "name": "Antiparos"
+     },
+     {
+      "why": "Lush green valley that attracts thousands of butterflies in summer, offering peaceful walking trails away from beaches",
+      "name": "Butterfly Valley"
+     },
+     {
+      "why": "Ancient marble quarries dating to classical antiquity, where the famous Parian marble was extracted for Greek sculptures",
+      "name": "Marathi Marble Quarries"
+     }
+    ],
+    "destination": "Paros Municipality, Aegean, Greece",
+    "must_try_foods": [
+     {
+      "why": "Sun-dried mackerel unique to Paros, traditionally grilled or fried and served with lemon",
+      "name": "Gouna"
+     },
+     {
+      "why": "Local delicacy cooked in tomato sauce or simply with olive oil and vinegar, especially popular in summer",
+      "name": "Karavoli (Snails)"
+     },
+     {
+      "why": "Spicy, creamy fermented cheese made from cow or goat milk, a Cycladic specialty perfect with bread",
+      "name": "Kopanisti cheese"
+     },
+     {
+      "why": "Slow-cooked chickpea stew traditionally prepared overnight in wood ovens, served on Sundays",
+      "name": "Revithada"
+     },
+     {
+      "why": "Grilled octopus caught locally, often hung to dry outside tavernas before being charcoal-grilled and served with lemon",
+      "name": "Fresh octopus"
+     },
+     {
+      "why": "Local wines from Paros vineyards, particularly the indigenous Monemvasia grape variety grown on the island",
+      "name": "Mostra Estate wine"
+     },
+     {
+      "why": "Traditional grape-based spirit similar to tsikoudia or grappa, often served as a complimentary digestif after meals",
+      "name": "Souma"
+     },
+     {
+      "why": "Variety of small plates featuring anchovies, gavros, fresh sardines, and local catch at harbor-side tavernas",
+      "name": "Seafood mezze"
+     }
+    ]
+   },
+   "created_at": "2026-06-12T20:12:04.833482+00:00",
+   "updated_at": "2026-06-12T20:20:03.761096+00:00"
+  },
+  {
+   "leg_id": "26fe1dc6-b5bf-46e6-a3d4-d1c9e975af33",
+   "trip_id": "52979ee0-af40-4777-93b6-6f9f707559f7",
+   "city": "Athens, Attica, Greece",
+   "arrival_date": "2026-08-27",
+   "departure_date": "2026-08-29",
+   "leg_order": 1,
+   "destination_guide": {
+    "known_for": "Athens is the cradle of Western civilization and democracy, dominated by the iconic Acropolis that towers over the sprawling cityscape. This ancient metropolis seamlessly blends 3,000+ years of history with vibrant modern energy\u2014buzzing tavernas, street art districts, rooftop bars with temple views, and locals who live passionately in every moment.",
+    "top_spots": [
+     {
+      "why": "The ultimate symbol of ancient Greece and classical architecture, commanding views over Athens that make the early morning climb worthwhile.",
+      "name": "Acropolis & Parthenon"
+     },
+     {
+      "why": "World-class modern museum housing the Parthenon sculptures and treasures found on the sacred rock, with glass floors revealing archaeological excavations below.",
+      "name": "Acropolis Museum"
+     },
+     {
+      "why": "The atmospheric old neighbourhood beneath the Acropolis with labyrinthine streets, neoclassical houses, family tavernas, and souvenir shops that capture traditional Athens charm.",
+      "name": "Plaka"
+     },
+     {
+      "why": "Where Socrates debated and democracy was born\u2014explore the well-preserved Temple of Hephaestus and imagine ancient Athenian civic life.",
+      "name": "Ancient Agora"
+     },
+     {
+      "why": "Greece's greatest collection of ancient artifacts spanning millennia, including the Mask of Agamemnon and stunning Cycladic figurines.",
+      "name": "National Archaeological Museum"
+     },
+     {
+      "why": "Bustling square perfect for people-watching, bargain hunting through antiques and souvenirs, with panoramic Acropolis views from rooftop caf\u00e9s.",
+      "name": "Monastiraki & Flea Market"
+     },
+     {
+      "why": "Athens' highest point offering 360-degree sunset panoramas over the city, the Aegean, and surrounding mountains\u2014accessible by funicular or scenic hike.",
+      "name": "Mount Lycabettus"
+     },
+     {
+      "why": "Massive ancient temple columns and the marble stadium where the first modern Olympics were held in 1896, both easy walks from central Athens.",
+      "name": "Temple of Olympian Zeus & Panathenaic Stadium"
+     },
+     {
+      "why": "Dramatic clifftop Temple of Poseidon 70km from Athens where Lord Byron carved his name\u2014stunning sunset spot overlooking the Aegean Sea.",
+      "name": "Cape Sounion (Day Trip)"
+     }
+    ],
+    "destination": "Athens, Attica, Greece",
+    "must_try_foods": [
+     {
+      "why": "Athens' ultimate street food\u2014skewered grilled pork or chicken in warm pita with tomatoes, onions, fries, and tangy tzatziki.",
+      "name": "Souvlaki"
+     },
+     {
+      "why": "Layers of spiced ground meat, eggplant, and creamy b\u00e9chamel baked until golden\u2014Greek comfort food at its finest.",
+      "name": "Moussaka"
+     },
+     {
+      "why": "Tomatoes, cucumbers, olives, onions, and thick slabs of feta drizzled with olive oil\u2014deceptively simple yet perfectly balanced.",
+      "name": "Greek Salad (Horiatiki)"
+     },
+     {
+      "why": "Flaky phyllo pastry stuffed with spinach, feta, and herbs\u2014found in every bakery and perfect for on-the-go snacking.",
+      "name": "Spanakopita"
+     },
+     {
+      "why": "Sesame-crusted bread rings sold by street vendors throughout Athens\u2014the traditional breakfast grab locals swear by.",
+      "name": "Koulouri"
+     },
+     {
+      "why": "Fluffy deep-fried dough balls drenched in honey and sprinkled with cinnamon or walnuts\u2014Athens' ancient answer to doughnuts.",
+      "name": "Loukoumades"
+     },
+     {
+      "why": "Vertical spit-roasted meat shaved into pita with all the fixings\u2014cheaper and faster than souvlaki but equally beloved.",
+      "name": "Gyros"
+     },
+     {
+      "why": "The anise-flavoured spirit served with small plates of octopus, fava, taramosalata, and olives embodies Athens' social dining culture.",
+      "name": "Ouzo & Mezze"
+     }
+    ]
+   },
+   "created_at": "2026-06-12T20:12:04.833482+00:00",
+   "updated_at": "2026-06-12T20:20:24.695742+00:00"
+  }
+ ],
+ "trip_briefs": [
+  {
+   "brief_id": "9ef9941e-7c91-492c-aa08-b441a881986e",
+   "trip_id": "52979ee0-af40-4777-93b6-6f9f707559f7",
+   "destination": "Paros Municipality \u2192 Athens",
+   "start_date": "2026-08-24",
+   "end_date": "2026-08-29",
+   "daily_budget_usd": 150.0,
+   "vibe_keywords": [
+    "history",
+    "foodie",
+    "nightlife",
+    "authentic local experiences"
+   ],
+   "party_composition": {
+    "adults": 3
+   },
+   "local_touristy_dial": 0.5,
+   "dietary_constraints": [],
+   "accessibility_needs": [],
+   "pace": "fast",
+   "created_at": "2026-06-12T20:18:40.499015+00:00",
+   "updated_at": "2026-06-12T20:18:40.499015+00:00"
+  }
+ ],
+ "itineraries": [
+  {
+   "itinerary_id": "f2f9cc37-7be0-4039-8394-f5b93894988b",
+   "trip_id": "52979ee0-af40-4777-93b6-6f9f707559f7",
+   "version": 1,
+   "is_current": true,
+   "status": "proposed",
+   "proposed_reason": null,
+   "total_cost_estimate": 2460.0,
+   "notes": "A fast-paced 6-day journey across two Greek destinations. Day 1 begins with evening arrival in Paros (19:25), allowing only dinner. Days 2-3 explore Paros's beaches, villages, and local tavernas. Day 4 features morning ferry to Athens with afternoon exploration. Days 5-6 immerse in Athens's ancient history, vibrant food scene, and nightlife. Early departure on Day 6 (09:00) limits morning activities. Budget: $150/day \u00d7 6 days \u00d7 3 adults = $2,700 total; itinerary estimates $2,460 (~$137/person/day) leaving room for spontaneity.",
+   "created_at": "2026-06-12T20:19:40.429686+00:00",
+   "updated_at": "2026-06-12T20:19:40.429686+00:00"
+  }
+ ],
+ "itinerary_days": [
+  {
+   "day_id": "aa054c22-9fdc-4594-80a0-d37e8e9589cf",
+   "itinerary_id": "f2f9cc37-7be0-4039-8394-f5b93894988b",
+   "date": "2026-08-24",
+   "daily_cost": 120.0,
+   "locked": false,
+   "created_at": "2026-06-12T20:19:40.688118+00:00",
+   "leg_id": "cb5cf3de-5447-48b8-859f-4cfc5ae1d903"
+  },
+  {
+   "day_id": "b7753a5e-accd-40b0-a3d2-98e87f91c4be",
+   "itinerary_id": "f2f9cc37-7be0-4039-8394-f5b93894988b",
+   "date": "2026-08-25",
+   "daily_cost": 390.0,
+   "locked": false,
+   "created_at": "2026-06-12T20:19:40.934992+00:00",
+   "leg_id": "cb5cf3de-5447-48b8-859f-4cfc5ae1d903"
+  },
+  {
+   "day_id": "99f801ff-795a-4fe6-887d-503cf32a7a90",
+   "itinerary_id": "f2f9cc37-7be0-4039-8394-f5b93894988b",
+   "date": "2026-08-26",
+   "daily_cost": 420.0,
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.19355+00:00",
+   "leg_id": "cb5cf3de-5447-48b8-859f-4cfc5ae1d903"
+  },
+  {
+   "day_id": "84bd71d7-2e9f-4638-a57a-dbe56709d68f",
+   "itinerary_id": "f2f9cc37-7be0-4039-8394-f5b93894988b",
+   "date": "2026-08-27",
+   "daily_cost": 480.0,
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.47108+00:00",
+   "leg_id": "cb5cf3de-5447-48b8-859f-4cfc5ae1d903"
+  },
+  {
+   "day_id": "d07a004a-1563-44fc-80b2-c0ff80a3f7e2",
+   "itinerary_id": "f2f9cc37-7be0-4039-8394-f5b93894988b",
+   "date": "2026-08-28",
+   "daily_cost": 570.0,
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.720547+00:00",
+   "leg_id": "26fe1dc6-b5bf-46e6-a3d4-d1c9e975af33"
+  },
+  {
+   "day_id": "3b4d5572-861a-4a59-911d-9ad960dc30b8",
+   "itinerary_id": "f2f9cc37-7be0-4039-8394-f5b93894988b",
+   "date": "2026-08-29",
+   "daily_cost": 480.0,
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.963624+00:00",
+   "leg_id": "26fe1dc6-b5bf-46e6-a3d4-d1c9e975af33"
+  }
+ ],
+ "activities": [
+  {
+   "activity_id": "94d1a31e-ce82-4050-9b81-7cdc9f049ba3",
+   "day_id": "3b4d5572-861a-4a59-911d-9ad960dc30b8",
+   "name": "Breakfast at Hotel",
+   "description": "Quick breakfast before airport departure.",
+   "estimated_time_hours": 0.5,
+   "estimated_cost_usd": 45.0,
+   "place_name": "Athens",
+   "source_attribution": "",
+   "activity_type": "food",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:42.13854+00:00",
+   "sort_order": 0,
+   "start_time": "06:00:00"
+  },
+  {
+   "activity_id": "cef32738-cddd-4d3a-bd0c-a9f3c1e2a635",
+   "day_id": "aa054c22-9fdc-4594-80a0-d37e8e9589cf",
+   "name": "Arrival at Paros Airport",
+   "description": "Land at PAS airport and transfer to accommodation in Parikia.",
+   "estimated_time_hours": 0.5,
+   "estimated_cost_usd": 30.0,
+   "place_name": "Paros Airport",
+   "source_attribution": "",
+   "activity_type": "transport",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:40.815487+00:00",
+   "sort_order": 0,
+   "start_time": "19:25:00"
+  },
+  {
+   "activity_id": "c5b47c58-a9ae-4fbe-b1e1-3cf3a168b5f4",
+   "day_id": "99f801ff-795a-4fe6-887d-503cf32a7a90",
+   "name": "Breakfast at Bakery",
+   "description": "Fresh bougatsa and Greek coffee at Parikia bakery.",
+   "estimated_time_hours": 0.5,
+   "estimated_cost_usd": 30.0,
+   "place_name": "Parikia",
+   "source_attribution": "",
+   "activity_type": "food",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.352257+00:00",
+   "sort_order": 0,
+   "start_time": "08:00:00"
+  },
+  {
+   "activity_id": "1f63c47c-9932-4e7a-9081-52855e672f28",
+   "day_id": "84bd71d7-2e9f-4638-a57a-dbe56709d68f",
+   "name": "Breakfast at Hotel",
+   "description": "Quick continental breakfast before ferry departure.",
+   "estimated_time_hours": 0.5,
+   "estimated_cost_usd": 30.0,
+   "place_name": "Parikia",
+   "source_attribution": "",
+   "activity_type": "food",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.600474+00:00",
+   "sort_order": 0,
+   "start_time": "07:00:00"
+  },
+  {
+   "activity_id": "5aaee045-b40e-4ef0-bbbe-b2aea0c4118b",
+   "day_id": "d07a004a-1563-44fc-80b2-c0ff80a3f7e2",
+   "name": "Breakfast at Syntagma Caf\u00e9",
+   "description": "Greek coffee and koulouri at a caf\u00e9 near the Parliament.",
+   "estimated_time_hours": 1.0,
+   "estimated_cost_usd": 45.0,
+   "place_name": "Syntagma Square",
+   "source_attribution": "",
+   "activity_type": "food",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.845562+00:00",
+   "sort_order": 0,
+   "start_time": "08:00:00"
+  },
+  {
+   "activity_id": "c8f14040-83e9-479b-8dc4-3591312ac7da",
+   "day_id": "b7753a5e-accd-40b0-a3d2-98e87f91c4be",
+   "name": "Breakfast at Caf\u00e9",
+   "description": "Greek yogurt, honey, and fresh pastries at local caf\u00e9.",
+   "estimated_time_hours": 1.0,
+   "estimated_cost_usd": 45.0,
+   "place_name": "Parikia",
+   "source_attribution": "",
+   "activity_type": "food",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.06528+00:00",
+   "sort_order": 0,
+   "start_time": "08:00:00"
+  },
+  {
+   "activity_id": "0da6688b-e7b8-4990-9016-a908185d2c12",
+   "day_id": "aa054c22-9fdc-4594-80a0-d37e8e9589cf",
+   "name": "Check-in at Accommodation",
+   "description": "Settle into hotel or Airbnb in Parikia town.",
+   "estimated_time_hours": 0.5,
+   "estimated_cost_usd": 0.0,
+   "place_name": "Parikia",
+   "source_attribution": "",
+   "activity_type": "accommodation",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:40.815487+00:00",
+   "sort_order": 1,
+   "start_time": "20:00:00"
+  },
+  {
+   "activity_id": "1c5301a3-3c13-43c3-99aa-ddf7b65fa4fd",
+   "day_id": "3b4d5572-861a-4a59-911d-9ad960dc30b8",
+   "name": "Transfer to Athens Airport",
+   "description": "Taxi to Athens International Airport allowing 3 hours before flight.",
+   "estimated_time_hours": 1.0,
+   "estimated_cost_usd": 60.0,
+   "place_name": "Athens to Airport",
+   "source_attribution": "",
+   "activity_type": "transport",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:42.13854+00:00",
+   "sort_order": 1,
+   "start_time": "06:30:00"
+  },
+  {
+   "activity_id": "bb261b09-308f-4c3f-ba7f-a2615b5bf930",
+   "day_id": "84bd71d7-2e9f-4638-a57a-dbe56709d68f",
+   "name": "Ferry to Piraeus (Athens)",
+   "description": "High-speed ferry from Paros to Athens port, scenic 3-hour journey.",
+   "estimated_time_hours": 4.0,
+   "estimated_cost_usd": 180.0,
+   "place_name": "Paros to Piraeus",
+   "source_attribution": "",
+   "activity_type": "transport",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.600474+00:00",
+   "sort_order": 1,
+   "start_time": "08:00:00"
+  },
+  {
+   "activity_id": "80c28ce2-ab13-46a5-89f0-ae7b706daa26",
+   "day_id": "99f801ff-795a-4fe6-887d-503cf32a7a90",
+   "name": "Golden Beach Watersports",
+   "description": "Windsurfing or paddleboarding at one of Greece's top wind beaches.",
+   "estimated_time_hours": 3.0,
+   "estimated_cost_usd": 120.0,
+   "place_name": "Golden Beach (Chrysi Akti)",
+   "source_attribution": "",
+   "activity_type": "outdoor",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.352257+00:00",
+   "sort_order": 1,
+   "start_time": "09:00:00"
+  },
+  {
+   "activity_id": "7bd75ab0-5985-480d-87c1-cbbdc97acba2",
+   "day_id": "b7753a5e-accd-40b0-a3d2-98e87f91c4be",
+   "name": "Naoussa Village Exploration",
+   "description": "Wander the charming fishing village with whitewashed houses and harbor views.",
+   "estimated_time_hours": 2.0,
+   "estimated_cost_usd": 0.0,
+   "place_name": "Naoussa",
+   "source_attribution": "",
+   "activity_type": "culture",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.06528+00:00",
+   "sort_order": 1,
+   "start_time": "09:30:00"
+  },
+  {
+   "activity_id": "87e6b44f-8770-4261-93b5-ebadaa749796",
+   "day_id": "d07a004a-1563-44fc-80b2-c0ff80a3f7e2",
+   "name": "Changing of the Guard",
+   "description": "Watch the ceremonial Evzones guard change at Parliament.",
+   "estimated_time_hours": 0.5,
+   "estimated_cost_usd": 0.0,
+   "place_name": "Syntagma Square",
+   "source_attribution": "",
+   "activity_type": "culture",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.845562+00:00",
+   "sort_order": 1,
+   "start_time": "09:30:00"
+  },
+  {
+   "activity_id": "e485a858-4ce6-4b1f-8a0b-c104559eec94",
+   "day_id": "d07a004a-1563-44fc-80b2-c0ff80a3f7e2",
+   "name": "National Archaeological Museum",
+   "description": "Explore Greece's premier museum with treasures from antiquity.",
+   "estimated_time_hours": 2.5,
+   "estimated_cost_usd": 30.0,
+   "place_name": "National Archaeological Museum",
+   "source_attribution": "",
+   "activity_type": "culture",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.845562+00:00",
+   "sort_order": 2,
+   "start_time": "10:30:00"
+  },
+  {
+   "activity_id": "38c8b4b3-7113-46b9-b909-de9e36fce173",
+   "day_id": "3b4d5572-861a-4a59-911d-9ad960dc30b8",
+   "name": "Airport Check-in and Departure",
+   "description": "Check-in for 09:00 departure flight home.",
+   "estimated_time_hours": 1.5,
+   "estimated_cost_usd": 0.0,
+   "place_name": "Athens International Airport",
+   "source_attribution": "",
+   "activity_type": "transport",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:42.13854+00:00",
+   "sort_order": 2,
+   "start_time": "07:30:00"
+  },
+  {
+   "activity_id": "e8ed5d60-ffa7-45af-aab8-bb3851ae86ca",
+   "day_id": "99f801ff-795a-4fe6-887d-503cf32a7a90",
+   "name": "Lunch at Beachside Grill",
+   "description": "Souvlaki and tzatziki right on Golden Beach.",
+   "estimated_time_hours": 1.0,
+   "estimated_cost_usd": 75.0,
+   "place_name": "Golden Beach",
+   "source_attribution": "",
+   "activity_type": "food",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.352257+00:00",
+   "sort_order": 2,
+   "start_time": "12:30:00"
+  },
+  {
+   "activity_id": "9b3748ee-0d43-4b3c-821a-67f9850f6621",
+   "day_id": "aa054c22-9fdc-4594-80a0-d37e8e9589cf",
+   "name": "Dinner at Taverna",
+   "description": "Welcome dinner at a traditional waterfront taverna with fresh seafood.",
+   "estimated_time_hours": 2.0,
+   "estimated_cost_usd": 90.0,
+   "place_name": "Parikia Waterfront",
+   "source_attribution": "",
+   "activity_type": "food",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:40.815487+00:00",
+   "sort_order": 2,
+   "start_time": "21:00:00"
+  },
+  {
+   "activity_id": "8850573c-531a-44af-a94d-4083275a1188",
+   "day_id": "84bd71d7-2e9f-4638-a57a-dbe56709d68f",
+   "name": "Transfer to Athens Center",
+   "description": "Taxi or metro from Piraeus port to accommodation in central Athens.",
+   "estimated_time_hours": 0.5,
+   "estimated_cost_usd": 30.0,
+   "place_name": "Piraeus to Athens",
+   "source_attribution": "",
+   "activity_type": "transport",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.600474+00:00",
+   "sort_order": 2,
+   "start_time": "12:00:00"
+  },
+  {
+   "activity_id": "053272a0-b09e-4987-9126-35c94da262c5",
+   "day_id": "b7753a5e-accd-40b0-a3d2-98e87f91c4be",
+   "name": "Kolimbithres Beach",
+   "description": "Swim and relax at famous beach with unique granite rock formations.",
+   "estimated_time_hours": 2.5,
+   "estimated_cost_usd": 60.0,
+   "place_name": "Kolimbithres",
+   "source_attribution": "",
+   "activity_type": "outdoor",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.06528+00:00",
+   "sort_order": 2,
+   "start_time": "12:00:00"
+  },
+  {
+   "activity_id": "580d976e-cc2b-4c64-8652-d01eb7c56c73",
+   "day_id": "84bd71d7-2e9f-4638-a57a-dbe56709d68f",
+   "name": "Check-in and Refresh",
+   "description": "Settle into Athens hotel and freshen up.",
+   "estimated_time_hours": 0.5,
+   "estimated_cost_usd": 0.0,
+   "place_name": "Athens",
+   "source_attribution": "",
+   "activity_type": "accommodation",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.600474+00:00",
+   "sort_order": 3,
+   "start_time": "12:30:00"
+  },
+  {
+   "activity_id": "b53bcf73-6ad2-4896-ae5d-54d60cbf3159",
+   "day_id": "d07a004a-1563-44fc-80b2-c0ff80a3f7e2",
+   "name": "Lunch at Psiri Neighborhood",
+   "description": "Try traditional Greek pies and local dishes in trendy Psiri.",
+   "estimated_time_hours": 1.5,
+   "estimated_cost_usd": 90.0,
+   "place_name": "Psiri",
+   "source_attribution": "",
+   "activity_type": "food",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.845562+00:00",
+   "sort_order": 3,
+   "start_time": "13:30:00"
+  },
+  {
+   "activity_id": "bd0c3cd1-cad9-4ffc-854e-a68fb4c8a957",
+   "day_id": "b7753a5e-accd-40b0-a3d2-98e87f91c4be",
+   "name": "Lunch at Beach Taverna",
+   "description": "Grilled octopus and Greek salad with sea views.",
+   "estimated_time_hours": 1.5,
+   "estimated_cost_usd": 90.0,
+   "place_name": "Kolimbithres",
+   "source_attribution": "",
+   "activity_type": "food",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.06528+00:00",
+   "sort_order": 3,
+   "start_time": "14:30:00"
+  },
+  {
+   "activity_id": "cc589f66-d413-436e-bce9-eb80ccbd8565",
+   "day_id": "99f801ff-795a-4fe6-887d-503cf32a7a90",
+   "name": "Antiparos Island Day Trip",
+   "description": "Ferry to nearby Antiparos, explore the cave and quiet village.",
+   "estimated_time_hours": 3.5,
+   "estimated_cost_usd": 60.0,
+   "place_name": "Antiparos",
+   "source_attribution": "",
+   "activity_type": "outdoor",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.352257+00:00",
+   "sort_order": 3,
+   "start_time": "14:00:00"
+  },
+  {
+   "activity_id": "ee78401f-8926-46ab-9353-ba6c49bfc06b",
+   "day_id": "84bd71d7-2e9f-4638-a57a-dbe56709d68f",
+   "name": "Lunch at Central Market",
+   "description": "Explore Varvakios Agora for authentic street food and local flavors.",
+   "estimated_time_hours": 1.5,
+   "estimated_cost_usd": 60.0,
+   "place_name": "Varvakios Agora",
+   "source_attribution": "",
+   "activity_type": "food",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.600474+00:00",
+   "sort_order": 4,
+   "start_time": "13:30:00"
+  },
+  {
+   "activity_id": "8276a203-d9f7-4511-ad77-8c7c5c726b28",
+   "day_id": "99f801ff-795a-4fe6-887d-503cf32a7a90",
+   "name": "Shopping in Naoussa",
+   "description": "Browse local boutiques for jewelry, ceramics, and island crafts.",
+   "estimated_time_hours": 1.5,
+   "estimated_cost_usd": 0.0,
+   "place_name": "Naoussa",
+   "source_attribution": "",
+   "activity_type": "shopping",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.352257+00:00",
+   "sort_order": 4,
+   "start_time": "18:00:00"
+  },
+  {
+   "activity_id": "6265e0a4-30f3-4afe-b407-aec85bd958f2",
+   "day_id": "b7753a5e-accd-40b0-a3d2-98e87f91c4be",
+   "name": "Lefkes Mountain Village",
+   "description": "Visit Paros's most picturesque inland village with marble-paved alleys.",
+   "estimated_time_hours": 1.5,
+   "estimated_cost_usd": 0.0,
+   "place_name": "Lefkes",
+   "source_attribution": "",
+   "activity_type": "culture",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.06528+00:00",
+   "sort_order": 4,
+   "start_time": "16:30:00"
+  },
+  {
+   "activity_id": "c9cb1b1c-e333-4cb0-8acb-8e2615b9a8e5",
+   "day_id": "d07a004a-1563-44fc-80b2-c0ff80a3f7e2",
+   "name": "Ancient Agora Exploration",
+   "description": "Walk the marketplace where Socrates once debated, see Temple of Hephaestus.",
+   "estimated_time_hours": 2.0,
+   "estimated_cost_usd": 30.0,
+   "place_name": "Ancient Agora",
+   "source_attribution": "",
+   "activity_type": "culture",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.845562+00:00",
+   "sort_order": 4,
+   "start_time": "15:30:00"
+  },
+  {
+   "activity_id": "fbe20bd9-6561-4ae0-9475-f1cef53035fd",
+   "day_id": "84bd71d7-2e9f-4638-a57a-dbe56709d68f",
+   "name": "Acropolis and Parthenon",
+   "description": "Climb to Athens's iconic ancient citadel and marvel at the Parthenon.",
+   "estimated_time_hours": 2.5,
+   "estimated_cost_usd": 60.0,
+   "place_name": "Acropolis",
+   "source_attribution": "",
+   "activity_type": "culture",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.600474+00:00",
+   "sort_order": 5,
+   "start_time": "15:30:00"
+  },
+  {
+   "activity_id": "9c3fa8da-da61-4846-b2b4-6a273cd3c6a9",
+   "day_id": "99f801ff-795a-4fe6-887d-503cf32a7a90",
+   "name": "Dinner at Naoussa Harbor",
+   "description": "Fresh lobster pasta at a upscale taverna by the fishing boats.",
+   "estimated_time_hours": 2.0,
+   "estimated_cost_usd": 135.0,
+   "place_name": "Naoussa",
+   "source_attribution": "",
+   "activity_type": "food",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.352257+00:00",
+   "sort_order": 5,
+   "start_time": "20:00:00"
+  },
+  {
+   "activity_id": "ff4e6752-3bc1-47fc-a487-a9274de321ec",
+   "day_id": "b7753a5e-accd-40b0-a3d2-98e87f91c4be",
+   "name": "Panagia Ekatontapiliani Church",
+   "description": "Tour the historic 4th-century Byzantine church in Parikia.",
+   "estimated_time_hours": 1.0,
+   "estimated_cost_usd": 5.0,
+   "place_name": "Parikia",
+   "source_attribution": "",
+   "activity_type": "culture",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.06528+00:00",
+   "sort_order": 5,
+   "start_time": "18:30:00"
+  },
+  {
+   "activity_id": "8dfc267c-5f99-4ee0-a151-55564780c3d9",
+   "day_id": "d07a004a-1563-44fc-80b2-c0ff80a3f7e2",
+   "name": "Monastiraki Flea Market",
+   "description": "Shop for souvenirs, antiques, and local crafts in Athens's famous bazaar.",
+   "estimated_time_hours": 1.5,
+   "estimated_cost_usd": 60.0,
+   "place_name": "Monastiraki",
+   "source_attribution": "",
+   "activity_type": "shopping",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.845562+00:00",
+   "sort_order": 5,
+   "start_time": "17:45:00"
+  },
+  {
+   "activity_id": "be3aca13-2b13-46c8-b412-392d6594a368",
+   "day_id": "d07a004a-1563-44fc-80b2-c0ff80a3f7e2",
+   "name": "Dinner at Rooftop Restaurant",
+   "description": "Modern Greek cuisine with panoramic Acropolis views.",
+   "estimated_time_hours": 2.0,
+   "estimated_cost_usd": 150.0,
+   "place_name": "Thissio",
+   "source_attribution": "",
+   "activity_type": "food",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.845562+00:00",
+   "sort_order": 6,
+   "start_time": "19:30:00"
+  },
+  {
+   "activity_id": "f1137e83-b58f-4eff-85f9-9be25c99a400",
+   "day_id": "b7753a5e-accd-40b0-a3d2-98e87f91c4be",
+   "name": "Dinner at Traditional Restaurant",
+   "description": "Moussaka and local wine at a family-run spot in Parikia.",
+   "estimated_time_hours": 2.0,
+   "estimated_cost_usd": 105.0,
+   "place_name": "Parikia",
+   "source_attribution": "",
+   "activity_type": "food",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.06528+00:00",
+   "sort_order": 6,
+   "start_time": "20:00:00"
+  },
+  {
+   "activity_id": "ce2d5bf0-a851-4b3c-846f-281f73a90208",
+   "day_id": "84bd71d7-2e9f-4638-a57a-dbe56709d68f",
+   "name": "Plaka Neighborhood Stroll",
+   "description": "Wander the old quarter's narrow streets with neoclassical architecture.",
+   "estimated_time_hours": 1.0,
+   "estimated_cost_usd": 0.0,
+   "place_name": "Plaka",
+   "source_attribution": "",
+   "activity_type": "culture",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.600474+00:00",
+   "sort_order": 6,
+   "start_time": "18:30:00"
+  },
+  {
+   "activity_id": "4e919582-d131-4b0a-b8ef-f1bdadc48552",
+   "day_id": "b7753a5e-accd-40b0-a3d2-98e87f91c4be",
+   "name": "Cocktails at Parikia Harbor",
+   "description": "Late-night drinks at a lively waterfront bar with island atmosphere.",
+   "estimated_time_hours": 1.5,
+   "estimated_cost_usd": 85.0,
+   "place_name": "Parikia",
+   "source_attribution": "",
+   "activity_type": "entertainment",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.06528+00:00",
+   "sort_order": 7,
+   "start_time": "22:30:00"
+  },
+  {
+   "activity_id": "778e24e9-2de5-4425-9298-9144f2710a56",
+   "day_id": "84bd71d7-2e9f-4638-a57a-dbe56709d68f",
+   "name": "Dinner at Plaka Taverna",
+   "description": "Mezze platter and grilled meats under the Acropolis lights.",
+   "estimated_time_hours": 2.0,
+   "estimated_cost_usd": 120.0,
+   "place_name": "Plaka",
+   "source_attribution": "",
+   "activity_type": "food",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.600474+00:00",
+   "sort_order": 7,
+   "start_time": "20:00:00"
+  },
+  {
+   "activity_id": "07b164e0-b347-477d-bc15-f593ea2e9c03",
+   "day_id": "d07a004a-1563-44fc-80b2-c0ff80a3f7e2",
+   "name": "Gazi Nightlife District",
+   "description": "Bar-hopping and live music in Athens's vibrant nightlife hub.",
+   "estimated_time_hours": 2.5,
+   "estimated_cost_usd": 165.0,
+   "place_name": "Gazi",
+   "source_attribution": "",
+   "activity_type": "entertainment",
+   "locked": false,
+   "created_at": "2026-06-12T20:19:41.845562+00:00",
+   "sort_order": 7,
+   "start_time": "22:00:00"
+  }
+ ],
+ "trip_flights": [
+  {
+   "flight_id": "11111111-1111-4111-8111-000000000001",
+   "trip_id": "52979ee0-af40-4777-93b6-6f9f707559f7",
+   "from_airport": "JFK",
+   "to_airport": "PAS",
+   "depart_date": "2026-08-24",
+   "depart_time": "08:40",
+   "sort_order": 0,
+   "created_at": "2026-06-12T20:12:04.568605+00:00"
+  },
+  {
+   "flight_id": "11111111-1111-4111-8111-000000000002",
+   "trip_id": "52979ee0-af40-4777-93b6-6f9f707559f7",
+   "from_airport": "PAS",
+   "to_airport": "ATH",
+   "depart_date": "2026-08-27",
+   "depart_time": "09:30",
+   "sort_order": 1,
+   "created_at": "2026-06-12T20:12:04.568605+00:00"
+  },
+  {
+   "flight_id": "11111111-1111-4111-8111-000000000003",
+   "trip_id": "52979ee0-af40-4777-93b6-6f9f707559f7",
+   "from_airport": "ATH",
+   "to_airport": "JFK",
+   "depart_date": "2026-08-29",
+   "depart_time": "14:25",
+   "sort_order": 2,
+   "created_at": "2026-06-12T20:12:04.568605+00:00"
+  }
+ ],
+ "trip_accommodations": [
+  {
+   "accommodation_id": "22222222-2222-4222-8222-000000000001",
+   "trip_id": "52979ee0-af40-4777-93b6-6f9f707559f7",
+   "name": "Parikia Harbour Studios",
+   "neighborhood": "Parikia",
+   "lat": 37.0853,
+   "lon": 25.1489,
+   "check_in": "2026-08-24",
+   "check_out": "2026-08-27",
+   "sort_order": 0,
+   "created_at": "2026-06-12T20:12:04.568605+00:00"
+  },
+  {
+   "accommodation_id": "22222222-2222-4222-8222-000000000002",
+   "trip_id": "52979ee0-af40-4777-93b6-6f9f707559f7",
+   "name": "Plaka Rooftop Apartment",
+   "neighborhood": "Plaka",
+   "lat": 37.9715,
+   "lon": 23.7267,
+   "check_in": "2026-08-27",
+   "check_out": "2026-08-29",
+   "sort_order": 1,
+   "created_at": "2026-06-12T20:12:04.568605+00:00"
+  }
+ ],
+ "community_posts": [
+  {
+   "post_id": "9af04e10-943f-4642-b21c-d30960078f43",
+   "destination": "Tokyo",
+   "title": "Hidden standing ramen shop in Shinjuku basement",
+   "source": "reddit_r_japanlife",
+   "author": "shinjuku_salaryman",
+   "author_type": "local",
+   "content": "Most tourists never find this place \u2014 it's down a flight of stairs in the Golden Gai alley system. Counter seating only, no English menu, but the master will mime the options. Tonkotsu for \u00a5850.",
+   "tags": [
+    "food",
+    "budget",
+    "ramen",
+    "local-secret"
+   ],
+   "estimated_cost_usd": 8.5,
+   "locality_score": 0.92,
+   "place_name": "Fuunji",
+   "location_lat": 35.6921,
+   "location_lon": 139.701,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "d71d8f48-14dd-43c2-bd54-e283ad0c0d55",
+   "destination": "Tokyo",
+   "title": "Yanaka Ginza: last old-town shopping street in Tokyo",
+   "source": "blog",
+   "author": "yanaka_local",
+   "author_type": "local",
+   "content": "Yanaka escaped WWII bombing so the prewar street grid is intact. The shotengai (shopping street) has family shops that have been here 60+ years. Get the menchi-katsu (fried meat patty) from Hamachiya \u2014 locals line up on weekends.",
+   "tags": [
+    "culture",
+    "food",
+    "history",
+    "neighborhood"
+   ],
+   "estimated_cost_usd": 5.0,
+   "locality_score": 0.9,
+   "place_name": "Yanaka Ginza",
+   "location_lat": 35.7267,
+   "location_lon": 139.7714,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "2ed4ed9e-5f86-479f-b6da-73e95645454e",
+   "destination": "Tokyo",
+   "title": "Sunday morning at Tsurukame Yu public bathhouse",
+   "source": "reddit_r_japanlife",
+   "author": "sento_addict",
+   "author_type": "local",
+   "content": "This is a real neighborhood sento, not a tourist onsen. \u00a5520 entrance, bring your own toiletries. Regulars are surprised to see foreigners but friendly. Best visited early morning (opens 6am) or after midnight.",
+   "tags": [
+    "culture",
+    "wellness",
+    "local"
+   ],
+   "estimated_cost_usd": 5.2,
+   "locality_score": 0.88,
+   "place_name": "Tsurukame Yu",
+   "location_lat": 35.701,
+   "location_lon": 139.7756,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "3d285d7d-5107-454c-bb66-5e41b9fe9036",
+   "destination": "Tokyo",
+   "title": "Depachika basement food halls \u2014 best free lunch in Tokyo",
+   "source": "reddit_r_japanlife",
+   "author": "isetan_regular",
+   "author_type": "local",
+   "content": "The basement food halls (depachika) of Isetan in Shinjuku or Mitsukoshi in Ginza have extraordinary prepared food. The trick locals know: go at 6:30pm when they start marking down bento sets 30\u201350%. Quality is identical.",
+   "tags": [
+    "food",
+    "budget",
+    "shopping"
+   ],
+   "estimated_cost_usd": 12.0,
+   "locality_score": 0.82,
+   "place_name": "Isetan Shinjuku B2F",
+   "location_lat": 35.6917,
+   "location_lon": 139.7033,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "f2fc9e0e-4e0b-4ec6-a0c3-eccd3b999f6c",
+   "destination": "Tokyo",
+   "title": "Koenji \u2014 the anti-Harajuku neighborhood for vintage",
+   "source": "reddit_r_japanlife",
+   "author": "koenji_resident",
+   "author_type": "local",
+   "content": "Koenji is where Tokyo's actual subculture lives. Dozens of second-hand and vintage shops along Look Shopping Street. No hype brands, just genuine vintage at 1/3 the price of Omotesando. Best on weekday afternoons.",
+   "tags": [
+    "shopping",
+    "culture",
+    "neighborhood"
+   ],
+   "estimated_cost_usd": 20.0,
+   "locality_score": 0.85,
+   "place_name": "Look Shopping Street Koenji",
+   "location_lat": 35.7052,
+   "location_lon": 139.6487,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "2c57ef49-46e9-4189-bc2f-3be36e4900d5",
+   "destination": "Tokyo",
+   "title": "The perfect Tokyo convenience store breakfast ritual",
+   "source": "blog",
+   "author": "tokyofoodlab",
+   "author_type": "blogger",
+   "content": "FamilyMart and 7-Eleven in Japan are genuinely excellent. The made-fresh onigiri (\u00a5120\u2013180), steamed buns, and egg salad sandwiches are far better than tourist food. This is what office workers eat every morning. Try the tamago sando.",
+   "tags": [
+    "food",
+    "budget",
+    "breakfast"
+   ],
+   "estimated_cost_usd": 4.0,
+   "locality_score": 0.75,
+   "place_name": "7-Eleven Shinjuku",
+   "location_lat": 35.6907,
+   "location_lon": 139.6994,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "9f75ab49-1d01-41ab-b27a-a0fa4fb05c32",
+   "destination": "Tokyo",
+   "title": "Shimokitazawa deep dive: vinyl, theater, coffee",
+   "source": "blog",
+   "author": "shimokita_wanderer",
+   "author_type": "blogger",
+   "content": "Shimokitazawa (\"Shimokita\") is a 20-minute train from Shibuya. It has the highest density of second-hand vinyl shops and indie theater in Tokyo. Coffee at Bear Pond Espresso if you get there before they run out (they do, by noon).",
+   "tags": [
+    "culture",
+    "music",
+    "coffee",
+    "neighborhood"
+   ],
+   "estimated_cost_usd": 15.0,
+   "locality_score": 0.78,
+   "place_name": "Bear Pond Espresso",
+   "location_lat": 35.6613,
+   "location_lon": 139.6681,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "1a7b7e60-b5a6-494d-a1dd-9443b22b90af",
+   "destination": "Tokyo",
+   "title": "Toyosu Fish Market \u2014 better than Tsukiji for serious eaters",
+   "source": "blog",
+   "author": "tokyofoodwriter",
+   "author_type": "blogger",
+   "content": "The wholesale tuna auction (apply 2 months in advance, free) runs 5:25am. After, eat at the inner market restaurants \u2014 quality matches Tsukiji at lower prices since tourists haven't fully discovered it yet. The kaisen-don at Sushidai Toyosu is outstanding.",
+   "tags": [
+    "food",
+    "culture",
+    "seafood"
+   ],
+   "estimated_cost_usd": 25.0,
+   "locality_score": 0.65,
+   "place_name": "Toyosu Market",
+   "location_lat": 35.6467,
+   "location_lon": 139.7829,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "db9ede24-3cb0-46cd-aa04-b971f242c18c",
+   "destination": "Tokyo",
+   "title": "Akihabara beyond the anime: radio kaikan deep cuts",
+   "source": "blog",
+   "author": "akiba_culture",
+   "author_type": "blogger",
+   "content": "Most tourists hit the big electronics stores. The interesting stuff is the tiny specialist shops in Radio Kaikan building \u2014 floors dedicated to vintage electronics components, military surplus, rare hobby parts. Bring cash.",
+   "tags": [
+    "shopping",
+    "culture",
+    "tech"
+   ],
+   "estimated_cost_usd": 30.0,
+   "locality_score": 0.62,
+   "place_name": "Radio Kaikan",
+   "location_lat": 35.6987,
+   "location_lon": 139.773,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "a3e7bbde-1693-46f3-8479-ea3cccd1a1c7",
+   "destination": "Tokyo",
+   "title": "Senso-ji temple at 6am beats the crowds completely",
+   "source": "reddit_r_JapanTravel",
+   "author": "globetrotter_dave",
+   "author_type": "tourist",
+   "content": "Every guidebook says Senso-ji is crowded. True at 10am. At 6am it is empty and the atmosphere is genuinely special \u2014 vendors setting up, locals doing morning routines, the gate lit by early light. Worth the early alarm.",
+   "tags": [
+    "culture",
+    "history",
+    "temples"
+   ],
+   "estimated_cost_usd": 0.0,
+   "locality_score": 0.35,
+   "place_name": "Senso-ji Temple",
+   "location_lat": 35.7147,
+   "location_lon": 139.7967,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "ab86fa8d-d047-45ed-8f2f-54fafb84215e",
+   "destination": "Tokyo",
+   "title": "teamLab Borderless \u2014 book 3 weeks out or you won't get in",
+   "source": "reddit_r_JapanTravel",
+   "author": "tech_tourist_2025",
+   "author_type": "tourist",
+   "content": "The new teamLab Borderless location in Azabudai Hills is worth the \u00a53800. Completely different rooms from the old location. Book online as far in advance as possible \u2014 sold out most days. Go early, the lines inside grow.",
+   "tags": [
+    "culture",
+    "art",
+    "tech",
+    "popular"
+   ],
+   "estimated_cost_usd": 38.0,
+   "locality_score": 0.3,
+   "place_name": "teamLab Borderless Azabudai",
+   "location_lat": 35.6581,
+   "location_lon": 139.7384,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "61f63df1-62f4-408f-a844-c0521e3f460c",
+   "destination": "Tokyo",
+   "title": "Shibuya Crossing: the timing that actually works",
+   "source": "blog",
+   "author": "travel_blogger_anna",
+   "author_type": "tourist",
+   "content": "Everyone comes here. The tricks: (1) view from Starbucks second floor is free but crowded \u2014 go to the Mag's Park rooftop instead; (2) the crossing is least chaotic on weekday mornings at 8am; (3) it's genuinely impressive, ignore the cynicism.",
+   "tags": [
+    "culture",
+    "iconic",
+    "photography"
+   ],
+   "estimated_cost_usd": 0.0,
+   "locality_score": 0.25,
+   "place_name": "Shibuya Crossing",
+   "location_lat": 35.6595,
+   "location_lon": 139.7004,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "eb0154d1-19f6-4109-aadc-9654a72c3e4c",
+   "destination": "Tokyo",
+   "title": "Harajuku Takeshita-dori on a Tuesday",
+   "source": "reddit_r_JapanTravel",
+   "author": "harajuku_weekender",
+   "author_type": "tourist",
+   "content": "The famous Harajuku street. Weekends are a wall of people. On weekdays it is still buzzing but navigable. The crepe stands are genuinely delicious and cheap (\u00a5500\u2013800). Ignore the overpriced souvenir shops.",
+   "tags": [
+    "shopping",
+    "food",
+    "fashion"
+   ],
+   "estimated_cost_usd": 8.0,
+   "locality_score": 0.28,
+   "place_name": "Takeshita Street",
+   "location_lat": 35.6708,
+   "location_lon": 139.7082,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "799acc7d-696b-4de2-bba9-864d271520c0",
+   "destination": "Tokyo",
+   "title": "Ueno Park sakura logistics \u2014 what no one tells you",
+   "source": "reddit_r_travel",
+   "author": "tokyoparkvisitor",
+   "author_type": "unknown",
+   "content": "During cherry blossom season Ueno Park has 6000+ people on blue tarps by 9am. The park itself is free. If you want to actually see the blossoms, go to Shinjuku Gyoen instead (\u00a5500 entry keeps the crowds manageable). Off-season Ueno is great for the zoo and museums.",
+   "tags": [
+    "nature",
+    "parks",
+    "sakura"
+   ],
+   "estimated_cost_usd": 5.0,
+   "locality_score": 0.5,
+   "place_name": "Ueno Park",
+   "location_lat": 35.7156,
+   "location_lon": 139.7736,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "65c529f1-700d-42e3-b40d-22d9de475324",
+   "destination": "Tokyo",
+   "title": "Odaiba sunset from the waterfront promenade",
+   "source": "reddit_r_travel",
+   "author": "bayarea_walker",
+   "author_type": "unknown",
+   "content": "The promenade along Odaiba's waterfront facing Rainbow Bridge is free and underrated at sunset. Combine with the teamLab Planets (different from Borderless \u2014 more visceral, shorter). The artificial beach is weirdly pleasant.",
+   "tags": [
+    "outdoor",
+    "views",
+    "free"
+   ],
+   "estimated_cost_usd": 0.0,
+   "locality_score": 0.48,
+   "place_name": "Odaiba Beach",
+   "location_lat": 35.6275,
+   "location_lon": 139.7752,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "a00432f9-d461-4dea-b9dd-3e31ead83cb6",
+   "destination": "Tokyo",
+   "title": "Tsukiji outer market: what remains and what is actually good",
+   "source": "blog",
+   "author": "tsukiji_repeat",
+   "author_type": "unknown",
+   "content": "The inner wholesale market moved to Toyosu. The outer market (surrounding streets) still operates with retail stalls and restaurants. Tamagoyaki (sweet egg) from Marutake is excellent. The tamagoyaki-on-a-stick is the move. Lines are shorter than they used to be.",
+   "tags": [
+    "food",
+    "seafood",
+    "market"
+   ],
+   "estimated_cost_usd": 10.0,
+   "locality_score": 0.55,
+   "place_name": "Tsukiji Outer Market",
+   "location_lat": 35.6654,
+   "location_lon": 139.7706,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "7dd83561-dc5c-4aad-a9b4-8b56369d1c87",
+   "destination": "Tokyo",
+   "title": "Nakameguro canal walk: when to go and what to skip",
+   "source": "reddit_r_JapanTravel",
+   "author": "meguro_weekend",
+   "author_type": "unknown",
+   "content": "Nakameguro is genuinely lovely for a canal walk \u2014 lined with boutiques and coffee shops. Skip it during cherry blossom season unless you enjoy wall-to-wall bodies. Best in late October when leaves turn. The coffee shops are quality but pricey (\u00a5800+ for a flat white).",
+   "tags": [
+    "outdoor",
+    "neighborhood",
+    "coffee"
+   ],
+   "estimated_cost_usd": 8.0,
+   "locality_score": 0.58,
+   "place_name": "Nakameguro Canal",
+   "location_lat": 35.644,
+   "location_lon": 139.6987,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "92e2eb74-838c-4fb3-806c-db48abfed6f5",
+   "destination": "Tokyo",
+   "title": "Ginza Six vs. actual Ginza shopping: the honest comparison",
+   "source": "reddit_r_JapanTravel",
+   "author": "ginza_observer",
+   "author_type": "unknown",
+   "content": "Ginza Six is spectacular architecture but the brands are the same global luxury names you can find anywhere. The interesting Ginza is the small gallery floors of the old department stores (free entry) and the back streets with specialist shops. Itoya stationery store is a must.",
+   "tags": [
+    "shopping",
+    "culture",
+    "art"
+   ],
+   "estimated_cost_usd": 50.0,
+   "locality_score": 0.45,
+   "place_name": "Itoya Ginza",
+   "location_lat": 35.672,
+   "location_lon": 139.765,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "fc7c4c7b-16e8-484b-b003-59291948d742",
+   "destination": "Tokyo",
+   "title": "Shinjuku Golden Gai: the honest guide",
+   "source": "blog",
+   "author": "goldengai_first",
+   "author_type": "unknown",
+   "content": "Golden Gai is 6 alleys with ~200 tiny bars (5\u20138 seats each). Many bars have a \"cover charge\" (\u00a5500\u20131000) \u2014 this is normal, not a scam. The vibe is authentic but tourists have found it; go on weeknights and pick bars with hand-written menus over ones with picture boards.",
+   "tags": [
+    "food",
+    "nightlife",
+    "bars"
+   ],
+   "estimated_cost_usd": 20.0,
+   "locality_score": 0.6,
+   "place_name": "Golden Gai",
+   "location_lat": 35.693,
+   "location_lon": 139.704,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "dad3169c-5c5d-4013-80fd-b6aa5f9dd1e8",
+   "destination": "Tokyo",
+   "title": "Day trip to Nikko from Tokyo: what actually takes all day",
+   "source": "blog",
+   "author": "day_tripper_tokyo",
+   "author_type": "tourist",
+   "content": "Nikko is 2 hours from Tokyo (Tobu Nikko line, cheaper than shinkansen). The UNESCO shrines are genuinely impressive but the walk between them plus the Toshogu complex takes 4\u20135 hours minimum. Leave Tokyo by 7am. Buy the 2-day pass even if you only go once \u2014 it pays off.",
+   "tags": [
+    "culture",
+    "history",
+    "day-trip"
+   ],
+   "estimated_cost_usd": 50.0,
+   "locality_score": 0.3,
+   "place_name": "Toshogu Shrine Nikko",
+   "location_lat": 36.7582,
+   "location_lon": 139.599,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "4da13a71-0a4e-499c-83db-8a0be40bce5b",
+   "destination": "Berlin",
+   "title": "Markthalle Neun Thursday Streetfood: the Berlin food market that locals actually use",
+   "source": "reddit_r_germany",
+   "author": "kreuzberg_resident",
+   "author_type": "local",
+   "content": "Every Thursday 5\u201310pm. Unlike the tourist markets around Mitte, this is in Kreuzberg and the clientele is mixed local. International food stalls with genuinely good quality. The Bao Bun stall and the Georgian khachapuri vendor are consistently excellent. Cash only for most stalls.",
+   "tags": [
+    "food",
+    "market",
+    "neighborhood"
+   ],
+   "estimated_cost_usd": 10.0,
+   "locality_score": 0.88,
+   "place_name": "Markthalle Neun",
+   "location_lat": 52.499,
+   "location_lon": 13.4268,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "26c20467-ca8c-4f90-8cd1-7a391c25cfc6",
+   "destination": "Berlin",
+   "title": "Swimming in the Spree at Badeschiff",
+   "source": "reddit_r_berlin",
+   "author": "berlin_swimmer",
+   "author_type": "local",
+   "content": "Badeschiff is a real swimming pool installed in the Spree river (not IN the Spree \u2014 it's a contained pool floating ON it). \u00a46\u20138 entry. Berlin locals use this from June\u2013September. The adjacent beach bar is excellent. Located in Treptow \u2014 20 minutes from Mitte on the U1.",
+   "tags": [
+    "outdoor",
+    "sports",
+    "summer",
+    "local"
+   ],
+   "estimated_cost_usd": 8.0,
+   "locality_score": 0.9,
+   "place_name": "Badeschiff Berlin",
+   "location_lat": 52.4948,
+   "location_lon": 13.4578,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "d6fcacbe-14c9-469a-a846-627027b1cb62",
+   "destination": "Berlin",
+   "title": "Bergmannstrasse on a Sunday morning",
+   "source": "blog",
+   "author": "bergmann_local",
+   "author_type": "local",
+   "content": "Bergmannstrasse in Kreuzberg is one of the few areas where Sunday shopping is legal in Berlin (tourist zone exemption). The street has bakeries, a covered market (Marheineke Markthalle), and independent shops. Arrive before 10am to avoid the weekend crush.",
+   "tags": [
+    "food",
+    "shopping",
+    "neighborhood"
+   ],
+   "estimated_cost_usd": 15.0,
+   "locality_score": 0.85,
+   "place_name": "Bergmannstrasse",
+   "location_lat": 52.4898,
+   "location_lon": 13.3888,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "3d9bad37-a36a-40bf-ba0d-c8caf40a537a",
+   "destination": "Berlin",
+   "title": "Tempelhofer Feld: the airport that became a park",
+   "source": "reddit_r_berlin",
+   "author": "tempelhof_regular",
+   "author_type": "local",
+   "content": "The old Tempelhof airport has been a public park since 2010. 386 hectares of flat open space \u2014 people bring grills, windsurf on the old runways, grow community gardens. Zero tourist infrastructure intentionally. Bring your own food/drinks and just walk the runways.",
+   "tags": [
+    "outdoor",
+    "parks",
+    "history",
+    "free"
+   ],
+   "estimated_cost_usd": 0.0,
+   "locality_score": 0.87,
+   "place_name": "Tempelhofer Feld",
+   "location_lat": 52.4739,
+   "location_lon": 13.3991,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "8717a414-3a19-47d0-a5f2-4f9a5f5bad0b",
+   "destination": "Berlin",
+   "title": "Prinzessinnenstra\u00dfe: the Turkish market and surrounding food",
+   "source": "reddit_r_berlin",
+   "author": "neuk\u00f6lln_regular",
+   "author_type": "local",
+   "content": "The Turkish market along the Landwehrkanal (Maybachufer) runs Tuesday and Friday 11am\u20136pm. Fresh produce, fabrics, cheeses, and the best G\u00f6zleme (Turkish flatbread) in the city. The surrounding Neuk\u00f6lln streets have excellent Syrian, Vietnamese, and West African food at non-tourist prices.",
+   "tags": [
+    "food",
+    "market",
+    "multicultural"
+   ],
+   "estimated_cost_usd": 8.0,
+   "locality_score": 0.84,
+   "place_name": "Turkish Market Maybachufer",
+   "location_lat": 52.4872,
+   "location_lon": 13.4257,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "9aee3157-9d81-4538-b632-bbf41cb76da9",
+   "destination": "Berlin",
+   "title": "Street art guide to Berlin that isn't just the East Side Gallery",
+   "source": "blog",
+   "author": "berlin_street_art",
+   "author_type": "blogger",
+   "content": "The East Side Gallery is impressive but it's a managed tourist destination. The raw street art is in: (1) the RAW Gel\u00e4nde complex in Friedrichshain; (2) the walls along Revaler Strasse; (3) the Haus Schwarzenberg courtyard in Mitte (free entry). These change constantly \u2014 worth revisiting.",
+   "tags": [
+    "culture",
+    "art",
+    "free",
+    "neighborhood"
+   ],
+   "estimated_cost_usd": 0.0,
+   "locality_score": 0.72,
+   "place_name": "Haus Schwarzenberg",
+   "location_lat": 52.5231,
+   "location_lon": 13.4019,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "0f08561a-ba3a-4633-b835-237b45d1953e",
+   "destination": "Berlin",
+   "title": "East German food nostalgia tour of Berlin",
+   "source": "blog",
+   "author": "ostalgie_foodie",
+   "author_type": "blogger",
+   "content": "Currywurst is the iconic Berlin street food (Currywurst Museum has closed but the stands remain \u2014 Konnopke's under the U2 tracks in Prenzlauer Berg since 1930). For full Ostalgie: Zur Letzten Instanz restaurant (oldest in Berlin, 1621). The DDR-era Ketwurst (hotdog in a bread roll with ketchup hole) is at the Alexanderplatz Imbiss.",
+   "tags": [
+    "food",
+    "history",
+    "culture",
+    "local"
+   ],
+   "estimated_cost_usd": 5.0,
+   "locality_score": 0.7,
+   "place_name": "Konnopke's Imbiss",
+   "location_lat": 52.5394,
+   "location_lon": 13.4138,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "b61e5e8b-e730-49ff-b40b-e230ae509724",
+   "destination": "Berlin",
+   "title": "Day club culture in Berlin for people who don't do nightclubs",
+   "source": "blog",
+   "author": "berlin_daytime",
+   "author_type": "blogger",
+   "content": "Berlin's club culture is famous but there's a daylife parallel: Klunkerkranich is a rooftop bar/garden on top of a parking garage in Neuk\u00f6lln (free access before 6pm, \u00a42 after). Bar Tausend under the S-Bahn arches. Sisyphos on weekends runs 24-hour events but opens at noon.",
+   "tags": [
+    "nightlife",
+    "outdoor",
+    "culture"
+   ],
+   "estimated_cost_usd": 10.0,
+   "locality_score": 0.68,
+   "place_name": "Klunkerkranich",
+   "location_lat": 52.482,
+   "location_lon": 13.437,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "7fac0cd1-b0e7-4593-82bf-56c6ef62837f",
+   "destination": "Berlin",
+   "title": "Jewish Museum Berlin: a genuine architectural experience",
+   "source": "blog",
+   "author": "museum_blogger",
+   "author_type": "blogger",
+   "content": "Daniel Libeskind's Jewish Museum is one of the few buildings where the architecture itself is the exhibit. The void spaces and the garden of exile are disorienting in an intentional, powerful way. Budget 3 hours minimum. The exhibition is extensive. \u00a410 entry, closed Saturdays.",
+   "tags": [
+    "culture",
+    "history",
+    "architecture",
+    "museum"
+   ],
+   "estimated_cost_usd": 10.0,
+   "locality_score": 0.55,
+   "place_name": "Jewish Museum Berlin",
+   "location_lat": 52.5025,
+   "location_lon": 13.3954,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "10449f97-dce4-44fd-a836-dc106ebd3396",
+   "destination": "Berlin",
+   "title": "Checkpoint Charlie is a tourist trap \u2014 what to do instead",
+   "source": "reddit_r_travel",
+   "author": "history_realist",
+   "author_type": "tourist",
+   "content": "Checkpoint Charlie itself is a reconstruction with actors for photo ops and overpriced cafes. Walk 10 minutes to the Topography of Terror (free, outdoors) for actual history about the SS and Gestapo. Far more serious and informative. Then the nearby DDR Museum (\u00a413.50) for the everyday life angle.",
+   "tags": [
+    "history",
+    "culture",
+    "museum"
+   ],
+   "estimated_cost_usd": 13.5,
+   "locality_score": 0.28,
+   "place_name": "Topography of Terror",
+   "location_lat": 52.5066,
+   "location_lon": 13.3837,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "df486cf1-78ef-43e1-b393-2d67f38358eb",
+   "destination": "Berlin",
+   "title": "The Pergamon Museum situation (currently under renovation)",
+   "source": "reddit_r_travel",
+   "author": "museum_tourist",
+   "author_type": "tourist",
+   "content": "The famous Pergamon altar is under renovation until 2027 and not viewable. The rest of the museum (Ishtar Gate, Roman Market Gate of Miletus) IS open. Still worth \u00a421 entry despite the closure. Book online \u2014 same-day tickets often sell out. Museum Island pass \u00a429 if you want multiple museums.",
+   "tags": [
+    "culture",
+    "history",
+    "art",
+    "museum"
+   ],
+   "estimated_cost_usd": 21.0,
+   "locality_score": 0.32,
+   "place_name": "Pergamon Museum",
+   "location_lat": 52.5213,
+   "location_lon": 13.3968,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "fbbf0ecc-7c8c-4666-b57c-c5e57c664f84",
+   "destination": "Berlin",
+   "title": "Brandenburg Gate crowds: the timing and angles that work",
+   "source": "reddit_r_JapanTravel",
+   "author": "berlin_first_timer",
+   "author_type": "tourist",
+   "content": "Brandenburg Gate is genuinely iconic and worth seeing. Best times: pre-8am or after 9pm. The view from Pariser Platz is the postcard shot. The Reichstag dome (free, must book 2\u20133 weeks in advance online) gives an elevated view. Bring ID for Reichstag.",
+   "tags": [
+    "history",
+    "culture",
+    "iconic",
+    "free"
+   ],
+   "estimated_cost_usd": 0.0,
+   "locality_score": 0.25,
+   "place_name": "Brandenburg Gate",
+   "location_lat": 52.5163,
+   "location_lon": 13.3777,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "ba19b3e0-aec0-496a-b2bf-3eeff48e1f44",
+   "destination": "Berlin",
+   "title": "Berlin Wall Memorial (Bernauer Strasse) is better than you expect",
+   "source": "blog",
+   "author": "history_tourist",
+   "author_type": "tourist",
+   "content": "Unlike Checkpoint Charlie, the Bernauer Strasse Berlin Wall Memorial preserves an actual section of the wall with the death strip intact. Free outdoor area open always, documentation centre (free) open Tue\u2013Sun. The outdoor audio guide app is excellent. Allow 2 hours.",
+   "tags": [
+    "history",
+    "culture",
+    "free",
+    "outdoor"
+   ],
+   "estimated_cost_usd": 0.0,
+   "locality_score": 0.35,
+   "place_name": "Berlin Wall Memorial",
+   "location_lat": 52.5352,
+   "location_lon": 13.3882,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "111d2fcc-9906-4d4e-aa53-3ce62d0236ef",
+   "destination": "Berlin",
+   "title": "Prenzlauer Berg for coffee and Sunday farmers market",
+   "source": "reddit_r_travel",
+   "author": "prenzlauerberg_visitor",
+   "author_type": "unknown",
+   "content": "The area around Helmholtzplatz has the highest density of good independent cafes in Berlin. Bonanza Coffee Roasters is the quality benchmark (single-origin, \u00a44\u20136). The Sunday farmers market at Kollwitzplatz (9am\u20134pm) has the best bread and cheese in the city. Bring a bag.",
+   "tags": [
+    "coffee",
+    "food",
+    "neighborhood",
+    "market"
+   ],
+   "estimated_cost_usd": 12.0,
+   "locality_score": 0.62,
+   "place_name": "Kollwitzplatz",
+   "location_lat": 52.5381,
+   "location_lon": 13.4185,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "6f08150f-ffa6-4336-a218-5eda072d34d6",
+   "destination": "Berlin",
+   "title": "Humboldthain flak tower: bizarre and free Berlin attraction",
+   "source": "blog",
+   "author": "urban_explorer",
+   "author_type": "unknown",
+   "content": "On top of Humboldthain park there are the ruins of a WWII anti-aircraft tower \u2014 the Allies blew up what they could and buried the rest in rubble to create the park hill. Free guided tours run on weekends. The view from the top is surprisingly good and few tourists find this.",
+   "tags": [
+    "history",
+    "outdoor",
+    "free",
+    "off-the-beaten-path"
+   ],
+   "estimated_cost_usd": 0.0,
+   "locality_score": 0.58,
+   "place_name": "Humboldthain Flak Tower",
+   "location_lat": 52.5456,
+   "location_lon": 13.3832,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "60e7502f-cd0f-432e-9971-94f64ebb15a8",
+   "destination": "Berlin",
+   "title": "East Side Gallery: how to actually experience it",
+   "source": "reddit_r_travel",
+   "author": "east_side_visitor",
+   "author_type": "unknown",
+   "content": "1.3km of the Berlin Wall painted by artists in 1990. The murals are preserved and genuinely moving. Early morning (before 9am) it's calm. The adjacent Ostbahnhof area has food options. The most photographed mural (Bruderkuss \u2014 Honecker and Brezhnev kissing) is in the middle section.",
+   "tags": [
+    "history",
+    "art",
+    "outdoor"
+   ],
+   "estimated_cost_usd": 0.0,
+   "locality_score": 0.45,
+   "place_name": "East Side Gallery",
+   "location_lat": 52.5053,
+   "location_lon": 13.4401,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "0e84e908-d996-4a25-9c39-82dcf853e323",
+   "destination": "Berlin",
+   "title": "Neuk\u00f6lln for dinner: the honest restaurant guide",
+   "source": "reddit_r_berlin",
+   "author": "neuk\u00f6lln_diner",
+   "author_type": "unknown",
+   "content": "Neuk\u00f6lln's Sonnenallee area has the best and most affordable Middle Eastern food in Berlin. The Lebanese on Sonnenallee proper are excellent (shawarma \u00a44\u20136). For Vietnamese, the area around Karl-Marx-Strasse. Avoid anything with English menus in Neuk\u00f6lln \u2014 sign of tourist pricing.",
+   "tags": [
+    "food",
+    "neighborhood",
+    "budget"
+   ],
+   "estimated_cost_usd": 7.0,
+   "locality_score": 0.68,
+   "place_name": "Sonnenallee",
+   "location_lat": 52.476,
+   "location_lon": 13.4355,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "183d863b-e425-4c04-8f37-4ac51fde0711",
+   "destination": "Berlin",
+   "title": "Berlin's underground bunker tours",
+   "source": "blog",
+   "author": "underground_berlin",
+   "author_type": "unknown",
+   "content": "The Berliner Unterwelten runs professional tours of the WWII and Cold War tunnel system. The \"Dark Worlds\" tour is the classic \u2014 \u00a415, 90 minutes, into the actual flak tower bunker under Gesundbrunnen. Book in advance. Not for claustrophobics. The museum shop has the best Berlin history books.",
+   "tags": [
+    "history",
+    "culture",
+    "off-the-beaten-path"
+   ],
+   "estimated_cost_usd": 15.0,
+   "locality_score": 0.55,
+   "place_name": "Berliner Unterwelten",
+   "location_lat": 52.5504,
+   "location_lon": 13.3885,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "fd586a77-f283-4095-b03a-72901f4d060c",
+   "destination": "Berlin",
+   "title": "Schloss Charlottenburg gardens: free and underrated",
+   "source": "blog",
+   "author": "palace_walker",
+   "author_type": "unknown",
+   "content": "The palace itself has an entry fee (\u00a419 for the full combo). The gardens are free and extensive \u2014 baroque, English landscape, and a small lake section. Local families use it as a park. Combined with the Charlottenburg neighborhood (Savignyplatz area for restaurants) makes a full half-day.",
+   "tags": [
+    "outdoor",
+    "culture",
+    "history",
+    "free"
+   ],
+   "estimated_cost_usd": 0.0,
+   "locality_score": 0.42,
+   "place_name": "Schloss Charlottenburg",
+   "location_lat": 52.5208,
+   "location_lon": 13.2957,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  },
+  {
+   "post_id": "cb3b8185-fec3-4ee6-9107-bfabd0157258",
+   "destination": "Berlin",
+   "title": "Flea markets in Berlin: the good ones",
+   "source": "blog",
+   "author": "berlin_flea",
+   "author_type": "blogger",
+   "content": "The Mauerpark flea market (Sunday, free to browse) is famous but mostly overpriced vintage. The better ones for actual bargains: Flohmarkt am Mauerpark's smaller northern section, Flohmarkt Ostbahnhof (Sat/Sun), and the Nowkoelln Flowmarkt (floating market on the canal, twice monthly). Check Instagram for dates.",
+   "tags": [
+    "shopping",
+    "outdoor",
+    "culture",
+    "local"
+   ],
+   "estimated_cost_usd": 10.0,
+   "locality_score": 0.72,
+   "place_name": "Flohmarkt Ostbahnhof",
+   "location_lat": 52.5072,
+   "location_lon": 13.4346,
+   "created_at": "2026-05-31T21:20:04.5316+00:00"
+  }
+ ]
+}

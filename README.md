@@ -1,36 +1,71 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Trip Planner
 
-## Getting Started
+An LLM-assisted travel planner: describe a trip, get a day-by-day itinerary you
+can revise by talking to it. Multi-city trips, flight and accommodation
+constraints, per-city destination guides, and a subscribable calendar feed.
 
-First, run the development server:
+Built with Next.js (App Router), Supabase (Postgres + Auth, RLS-enforced), and
+the Anthropic API.
+
+## Try it — demo mode
+
+Demo mode runs the whole product with **no API keys, no database, and no
+signup**:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev:demo      # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+You land straight in a populated account with a real two-city Greece itinerary
+(Paros → Athens) and can click through everything: browse the plan, revise a
+day, swap a single activity, chat about the itinerary, generate a new trip.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+There is no `.env.local` to create — demo mode is fully self-contained. Every
+external dependency is served from fixtures:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Dependency | Normal mode | Demo mode |
+|---|---|---|
+| Anthropic API | `AnthropicProvider` | `MockProvider` — synthesises itineraries from the brief |
+| Supabase (data) | Postgres via RLS | in-memory store seeded from a real exported trip |
+| Supabase (auth) | cookie session | always signed in as a demo user |
+| Photon geocoding | live HTTP | local city list |
 
-## Learn More
+Demo writes live in memory for the life of the server process and reset on
+restart. Nothing is persisted and nothing is billed.
 
-To learn more about Next.js, take a look at the following resources:
+`npm run build:demo` and `npm run start:demo` do the same for a production
+build, which is what makes demo mode deployable as a shareable link.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### How the switch works
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+One flag, `NEXT_PUBLIC_MOCK_MODE=1`, read in `lib/mock/flag.ts` and applied at
+four seams:
 
-## Deploy on Vercel
+- `lib/db/queries.ts` picks the real or mock query module at import time, so no
+  page, server action, or route handler knows which is live.
+- `lib/llm/provider.ts` resolves `defaultProvider` to `MockProvider`.
+- `lib/auth/index.ts` returns a fixture user instead of asking Supabase.
+- `middleware.ts` skips session refresh and sends `/login` to the dashboard.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Both query modules export the same 38 names, and the dispatcher types the mock
+against the real one — if either drifts, the build fails.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Running against real services
+
+```bash
+cp .env.local.example .env.local   # fill in the values
+npm install
+npm run dev
+```
+
+Required: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+`SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `NEXT_PUBLIC_SITE_URL`.
+
+For a fresh Supabase project, apply `supabase/migrations/` in order
+(`0001` … `0007`) plus the `supabase/fix_*.sql` constraints.
+
+> Itinerary generation, revision, chat, and destination guides all bill your
+> Anthropic key. Set a spend limit before sharing a non-demo deployment.
+
+See `DEPLOY.md` for deploying to Vercel.

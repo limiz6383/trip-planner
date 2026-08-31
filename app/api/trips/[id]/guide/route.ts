@@ -25,6 +25,7 @@ import {
 } from "@/lib/db/queries";
 import { createPlannerEngine } from "@/lib/planner/engine";
 import type { DestinationGuide } from "@/lib/types";
+import { isLLMConfigured } from "@/lib/llm/availability";
 
 export interface CityGuide {
   city: string;
@@ -86,7 +87,7 @@ export async function GET(
           continue;
         }
 
-        if (!process.env.ANTHROPIC_API_KEY) {
+        if (!isLLMConfigured()) {
           return Response.json(
             { error: MISSING_KEY_MESSAGE } satisfies GuideErrorBody,
             { status: 500 }
@@ -119,7 +120,7 @@ export async function GET(
       );
     }
 
-    if (!process.env.ANTHROPIC_API_KEY) {
+    if (!isLLMConfigured()) {
       return Response.json(
         { error: MISSING_KEY_MESSAGE } satisfies GuideErrorBody,
         { status: 500 }

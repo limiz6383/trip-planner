@@ -22,7 +22,11 @@
 import type { NextRequest } from "next/server";
 import { getUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/db/server";
-import { appendChangeLogEntry } from "@/lib/db/queries";
+import {
+  appendChangeLogEntry,
+  getDayById,
+  setDayLocked,
+} from "@/lib/db/queries";
 import type { ItineraryDay } from "@/lib/types";
 
 // ---- request / response shapes ----
@@ -74,32 +78,13 @@ export async function PATCH(
     const supabase = await createSupabaseServerClient();
 
     // --- 1. Fetch current row (RLS ensures the user can access this day) ---
-    const { data: currentRow, error: fetchError } = await supabase
-      .from("itinerary_days")
-      .select("*")
-      .eq("day_id", dayId)
-      .single();
-
-    if (fetchError) {
-      if (fetchError.code === "PGRST116") {
-        return Response.json({ error: "Day not found" } satisfies PatchDayErrorBody, { status: 404 });
-      }
-      throw fetchError;
+    const before = await getDayById(supabase, dayId);
+    if (!before) {
+      return Response.json({ error: "Day not found" } satisfies PatchDayErrorBody, { status: 404 });
     }
 
-    const before = currentRow as ItineraryDay;
-
     // --- 2. Apply the update ---
-    const { data: updatedRow, error: updateError } = await supabase
-      .from("itinerary_days")
-      .update({ locked: body.locked })
-      .eq("day_id", dayId)
-      .select()
-      .single();
-
-    if (updateError) throw updateError;
-
-    const after = updatedRow as ItineraryDay;
+    const after = await setDayLocked(supabase, dayId, body.locked);
 
     // --- 3. Append change log entry ---
     const summary = after.locked
