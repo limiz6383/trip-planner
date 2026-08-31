@@ -25,6 +25,7 @@ import type {
   LLMItineraryDay,
   LLMActivity,
   DestinationGuide,
+  GuidePick,
   ActivityType,
 } from "@/lib/types";
 
@@ -138,6 +139,61 @@ function poolForTime(startTime: string | null, outdoorsy: boolean): Template[] {
   if (t < "18:00") return outdoorOnly(AFTERNOON);
   if (t < "21:00") return DINNER;
   return EVENING;
+}
+
+/** Accent- and punctuation-insensitive comparison key. */
+function normalise(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/** Does this activity already represent the named guide item? */
+function activityMatches(a: LLMActivity, name: string): boolean {
+  const needle = normalise(name.replace(/\([^)]*\)/g, " "));
+  if (needle.length < 3) return false;
+  const hay = normalise(`${a.name} ${a.place_name ?? ""} ${a.description ?? ""}`);
+  return hay.includes(needle);
+}
+
+/**
+ * Splices a ticked guide item into a day at a slot that suits its kind: a dish
+ * lands at dinner, a spot mid-afternoon. If the day is already at the cap, the
+ * lowest-value non-locked activity in that part of the day gives way — dropping
+ * the traveller's explicit pick would be the worse failure.
+ */
+function insertPick(day: LLMItineraryDay, pick: GuidePick): void {
+  const isFood = pick.kind === "food";
+  const slot = isFood ? "19:30" : "15:00";
+
+  const activity: LLMActivity = {
+    name: isFood ? `Dinner — ${pick.name}` : `Visit ${pick.name}`,
+    description: isFood
+      ? `${pick.name}, the dish you picked from the guide.`
+      : `${pick.name} — added because you picked it from the guide.`,
+    start_time: slot,
+    estimated_time_hours: isFood ? 1.5 : 2,
+    estimated_cost_usd: isFood ? 34 : 16,
+    place_name: pick.name,
+    source_attribution: "Your picks",
+    activity_type: isFood ? "food" : "culture",
+    locked: false,
+  };
+
+  const MAX = 8;
+  if (day.activities.length >= MAX) {
+    const victim = day.activities
+      .filter((a) => !a.locked && a.activity_type !== "transport")
+      .sort((a, b) => (a.estimated_cost_usd ?? 0) - (b.estimated_cost_usd ?? 0))[0];
+    if (victim) {
+      day.activities = day.activities.filter((a) => a !== victim);
+    }
+  }
+
+  day.activities.push(activity);
 }
 
 function toActivity(t: Template, city: string, seed: string): LLMActivity {
@@ -360,13 +416,24 @@ export class MockProvider implements LLMProvider {
 
     const instruction = params.instruction.toLowerCase();
     const cheaper = /cheap|budget|afford|less money|lower cost/.test(instruction);
-    const slower = /relax|slow|less|calm|chill|easy/.test(instruction);
+    const slower = /relax|slow|calm|chill|fewer|less busy/.test(instruction);
 
     const revised: LLMItinerary = structuredClone(params.currentItinerary);
+    const include = params.mustInclude ?? [];
+    const exclude = params.mustExclude ?? [];
 
+    // --- 1. Drop un-ticked items. Locked activities are never removed. ---
+    if (exclude.length > 0) {
+      for (const day of revised.days ?? []) {
+        day.activities = day.activities.filter(
+          (a) => a.locked || !exclude.some((p) => activityMatches(a, p.name))
+        );
+      }
+    }
+
+    // --- 2. Apply the free-text intent, as before. ---
     for (const day of revised.days ?? []) {
       if (slower) {
-        // Keep locked items and trim from the end, mirroring the real rules.
         const locked = day.activities.filter((a) => a.locked);
         const rest = day.activities.filter((a) => !a.locked);
         day.activities = [...locked, ...rest].slice(0, 4);
@@ -381,6 +448,46 @@ export class MockProvider implements LLMProvider {
           }
         }
       }
+    }
+
+    // --- 3. Work in the ticked items that aren't already covered. ---
+    const candidateDays = (revised.days ?? []).filter(
+      (_d, i) => i > 0 && i < (revised.days ?? []).length - 1
+    );
+    const targetDays = candidateDays.length > 0 ? candidateDays : revised.days ?? [];
+
+    let cursor = 0;
+    for (const pick of include) {
+      const present = (revised.days ?? []).some((d) =>
+        d.activities.some((a) => activityMatches(a, pick.name))
+      );
+      if (present) continue;
+
+      // Prefer a day in the pick's own city; otherwise round-robin so several
+      // picks don't all pile onto day 2.
+      // A day's city may be the full leg label ("Athens, Attica, Greece") or
+      // already shortened, depending on whether it came from persistence or
+      // from generation — compare both sides on the short form.
+      const cityDays = pick.city
+        ? targetDays.filter(
+            (d) =>
+              normalise(shortCity(d.city ?? "")) ===
+              normalise(shortCity(pick.city ?? ""))
+          )
+        : [];
+      const pool = cityDays.length > 0 ? cityDays : targetDays;
+      if (pool.length === 0) continue;
+      const day = pool[cursor % pool.length];
+      cursor += 1;
+
+      insertPick(day, pick);
+    }
+
+    // --- 4. Re-sort and recost every touched day. ---
+    for (const day of revised.days ?? []) {
+      day.activities.sort((a, b) =>
+        (a.start_time ?? "").localeCompare(b.start_time ?? "")
+      );
       day.daily_cost = day.activities.reduce(
         (sum, a) => sum + (a.estimated_cost_usd ?? 0),
         0
@@ -391,7 +498,17 @@ export class MockProvider implements LLMProvider {
       (sum, d) => sum + (d.daily_cost ?? 0),
       0
     );
-    revised.notes = `Revised for "${params.instruction}". Demo mode — no model was called.`;
+
+    const parts: string[] = [];
+    if (include.length > 0)
+      parts.push(`added ${include.map((p) => p.name).join(", ")}`);
+    if (exclude.length > 0)
+      parts.push(`dropped ${exclude.map((p) => p.name).join(", ")}`);
+    revised.notes =
+      parts.length > 0
+        ? `Rebuilt around your picks — ${parts.join("; ")}. Demo mode — no model was called.`
+        : `Revised for "${params.instruction}". Demo mode — no model was called.`;
+
     return revised;
   }
 

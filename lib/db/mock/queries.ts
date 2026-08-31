@@ -727,15 +727,35 @@ export async function appendChangeLogEntry(
   return clone(entry);
 }
 
+/**
+ * Mirrors the Postgres query exactly: revisions only, oldest first, skipping
+ * system cleanups and guide-picker rebuilds, de-duplicated, capped at 20.
+ * Divergence here would be invisible to the type checker and would make demo
+ * mode behave differently from production.
+ */
 export async function getRevisionInstructions(
   client: SupabaseClient,
   tripId: string
 ): Promise<string[]> {
-  const entries = await getChangeLogForTrip(client, tripId);
-  return entries
-    .filter((e) => e.change_type === "revision")
-    .map((e) => (e.metadata?.instruction as string) ?? e.summary)
-    .filter((s): s is string => Boolean(s));
+  // getChangeLogForTrip returns newest first; the real query orders ascending.
+  const entries = (await getChangeLogForTrip(client, tripId)).reverse();
+
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const e of entries) {
+    if (e.change_type !== "revision") continue;
+    const md = e.metadata;
+    if (!md || md.kind === "tidy" || md.kind === "picks") continue;
+    const instr = md.instruction;
+    if (typeof instr === "string" && instr.trim()) {
+      const t = instr.trim();
+      if (!seen.has(t)) {
+        seen.add(t);
+        out.push(t);
+      }
+    }
+  }
+  return out.slice(-20);
 }
 
 // ---------------------------------------------------------------------------

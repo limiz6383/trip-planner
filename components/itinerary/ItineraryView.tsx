@@ -14,7 +14,7 @@
  *   onItineraryUpdated?: () => void   fired after any successful mutation
  */
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import type { DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -29,6 +29,7 @@ import type {
   ActivityType,
   ChangeLogEntry,
   DestinationGuide,
+  GuidePick,
 } from "@/lib/types";
 import type {
   PatchActivityRequestBody,
@@ -1572,15 +1573,29 @@ function normalizeText(s: string): string {
     .trim();
 }
 
-/** Is this guide highlight covered by any activity in the plan? */
-function isCovered(name: string, activities: Activity[]): boolean {
-  // Drop parenthetical qualifiers (e.g. "The Shed (green chile)") so the core
-  // name still matches an activity like "Lunch at The Shed".
+function CheckDot({ on }: { on: boolean }) {
+  return (
+    <span
+      className={[
+        "flex h-4 w-4 flex-none items-center justify-center rounded-full text-[10px] font-bold",
+        on ? "bg-green-100 text-green-700" : "bg-zinc-100 text-zinc-300",
+      ].join(" ")}
+      title={on ? "Already in your plan" : "Not in your plan yet"}
+      aria-label={on ? "In your plan" : "Not in your plan"}
+    >
+      {on ? "\u2713" : "\u25cb"}
+    </span>
+  );
+}
+
+/** The activity that covers this highlight, if any. */
+function coveringActivity(
+  name: string,
+  activities: Activity[]
+): Activity | undefined {
   const sp = normalizeText(name.replace(/\([^)]*\)/g, " "));
-  if (sp.length < 3) return false;
-  return activities.some((a) => {
-    // Include the description: dishes/spots are often named there rather than
-    // in the title (e.g. "Dinner at Lokál" whose desc mentions svíčková).
+  if (sp.length < 3) return undefined;
+  return activities.find((a) => {
     const at = normalizeText(
       `${a.name} ${a.place_name ?? ""} ${a.description ?? ""}`
     );
@@ -1591,39 +1606,90 @@ function isCovered(name: string, activities: Activity[]): boolean {
   });
 }
 
-function CheckDot({ on }: { on: boolean }) {
+/** Stable key for a guide item across rebuilds. */
+function pickKey(city: string, name: string): string {
+  return `${city}::${name}`;
+}
+
+interface GuideItemState {
+  key: string;
+  name: string;
+  why: string;
+  kind: "spot" | "food";
+  city: string;
+  covered: boolean;
+  /** Covered by an activity the traveller locked — cannot be dropped. */
+  lockedIn: boolean;
+}
+
+/** One selectable highlight row. */
+function PickRow({
+  item,
+  selected,
+  onToggle,
+}: {
+  item: GuideItemState;
+  selected: boolean;
+  onToggle: () => void;
+}) {
+  const disabled = item.lockedIn && selected;
+
   return (
-    <span
-      className={[
-        "mt-0.5 flex h-4 w-4 flex-none items-center justify-center rounded-full text-[10px] font-bold",
-        on ? "bg-green-100 text-green-700" : "bg-zinc-100 text-zinc-300",
-      ].join(" ")}
-      aria-hidden="true"
-    >
-      {on ? "✓" : "○"}
-    </span>
+    <li>
+      <label
+        className={[
+          "flex cursor-pointer items-start gap-2 rounded-md px-1.5 py-1 text-sm transition-colors",
+          disabled ? "cursor-not-allowed opacity-70" : "hover:bg-zinc-50",
+        ].join(" ")}
+        title={
+          disabled
+            ? "This is part of a locked activity — unlock it in the plan to remove it."
+            : undefined
+        }
+      >
+        <input
+          type="checkbox"
+          checked={selected}
+          disabled={disabled}
+          onChange={onToggle}
+          className="mt-0.5 h-4 w-4 flex-none rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+        />
+        <CheckDot on={item.covered} />
+        <span>
+          <span className="font-medium text-zinc-800">{item.name}</span>
+          {item.why ? <span className="text-zinc-500"> — {item.why}</span> : null}
+        </span>
+      </label>
+    </li>
   );
 }
 
 /**
- * One collapsible "About {city}" card. Coverage (the ✓/○ dots and the
- * "your plan covers X of N" counts) is computed against `activities` — the
- * caller scopes these to the city's own days (falling back to all activities
- * for single-city trips). Styling/behaviour is identical to the original card.
+ * One collapsible "About {city}" card.
+ *
+ * Two independent signals per row, deliberately kept apart: the checkbox is the
+ * traveller's intent (what they want in the plan) and the dot is coverage (what
+ * the plan currently contains). Coverage is a fuzzy name match, so it must
+ * never be used as the checkbox's source of truth — after a rebuild the model
+ * rewords activities and the match drifts.
  */
 function DestinationGuideCard({
   guide,
-  activities,
+  items,
+  selected,
+  onToggle,
 }: {
   guide: DestinationGuide;
-  activities: Activity[];
+  items: GuideItemState[];
+  selected: Set<string>;
+  onToggle: (key: string) => void;
 }) {
   const [open, setOpen] = useState(true);
 
-  const spotsHit = guide.top_spots.filter((s) => isCovered(s.name, activities)).length;
-  const foodsHit = guide.must_try_foods.filter((f) =>
-    isCovered(f.name, activities)
-  ).length;
+  const spots = items.filter((i) => i.kind === "spot");
+  const foods = items.filter((i) => i.kind === "food");
+  const spotsHit = spots.filter((i) => i.covered).length;
+  const foodsHit = foods.filter((i) => i.covered).length;
 
   return (
     <Card>
@@ -1641,7 +1707,7 @@ function DestinationGuideCard({
           ].join(" ")}
           aria-hidden="true"
         >
-          ▾
+          &#9662;
         </span>
       </button>
 
@@ -1653,43 +1719,37 @@ function DestinationGuideCard({
             </p>
           )}
 
-          {guide.top_spots.length > 0 && (
+          {spots.length > 0 && (
             <div className="flex flex-col gap-1.5">
               <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                Top spots — your plan covers {spotsHit} of {guide.top_spots.length}
+                Top spots — your plan covers {spotsHit} of {spots.length}
               </h4>
-              <ul className="flex flex-col gap-1">
-                {guide.top_spots.map((s) => (
-                  <li key={s.name} className="flex gap-2 text-sm">
-                    <CheckDot on={isCovered(s.name, activities)} />
-                    <span>
-                      <span className="font-medium text-zinc-800">{s.name}</span>
-                      {s.why ? (
-                        <span className="text-zinc-500"> — {s.why}</span>
-                      ) : null}
-                    </span>
-                  </li>
+              <ul className="flex flex-col">
+                {spots.map((i) => (
+                  <PickRow
+                    key={i.key}
+                    item={i}
+                    selected={selected.has(i.key)}
+                    onToggle={() => onToggle(i.key)}
+                  />
                 ))}
               </ul>
             </div>
           )}
 
-          {guide.must_try_foods.length > 0 && (
+          {foods.length > 0 && (
             <div className="flex flex-col gap-1.5">
               <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
                 Must-try food — {foodsHit} on your plan
               </h4>
-              <ul className="flex flex-col gap-1">
-                {guide.must_try_foods.map((f) => (
-                  <li key={f.name} className="flex gap-2 text-sm">
-                    <CheckDot on={isCovered(f.name, activities)} />
-                    <span>
-                      <span className="font-medium text-zinc-800">{f.name}</span>
-                      {f.why ? (
-                        <span className="text-zinc-500"> — {f.why}</span>
-                      ) : null}
-                    </span>
-                  </li>
+              <ul className="flex flex-col">
+                {foods.map((i) => (
+                  <PickRow
+                    key={i.key}
+                    item={i}
+                    selected={selected.has(i.key)}
+                    onToggle={() => onToggle(i.key)}
+                  />
                 ))}
               </ul>
             </div>
@@ -1701,32 +1761,58 @@ function DestinationGuideCard({
 }
 
 /**
- * Fetches the per-city destination guides and renders one card per city,
- * each with its coverage scoped to that city's own days.
+ * Fetches the per-city destination guides and renders one card per city, each
+ * with its coverage scoped to that city's own days.
  *
- * Coverage scoping: for each guide we collect the activities of the days whose
- * `.city` matches the guide's city (case-insensitively). If a guide's city
- * matches no day — or there's only a single guide — we fall back to ALL
- * activities, so single-city trips behave exactly as before.
+ * Selection state lives here rather than in the cards so a multi-city trip
+ * still rebuilds once, from one combined set of picks.
+ *
+ * Restoring picks: the traveller's ticks are stored on the change-log entry of
+ * the revision that applied them, and re-read here. Coverage is only used as
+ * the initial default on a trip that has never been rebuilt from picks.
  */
 function DestinationGuides({
   tripId,
   days,
+  onRebuilt,
 }: {
   tripId: string;
   days: (ItineraryDay & { activities?: Activity[] })[];
+  onRebuilt?: () => void;
 }) {
   const [guides, setGuides] = useState<CityGuide[] | null>(null);
   const [loading, setLoading] = useState(true);
+  const [storedPicks, setStoredPicks] = useState<GuidePick[] | null>(null);
+  // null = "traveller hasn't touched the ticks yet", so the derived default
+  // below stays live while the guides and change log are still arriving.
+  const [override, setOverride] = useState<Set<string> | null>(null);
+  const [appliedBaseline, setAppliedBaseline] = useState<Set<string> | null>(null);
+  const [rebuilding, setRebuilding] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/api/trips/${tripId}/guide`);
-        if (!res.ok) return; // no guide (e.g. not migrated) — hide silently
-        const body = (await res.json()) as GuideResponseBody;
+        const [guideRes, logRes] = await Promise.all([
+          fetch(`/api/trips/${tripId}/guide`),
+          fetch(`/api/trips/${tripId}/changelog`),
+        ]);
+        if (!guideRes.ok) return; // no guide — hide silently
+        const body = (await guideRes.json()) as GuideResponseBody;
         if (!cancelled) setGuides(body.guides);
+
+        if (logRes.ok) {
+          const log = (await logRes.json()) as GetChangelogResponseBody;
+          const latest = log.entries.find(
+            (e) => Array.isArray((e.metadata as { include?: unknown })?.include)
+          );
+          if (!cancelled && latest) {
+            setStoredPicks(
+              ((latest.metadata as { include?: GuidePick[] }).include ?? [])
+            );
+          }
+        }
       } catch {
         /* network error — hide */
       } finally {
@@ -1738,42 +1824,190 @@ function DestinationGuides({
     };
   }, [tripId]);
 
+  /** Activities of the days whose city matches `city` (case-insensitive). */
+  const activitiesForCity = useCallback(
+    (city: string): Activity[] => {
+      const target = city.trim().toLowerCase();
+      const matched = days.filter(
+        (d) => (d.city ?? "").trim().toLowerCase() === target
+      );
+      if (matched.length === 0 || (guides?.length ?? 0) === 1) {
+        return days.flatMap((d) => d.activities ?? []);
+      }
+      return matched.flatMap((d) => d.activities ?? []);
+    },
+    [days, guides]
+  );
+
+  // Flatten every guide into one addressable list, with coverage resolved.
+  const items: GuideItemState[] = useMemo(() => {
+    if (!guides) return [];
+    const out: GuideItemState[] = [];
+    for (const cg of guides) {
+      const acts = activitiesForCity(cg.city);
+      const add = (h: { name: string; why: string }, kind: "spot" | "food") => {
+        const covering = coveringActivity(h.name, acts);
+        out.push({
+          key: pickKey(cg.city, h.name),
+          name: h.name,
+          why: h.why,
+          kind,
+          city: cg.city,
+          covered: Boolean(covering),
+          lockedIn: Boolean(covering?.locked),
+        });
+      };
+      for (const sp of cg.guide.top_spots) add(sp, "spot");
+      for (const fd of cg.guide.must_try_foods) add(fd, "food");
+    }
+    return out;
+  }, [guides, activitiesForCity]);
+
+  // Derived, not stored: stored picks if this trip has been rebuilt from picks
+  // before, otherwise whatever the plan already covers. Locked-in items are
+  // always ticked because they cannot be removed anyway.
+  const defaultSelection = useMemo(() => {
+    const initial = new Set<string>();
+    if (storedPicks && storedPicks.length > 0) {
+      const stored = new Set(
+        storedPicks.map((p) => pickKey(p.city ?? "", p.name))
+      );
+      for (const i of items) {
+        if (stored.has(i.key) || (i.lockedIn && i.covered)) initial.add(i.key);
+      }
+    } else {
+      for (const i of items) if (i.covered) initial.add(i.key);
+    }
+    return initial;
+  }, [items, storedPicks]);
+
+  const selected = override ?? defaultSelection;
+  const baseline = appliedBaseline ?? defaultSelection;
+
+  function toggle(key: string) {
+    const next = new Set(selected);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    setOverride(next);
+  }
+
+  async function handleRebuild() {
+    const toPick = (i: GuideItemState): GuidePick => ({
+      name: i.name,
+      kind: i.kind,
+      city: i.city,
+    });
+
+    const include = items.filter((i) => selected.has(i.key)).map(toPick);
+    // Only ask to remove things that are actually in the plan — otherwise the
+    // exclude list is mostly items that were never there.
+    const exclude = items
+      .filter((i) => !selected.has(i.key) && i.covered && !i.lockedIn)
+      .map(toPick);
+
+    if (include.length === 0 && exclude.length === 0) return;
+
+    setRebuilding(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/trips/${tripId}/itinerary/revise`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "picks",
+          include,
+          exclude,
+        } satisfies ReviseItineraryRequestBody),
+      });
+      if (!res.ok) {
+        const errBody = (await res.json()) as ReviseItineraryErrorBody;
+        setError(errBody.error ?? "Failed to rebuild the plan.");
+        return;
+      }
+      setAppliedBaseline(new Set(selected));
+      onRebuilt?.();
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setRebuilding(false);
+    }
+  }
+
   if (loading) {
     return (
       <Card>
         <div className="flex items-center gap-2 text-sm text-zinc-500">
           <span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-300 border-t-indigo-600" />
-          Loading destination highlights…
+          Loading destination highlights&#8230;
         </div>
       </Card>
     );
   }
 
-  if (!guides || guides.length === 0) return null;
+  if (!guides || guides.length === 0 || items.length === 0) return null;
 
-  const allActivities = days.flatMap((d) => d.activities ?? []);
-
-  /** Activities of the days whose city matches `city` (case-insensitive). */
-  function activitiesForCity(city: string): Activity[] {
-    const target = city.trim().toLowerCase();
-    const matched = days.filter(
-      (d) => (d.city ?? "").trim().toLowerCase() === target
-    );
-    // No day tagged with this city (or single-guide trip): fall back to all
-    // activities so coverage behaves exactly as the old single-card view.
-    if (matched.length === 0 || guides!.length === 1) return allActivities;
-    return matched.flatMap((d) => d.activities ?? []);
-  }
+  const addCount = items.filter((i) => selected.has(i.key) && !i.covered).length;
+  const dropCount = items.filter(
+    (i) => !selected.has(i.key) && i.covered && !i.lockedIn
+  ).length;
 
   return (
     <div className="flex flex-col gap-4">
+      <p className="text-xs text-zinc-500">
+        Tick what you want in the plan and untick what you don&#39;t, then
+        rebuild — the itinerary is regenerated around your picks.
+      </p>
+
       {guides.map((cg) => (
         <DestinationGuideCard
           key={cg.city}
           guide={cg.guide}
-          activities={activitiesForCity(cg.city)}
+          items={items.filter((i) => i.city === cg.city)}
+          selected={selected}
+          onToggle={toggle}
         />
       ))}
+
+      {(addCount > 0 || dropCount > 0 || rebuilding) && (
+        <div className="sticky bottom-3 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-200 bg-indigo-50/95 px-4 py-3 shadow-sm backdrop-blur">
+          <div className="text-sm text-indigo-900">
+            {addCount > 0 && (
+              <span>
+                Adding <strong>{addCount}</strong>
+              </span>
+            )}
+            {addCount > 0 && dropCount > 0 && <span>, </span>}
+            {dropCount > 0 && (
+              <span>
+                removing <strong>{dropCount}</strong>
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setOverride(new Set(baseline))}
+              disabled={rebuilding}
+            >
+              Reset
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleRebuild}
+              disabled={rebuilding}
+            >
+              {rebuilding ? "Rebuilding\u2026" : "Rebuild plan"}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <p className="text-sm text-red-600" role="alert">
+          {error}
+        </p>
+      )}
     </div>
   );
 }
@@ -2485,7 +2719,16 @@ export function ItineraryView({
         </Card>
 
         {/* ---- Destination guide(s) (overview + per-city coverage) ---- */}
-        <DestinationGuides tripId={tripId} days={localDays} />
+        <DestinationGuides
+          tripId={tripId}
+          days={localDays}
+          onRebuilt={() => {
+            // A rebuild persists a new version; refresh so the server re-renders
+            // it, matching how the chat "Apply changes" path updates state.
+            onItineraryUpdated?.();
+            router.refresh();
+          }}
+        />
 
         {/* ---- Day-by-day list ---- */}
         {localDays.length > 0 ? (

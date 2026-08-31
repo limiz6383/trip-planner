@@ -54,6 +54,17 @@ export interface GuideHighlight {
   why: string;
 }
 
+/**
+ * A destination-guide item the traveller has ticked or un-ticked, carried into
+ * a revision. `kind` tells the planner how to slot it: a dish becomes a meal,
+ * a spot becomes a visit. `city` scopes it on multi-city trips.
+ */
+export interface GuidePick {
+  name: string;
+  kind: "spot" | "food";
+  city?: string;
+}
+
 /** LLM-generated overview of a destination, cached on the trip. */
 export interface DestinationGuide {
   destination: string;
