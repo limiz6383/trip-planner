@@ -49,20 +49,21 @@ const SIGHT_TOURISM = "attraction|museum|viewpoint|gallery|zoo|theme_park";
 const SIGHT_HISTORIC = "monument|castle|ruins|archaeological_site|fort";
 
 /**
- * Overpass QL for named food venues plus the major sights around a point.
+ * Overpass QL (nodes and ways only: venues are never relations, and skipping
+ * them makes the query much cheaper) for named food venues plus the major sights around a point.
  * Sights are fetched in a separate `out` so a dense city's thousands of
  * restaurants can't truncate them away.
  */
 export function buildOverpassQuery(center: LatLon, radiusMeters: number): string {
   const around = `(around:${Math.round(radiusMeters)},${center.lat.toFixed(5)},${center.lon.toFixed(5)})`;
-  return `[out:json][timeout:25];
+  return `[out:json][timeout:15];
 (
-  nwr["amenity"~"^(${FOOD_AMENITIES})$"]["name"]${around};
-  nwr["shop"~"^(${FOOD_SHOPS})$"]["name"]${around};
+  nw["amenity"~"^(${FOOD_AMENITIES})$"]["name"]${around};
+  nw["shop"~"^(${FOOD_SHOPS})$"]["name"]${around};
 )->.food;
 (
-  nwr["tourism"~"^(${SIGHT_TOURISM})$"]["name"]${around};
-  nwr["historic"~"^(${SIGHT_HISTORIC})$"]["name"]${around};
+  nw["tourism"~"^(${SIGHT_TOURISM})$"]["name"]${around};
+  nw["historic"~"^(${SIGHT_HISTORIC})$"]["name"]${around};
 )->.sights;
 .food out center tags 1200;
 .sights out center tags 800;`;
