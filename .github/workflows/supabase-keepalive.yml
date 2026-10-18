@@ -1,0 +1,44 @@
+name: Supabase keep-alive
+
+# Supabase pauses Free-plan projects after 7 days with no database activity.
+# This sends one tiny read request to the project's REST API every day so the
+# project always looks active. It is independent of where the app is hosted
+# (the public Vercel deployment runs in demo mode and never touches Supabase).
+#
+# Setup: repo Settings -> Secrets and variables -> Actions -> add
+#   SUPABASE_URL        e.g. https://abcdefgh.supabase.co
+#   SUPABASE_ANON_KEY   the publishable / anon key (safe to expose; RLS applies)
+# Then Actions -> "Supabase keep-alive" -> Run workflow to test it once.
+
+on:
+  schedule:
+    - cron: "17 15 * * *" # daily, 15:17 UTC
+  workflow_dispatch: {} # adds a manual "Run workflow" button
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Query the database
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::error::Set the SUPABASE_URL and SUPABASE_ANON_KEY repository secrets."
+            exit 1
+          fi
+          # One row from `trips`. RLS may return an empty list for the anon
+          # role; that is fine - the request still reaches Postgres, which is
+          # what counts as activity.
+          status=$(curl -sS -o /dev/null -w "%{http_code}" \
+            "${SUPABASE_URL%/}/rest/v1/trips?select=id&limit=1" \
+            -H "apikey: $SUPABASE_ANON_KEY")
+          echo "Supabase responded with HTTP $status"
+          if [ "$status" != "200" ]; then
+            echo "::error::Keep-alive failed (HTTP $status). Is the project paused or the key wrong?"
+            exit 1
+          fi
