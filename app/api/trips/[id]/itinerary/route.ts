@@ -24,6 +24,7 @@ import { getTripBrief, getBookingForTrip, createItineraryFromLLMOutput, appendCh
 import { createPlannerEngine } from "@/lib/planner/engine";
 import type { Itinerary } from "@/lib/types";
 import { isLLMConfigured } from "@/lib/llm/availability";
+import { tryAcquire } from "@/lib/server/inflight";
 
 // ---- response shape (exported so client components can import) ----
 
@@ -61,6 +62,15 @@ export async function POST(
           "Add it to .env.local.",
       },
       { status: 500 }
+    );
+  }
+
+  // A double-click or second tab must not create two versions.
+  const release = tryAcquire(`generate:${tripId}`);
+  if (!release) {
+    return Response.json(
+      { error: "An itinerary is already being generated for this trip." },
+      { status: 409 }
     );
   }
 
@@ -154,5 +164,7 @@ export async function POST(
     const message =
       err instanceof Error ? err.message : "Itinerary generation failed.";
     return Response.json({ error: message }, { status: 500 });
+  } finally {
+    release();
   }
 }

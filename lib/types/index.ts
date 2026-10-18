@@ -352,6 +352,13 @@ export interface LLMActivity {
   estimated_time_hours: number;
   estimated_cost_usd: number;
   place_name: string;
+  /**
+   * Approximate coordinates of the place, requested from the model so the
+   * planner can check a day's route. Transient: used by the geography check
+   * and NOT persisted.
+   */
+  lat?: number;
+  lon?: number;
   source_attribution: string;
   activity_type: ActivityType;
   /**

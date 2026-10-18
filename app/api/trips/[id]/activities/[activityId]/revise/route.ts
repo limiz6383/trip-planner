@@ -33,6 +33,7 @@ import {
 import { createPlannerEngine } from "@/lib/planner/engine";
 import type { Activity } from "@/lib/types";
 import { isLLMConfigured } from "@/lib/llm/availability";
+import { getLegsForTrip } from "@/lib/db/queries";
 import { syncCostsForDay, type SyncedCosts } from "@/lib/db/sync-costs";
 
 // ---- request / response shapes (exported so client components can import) ----
@@ -143,7 +144,9 @@ export async function POST(
 
     // --- 4. Generate the replacement via the planner pipeline ---
     const engine = createPlannerEngine(supabase);
+    const legs = await getLegsForTrip(supabase, tripId).catch(() => []);
     const llmActivity = await engine.reviseActivity({
+      legs,
       brief,
       activity,
       dayDate,

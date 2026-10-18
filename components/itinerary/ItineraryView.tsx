@@ -23,6 +23,7 @@ import { ItineraryGeneratingOverlay } from "@/components/itinerary/ItineraryGene
 import { TYPE_META, TypeChip } from "@/components/itinerary/activity-types";
 import { buildICS } from "@/lib/ics";
 import { sumActivityCosts, sumDayCosts, summarizeBudget } from "@/lib/planner/costs";
+import { detectTripWideImpact } from "@/lib/planner/ripple";
 import type {
   Itinerary,
   ItineraryDay,
@@ -1260,13 +1261,18 @@ function BudgetLine({
 
 interface ReviseDayFormProps {
   dayId: string;
+  dayNumber: number;
+  dayCount: number;
   tripId: string;
-  onRevised: (activities: Activity[]) => void;
+  onRevised: (result: ReviseDayResponseBody) => void;
   onCancel: () => void;
 }
 
-function ReviseDayForm({ dayId, tripId, onRevised, onCancel }: ReviseDayFormProps) {
+function ReviseDayForm({ dayId, dayNumber, dayCount, tripId, onRevised, onCancel }: ReviseDayFormProps) {
   const [instruction, setInstruction] = useState("");
+  // Same deterministic check the server runs, so the traveller is told up front
+  // that this will re-plan the whole trip (and why it takes longer).
+  const tripWide = detectTripWideImpact(instruction, { dayNumber, dayCount });
   const [revising, setRevising] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1292,7 +1298,7 @@ function ReviseDayForm({ dayId, tripId, onRevised, onCancel }: ReviseDayFormProp
         return;
       }
       const responseBody = (await res.json()) as ReviseDayResponseBody;
-      onRevised(responseBody.activities);
+      onRevised(responseBody);
     } catch {
       setError("Network error. Please try again.");
     } finally {
@@ -1301,12 +1307,16 @@ function ReviseDayForm({ dayId, tripId, onRevised, onCancel }: ReviseDayFormProp
   }
 
   return (
-    <div className="ml-8 flex flex-col gap-2 rounded-lg border border-violet-200 bg-violet-50 p-3">
-      <label className="flex items-center gap-1.5 text-sm font-medium text-violet-800">
+    <div className="flex flex-col gap-2 rounded-lg border border-violet-200 bg-violet-50 p-3 sm:ml-8">
+      <label
+        htmlFor={`revise-day-${dayId}`}
+        className="flex items-center gap-1.5 text-sm font-medium text-violet-800"
+      >
         <SparkleIcon />
         Revise this day
       </label>
       <textarea
+        id={`revise-day-${dayId}`}
         value={instruction}
         onChange={(e) => setInstruction(e.target.value)}
         disabled={revising}
@@ -1315,6 +1325,13 @@ function ReviseDayForm({ dayId, tripId, onRevised, onCancel }: ReviseDayFormProp
         className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:cursor-not-allowed disabled:bg-zinc-50"
         placeholder="e.g. more outdoorsy, make the morning cheaper, add a museum"
       />
+      {tripWide && (
+        <p className="rounded-md bg-white/70 px-2.5 py-1.5 text-xs leading-snug text-violet-950" role="status">
+          This changes your travel logistics, so the planner will re-plan the
+          <strong> whole trip</strong> (neighbouring days, transfers and budget),
+          not just this day. It takes a little longer and creates a new version.
+        </p>
+      )}
       {error && (
         <p className="text-xs text-red-600" role="alert">
           {error}
@@ -1328,7 +1345,7 @@ function ReviseDayForm({ dayId, tripId, onRevised, onCancel }: ReviseDayFormProp
           loading={revising}
           disabled={revising}
         >
-          {revising ? "Revising…" : "Revise day"}
+          {revising ? (tripWide ? "Re-planning trip…" : "Revising…") : tripWide ? "Re-plan trip" : "Revise day"}
         </Button>
         <Button variant="ghost" size="sm" onClick={onCancel} disabled={revising}>
           Cancel
@@ -1350,6 +1367,8 @@ interface DaySectionProps {
   onDayUpdated: (updated: ItineraryDay) => void;
   onActivityUpdated: (updated: Activity) => void;
   onDayActivitiesReplaced: (dayId: string, activities: Activity[]) => void;
+  dayCount: number;
+  onTripReplanned: (notice: string) => void;
   onReorderActivity: (
     dayId: string,
     activityId: string,
@@ -1386,10 +1405,13 @@ function DaySection({
   onDayUpdated,
   onActivityUpdated,
   onDayActivitiesReplaced,
+  dayCount,
+  onTripReplanned,
   onReorderActivity,
   onActivityDrop,
   onActivityDeleted,
 }: DaySectionProps) {
+  const [dayNotes, setDayNotes] = useState<string[]>([]);
   const [localDay, setLocalDay] = useState<ItineraryDay>(day);
   const [lockPending, setLockPending] = useState(false);
   const [lockError, setLockError] = useState<string | null>(null);
@@ -1537,13 +1559,27 @@ function DaySection({
           </p>
         )}
 
+        {dayNotes.length > 0 && (
+          <p className="rounded-lg bg-paper-2 px-3 py-2 text-xs text-zinc-700" role="status">
+            {dayNotes.join(" ")}
+          </p>
+        )}
+
         {/* AI revise-day form */}
         {revisingDay && (
           <ReviseDayForm
             dayId={day.day_id}
+            dayNumber={dayNumber}
+            dayCount={dayCount}
             tripId={tripId}
-            onRevised={(acts) => {
-              onDayActivitiesReplaced(day.day_id, acts);
+            onRevised={(result) => {
+              if (result.scope === "trip") {
+                setRevisingDay(false);
+                onTripReplanned(result.notice);
+                return;
+              }
+              onDayActivitiesReplaced(day.day_id, result.activities);
+              setDayNotes(result.notes ?? []);
               setRevisingDay(false);
             }}
             onCancel={() => setRevisingDay(false)}
@@ -2631,6 +2667,20 @@ export function ItineraryView({
     [tripId, onItineraryUpdated]
   );
 
+  // A day-level ask turned out to be a trip-wide logistics change: the server
+  // re-planned every day and saved a NEW version. Show what happened, then
+  // refresh so the new version (and the server-rendered header) replace this one.
+  const [tripNotice, setTripNotice] = useState<string | null>(null);
+  const handleTripReplanned = useCallback(
+    (notice: string) => {
+      setTripNotice(notice);
+      onItineraryUpdated();
+      router.refresh();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    },
+    [onItineraryUpdated, router]
+  );
+
   // Per-day AI revise replaced the whole day's activity set — swap them in
   // (already ordered by start_time from the server).
   const handleDayActivitiesReplaced = useCallback(
@@ -3244,6 +3294,25 @@ export function ItineraryView({
             )}
           </section>
 
+          {tripNotice && (
+            <div
+              role="status"
+              className="flex items-start gap-3 rounded-2xl border border-violet-200 bg-violet-50 p-4 text-sm leading-snug text-violet-950"
+            >
+              <p className="flex-1">{tripNotice}</p>
+              <button
+                type="button"
+                onClick={() => setTripNotice(null)}
+                className="-mr-1 -mt-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-violet-700 hover:bg-violet-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                aria-label="Dismiss message"
+              >
+                <StrokeIcon>
+                  <path d="M6 6l12 12M18 6 6 18" />
+                </StrokeIcon>
+              </button>
+            </div>
+          )}
+
           {/* ---- Destination guide(s) (overview + per-city coverage) ---- */}
           <DestinationGuides
             tripId={tripId}
@@ -3319,6 +3388,8 @@ export function ItineraryView({
                       onDayUpdated={handleDayUpdated}
                       onActivityUpdated={handleActivityUpdated}
                       onDayActivitiesReplaced={handleDayActivitiesReplaced}
+                      dayCount={localDays.length}
+                      onTripReplanned={handleTripReplanned}
                       onReorderActivity={handleReorderActivity}
                       onActivityDrop={handleActivityDrop}
                       onActivityDeleted={handleActivityDeleted}
