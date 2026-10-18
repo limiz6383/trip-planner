@@ -32,7 +32,15 @@ export async function GET(
   const { id: tripId } = await params;
   const token = request.nextUrl.searchParams.get("token") ?? "";
 
-  if (!tripId || !verifyCalendarToken(tripId, token)) {
+  // verifyCalendarToken throws when the signing secret is not configured (demo
+  // mode, a half-configured deploy). That must read as "no feed", not a 500.
+  let allowed = false;
+  try {
+    allowed = !!tripId && verifyCalendarToken(tripId, token);
+  } catch {
+    allowed = false;
+  }
+  if (!allowed) {
     return new Response("Forbidden", { status: 403 });
   }
 

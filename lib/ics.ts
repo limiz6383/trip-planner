@@ -122,5 +122,30 @@ export function buildICS(
   }
 
   lines.push("END:VCALENDAR");
-  return lines.join("\r\n");
+  // RFC 5545: content lines are folded at 75 octets and the file ends with CRLF.
+  return lines.map(foldLine).join("\r\n") + "\r\n";
+}
+
+/** Folds one content line at 75 octets (UTF-8 aware), continuing with a space. */
+export function foldLine(line: string): string {
+  const enc = new TextEncoder();
+  if (enc.encode(line).length <= 75) return line;
+  const out: string[] = [];
+  let cur = "";
+  let curBytes = 0;
+  // First physical line may hold 75 octets; continuation lines 74 plus the leading space.
+  let limit = 75;
+  for (const ch of line) {
+    const b = enc.encode(ch).length;
+    if (curBytes + b > limit) {
+      out.push(cur);
+      cur = "";
+      curBytes = 0;
+      limit = 74;
+    }
+    cur += ch;
+    curBytes += b;
+  }
+  if (cur) out.push(cur);
+  return out.join("\r\n ");
 }
