@@ -2917,7 +2917,7 @@ export function ItineraryView({
                   rows={1}
                   aria-label="Message the planner"
                   className="min-h-11 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-2.5 py-2.5 text-base leading-relaxed text-zinc-900 placeholder:text-zinc-500 focus:outline-none disabled:opacity-60 sm:text-sm"
-                  placeholder="Ask or suggest something…"
+                  placeholder="Ask or suggest…"
                 />
                 <button
                   type="button"
