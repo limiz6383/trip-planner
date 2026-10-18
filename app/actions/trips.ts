@@ -11,6 +11,7 @@ import {
   type TripLegInput,
 } from "@/lib/db/queries";
 import { requireUser } from "@/lib/auth";
+import { validateLegs } from "@/lib/planner/legs";
 
 export type TripActionState = { error?: string } | undefined;
 
@@ -50,6 +51,12 @@ export async function createTripAction(
   if (legs.some((l) => l.departure < l.arrival)) {
     return { error: "Each city's departure must be on or after its arrival." };
   }
+  // Cities must chain: each starts the day the previous one ends (that shared
+  // day is the travel day). Gaps leave days with no city; overlaps double-book.
+  const legError = validateLegs(
+    legs.map((l) => ({ city: l.city, arrival_date: l.arrival, departure_date: l.departure }))
+  );
+  if (legError) return { error: legError };
 
   // Chronological order = leg order. Trip dates are the outer envelope.
   legs.sort((a, b) => a.arrival.localeCompare(b.arrival));
