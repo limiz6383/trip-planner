@@ -52,6 +52,21 @@ Note that demo writes are per-instance and in-memory, so a visitor's changes do
 not survive across serverless instances. That is fine for a walkthrough; do not
 present it as persistence.
 
+## Keeping the free Supabase project awake
+Supabase pauses Free-plan projects after **7 days with no database activity**.
+`.github/workflows/supabase-keepalive.yml` runs daily on GitHub Actions and
+sends one tiny read request to the project's REST API, so it never goes idle.
+It does not depend on Vercel, so it works even when the public deployment runs
+in demo mode (which never touches Supabase).
+
+1. GitHub repo → **Settings → Secrets and variables → Actions** → add
+   `SUPABASE_URL` and `SUPABASE_ANON_KEY` (Supabase → Project Settings → API;
+   the anon/publishable key is safe to expose, RLS still applies).
+2. **Actions → Supabase keep-alive → Run workflow** once to confirm a green run.
+3. GitHub disables scheduled workflows after 60 days with no repo activity, so
+   an occasional commit keeps it running. If the project is already paused,
+   resume it in the Supabase dashboard first.
+
 ## ⚠️ Cost — read before sharing widely
 Every itinerary **generate / revise / day-revise / activity-revise / chat /
 destination guide** call uses **your** `ANTHROPIC_API_KEY` — so friends' usage
