@@ -39,31 +39,38 @@ export interface LatLon {
 // Query
 // ---------------------------------------------------------------------------
 
-const FOOD_AMENITIES =
-  "restaurant|cafe|bar|pub|fast_food|food_court|ice_cream|biergarten";
-const FOOD_SHOPS = "bakery|pastry|deli|confectionery";
+const FOOD_AMENITIES = [
+  "restaurant", "cafe", "bar", "pub", "fast_food", "food_court", "ice_cream", "biergarten",
+];
+const FOOD_SHOPS = ["bakery", "pastry", "deli", "confectionery"];
 // Named, genuinely visit-worthy sights only. Unnamed or tiny features (artwork,
 // memorial plaques such as Berlin's thousands of Stolpersteine) would make every
 // street look like a tourist zone.
-const SIGHT_TOURISM = "attraction|museum|viewpoint|gallery|zoo|theme_park";
-const SIGHT_HISTORIC = "monument|castle|ruins|archaeological_site|fort";
+const SIGHT_TOURISM = ["attraction", "museum", "viewpoint", "gallery", "zoo", "theme_park"];
+const SIGHT_HISTORIC = ["monument", "castle", "ruins", "archaeological_site", "fort"];
 
 /**
  * Overpass QL (nodes and ways only: venues are never relations, and skipping
- * them makes the query much cheaper) for named food venues plus the major sights around a point.
- * Sights are fetched in a separate `out` so a dense city's thousands of
- * restaurants can't truncate them away.
+ * them makes the query much cheaper) for named food venues plus the major sights
+ * around a point. Sights are fetched in a separate `out` so a dense city's
+ * thousands of restaurants can't truncate them away.
+ *
+ * One exact `["key"="value"]` statement per value, not a regex alternation:
+ * exact matches use Overpass's tag index and run in a fraction of the time, which
+ * matters on the shared public servers.
  */
 export function buildOverpassQuery(center: LatLon, radiusMeters: number): string {
   const around = `(around:${Math.round(radiusMeters)},${center.lat.toFixed(5)},${center.lon.toFixed(5)})`;
-  return `[out:json][timeout:15];
+  const stmts = (key: string, values: string[]) =>
+    values.map((v) => `  nw["${key}"="${v}"]["name"]${around};`).join("\n");
+  return `[out:json][timeout:20];
 (
-  nw["amenity"~"^(${FOOD_AMENITIES})$"]["name"]${around};
-  nw["shop"~"^(${FOOD_SHOPS})$"]["name"]${around};
+${stmts("amenity", FOOD_AMENITIES)}
+${stmts("shop", FOOD_SHOPS)}
 )->.food;
 (
-  nw["tourism"~"^(${SIGHT_TOURISM})$"]["name"]${around};
-  nw["historic"~"^(${SIGHT_HISTORIC})$"]["name"]${around};
+${stmts("tourism", SIGHT_TOURISM)}
+${stmts("historic", SIGHT_HISTORIC)}
 )->.sights;
 .food out center tags 1200;
 .sights out center tags 800;`;
