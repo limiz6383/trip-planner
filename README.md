@@ -55,6 +55,44 @@ mode came last, once the product was worth showing to people.
 - Date-only values showed one day early in negative-UTC timezones, and activity
   order drifted until I added an explicit `sort_order`.
 
+## Where restaurant suggestions come from
+
+Early versions produced generic meals ("Dinner at Taverna") for any city outside a
+small curated sample, because the model had nothing local to ground on. Live mode
+now pulls **real, named venues from [OpenStreetMap](https://www.openstreetmap.org)**
+(via the free Overpass API; no key needed) and merges them with the curated posts
+before ranking.
+
+I deliberately did **not** use Google or Tripadvisor ratings: star ratings reward
+whatever the most tourists have already visited, which is the opposite of "where
+locals actually eat". OpenStreetMap has no ratings, so the app derives a *locality*
+score from what the map does know:
+
+- chains (brand tags) are left out entirely
+- has its own Wikipedia/Wikidata entry, or is tagged as a visitor attraction → less local
+- sits within 150 m of several *named* major sights (the classic tourist-trap zone) → less local
+- independent and away from the main sights → local
+
+That score feeds the same ranking as everything else, so the existing
+local ↔ touristy slider decides which venues the model sees. The model is told to
+name only venues present in that data and never to invent a restaurant; if
+nothing fits it says so generically instead.
+
+**Honest limits.** The locality score is a heuristic, not a measurement, and it
+will misjudge some places (a genuinely local café on a tourist street, a chain the
+map doesn't tag). OpenStreetMap coverage varies by region and carries no ratings,
+prices or reviews. Some venues are only named in the local script (for example Greek), so
+those names appear untransliterated. The public Overpass service is rate-limited, so
+results are cached in memory, each lookup has a 12-second budget (plus a short fallback to a plain place search, which finds fewer venues and cannot tell how close they are to sights), and a failed lookup
+falls back to generic suggestions rather than failing the plan. The hosted demo does not use any of this: its itinerary is a saved
+sample generated before this feature existed, and its curated posts (Tokyo and
+Berlin) are seeded sample data.
+
+Place data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright)
+(ODbL). Set `PLACES_SOURCE=off` to disable the lookup.
+
+Run the unit tests for the venue logic with `npm test`.
+
 ## Try it — demo mode
 
 Demo mode runs the whole product with **no API keys, no database, and no

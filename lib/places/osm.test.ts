@@ -12,12 +12,49 @@ const node = (id: number, lat: number, lon: number, tags: Record<string, string>
   type: "node", id, lat, lon, tags,
 });
 
-test("a chain scores far lower than an independent place", () => {
+test("an independent venue away from sights scores as local", () => {
   const indie = scoreLocality({ amenity: "restaurant", cuisine: "greek" }, 0);
-  const chain = scoreLocality({ amenity: "fast_food", brand: "Burger Co", "brand:wikidata": "Q1" }, 0);
-  assert.ok(indie.score >= 0.6, `independent should be local, got ${indie.score}`);
-  assert.ok(chain.score <= 0.3, `chain should be touristy/generic, got ${chain.score}`);
-  assert.match(chain.reasons.join(" "), /chain/);
+  assert.ok(indie.score >= 0.7, `independent should be clearly local, got ${indie.score}`);
+  assert.ok(indie.score <= 0.95);
+});
+
+test("a famous or attraction-tagged venue scores lower", () => {
+  const plain = scoreLocality({ amenity: "restaurant" }, 0).score;
+  const famous = scoreLocality({ amenity: "restaurant", wikidata: "Q1" }, 0).score;
+  const attraction = scoreLocality({ amenity: "restaurant", tourism: "attraction" }, 0).score;
+  assert.ok(famous < plain && attraction < plain);
+});
+
+test("chains are never suggested", () => {
+  const els: OverpassElement[] = [
+    node(1, 37.0, 25.0, { amenity: "fast_food", name: "Burger Co", brand: "Burger Co" }),
+    node(2, 37.0, 25.001, { amenity: "cafe", name: "Chain Cafe", "brand:wikidata": "Q42" }),
+    node(3, 37.0, 25.002, { amenity: "cafe", name: "Kafeneio Mitsos" }),
+  ];
+  const names = elementsToPosts(els, "X").map((p) => p.place_name);
+  assert.deepEqual(names, ["Kafeneio Mitsos"]);
+});
+
+test("prefers the English name and keeps the local one as context", () => {
+  const els: OverpassElement[] = [
+    node(1, 37.0, 25.0, { amenity: "restaurant", name: "Κλαρίνος", "name:en": "Klarinos" }),
+  ];
+  const [p] = elementsToPosts(els, "Paros");
+  assert.equal(p.place_name, "Klarinos");
+  assert.equal(p.title, "Klarinos");
+  assert.match(p.content!, /Local name: Κλαρίνος/);
+});
+
+test("unnamed sights do not make a street look touristy", () => {
+  const els: OverpassElement[] = [
+    node(1, 37.0, 25.0, { amenity: "restaurant", name: "Quiet Place" }),
+    node(2, 37.0001, 25.0, { tourism: "artwork" }),
+    node(3, 37.0001, 25.0001, { historic: "memorial" }),
+    node(4, 37.0002, 25.0, { tourism: "attraction" }),
+  ];
+  const [p] = elementsToPosts(els, "X");
+  assert.doesNotMatch(p.content!, /sightseeing zone|close to a major sight/);
+  assert.ok(p.locality_score >= 0.7);
 });
 
 test("sitting among major sights lowers the score", () => {
@@ -28,8 +65,10 @@ test("sitting among major sights lowers the score", () => {
 });
 
 test("score is clamped to 0.05..0.95", () => {
-  const low = scoreLocality({ brand: "X", wikidata: "Q1", tourism: "attraction" }, 9).score;
-  assert.equal(low, 0.05);
+  const worst = scoreLocality({ wikidata: "Q1", tourism: "attraction" }, 9).score;
+  const best = scoreLocality({ amenity: "cafe", cuisine: "greek" }, 0).score;
+  assert.ok(worst >= 0.05 && worst <= 0.15, `worst case should be near the floor, got ${worst}`);
+  assert.ok(best <= 0.95);
 });
 
 test("elementsToPosts keeps only named venues and maps fields", () => {
@@ -79,6 +118,13 @@ test("query targets the point and radius, and separates sights", () => {
   assert.match(q, /around:5000,37\.97550,23\.73480/);
   assert.match(q, /\.food out center/);
   assert.match(q, /\.sights out center/);
+});
+
+test("sights query asks only for named, notable features", () => {
+  const q = buildOverpassQuery({ lat: 0, lon: 0 }, 1000);
+  const sights = q.slice(q.indexOf("->.food;"));
+  assert.doesNotMatch(sights, /artwork|memorial/);
+  assert.match(sights, /\["name"\]/);
 });
 
 test("haversine is roughly right", () => {

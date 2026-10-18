@@ -300,6 +300,8 @@ Always populate destination, start_date, and end_date in the brief JSON from the
 If you don't have enough information yet, omit the JSON block and keep asking.`;
 
 /** System prompt for whole-itinerary revision */
+const NAME_THE_PLACE = `NAME THE PLACE: for every meal, use a venue from community_posts whose place_name fits that neighbourhood and time of day (entries with source "openstreetmap" are real mapped venues; their content says how local they are) and write the name as that venue's exact place_name. Never invent a restaurant, cafe or bar name that is not in community_posts; if nothing fits, describe the meal generically (e.g. "Lunch at a family-run taverna"). Keep an existing named meal the traveller has not asked to change.`;
+
 const ITINERARY_REVISION_SYSTEM_PROMPT = `You are an expert travel itinerary planner helping a user revise an existing plan.
 
 You will receive:
@@ -326,7 +328,7 @@ Your job is to apply the instruction to produce a revised itinerary. Rules:
 3. Keep what the user did NOT ask to change where reasonable; preserve good activities that are unaffected by the instruction.
 3. LOCKED ITEMS ARE NON-NEGOTIABLE. Any day or activity marked "locked": true in the current itinerary represents a committed plan (e.g. a booking the user cannot move). Reproduce it EXACTLY — do not change, reword, reprice, reorder, or remove it — and plan the rest of the trip around it.
 4. Size each day to the traveller's PACE from the brief: relaxed ≈ 3-4, moderate ≈ 4-5, fast ≈ 6-7 activities (default ~4; meals included in the count; never exceed 8) — same policy as the original generation.
-5. MEALS: keep breakfast, lunch, and dinner present on every full day (activity_type "food") at realistic times, unless the instruction explicitly changes meals. Arrival/departure days include only meals that fit around the flight.
+5. MEALS: keep breakfast, lunch, and dinner present on every full day (activity_type "food") at realistic times, unless the instruction explicitly changes meals. Arrival/departure days include only meals that fit around the flight. ${NAME_THE_PLACE}
 6. Keep each "description" to ONE short sentence.
 7. Maintain the same date range and day count as the original itinerary.
 8. Respect the budget and pace from the brief.
@@ -371,6 +373,8 @@ You will receive:
 - The date of the day this activity belongs to
 - Community-sourced place recommendations for the destination
 
+If the replacement is a meal or drink: ${NAME_THE_PLACE}
+
 Return ONLY a single replacement activity as valid JSON matching this exact shape:
 {
   "name": "string",
@@ -400,7 +404,7 @@ Rules:
 2. STANDING PREFERENCES ARE STICKY. Everything in standing_preferences was explicitly requested earlier and must still hold. Do NOT undo or compromise an earlier request while satisfying the new one — only drop one if the current instruction directly contradicts it.
 2. LOCKED ITEMS ARE NON-NEGOTIABLE. Any activity with "locked": true must be reproduced EXACTLY (do not change, reorder, reprice, or remove it) and the rest of the day planned around it.
 3. Size the day to the traveller's PACE: relaxed ≈ 3-4, moderate ≈ 4-5, fast ≈ 6-7 activities (default ~4; meals count; never exceed 8).
-4. Keep breakfast, lunch, and dinner present (activity_type "food") at realistic times unless the instruction explicitly changes meals.
+4. Keep breakfast, lunch, and dinner present (activity_type "food") at realistic times unless the instruction explicitly changes meals. ${NAME_THE_PLACE}
 5. Give every activity a "start_time" in 24-hour "HH:MM" format — chronological, consistent with each activity's estimated_time_hours and realistic venue/meal hours.
 6. Keep each "description" to ONE short sentence.
 
@@ -458,7 +462,7 @@ Generate a detailed day-by-day itinerary that:
 3. Produces a realistic schedule with appropriate timing and logical geography
 4. Estimates costs for each activity
 5. Sizes each day to the traveller's PACE from the brief: relaxed ≈ 3-4 activities, moderate ≈ 4-5, fast ≈ 6-7. Default to about 4 when pace is moderate or unspecified. These counts INCLUDE meals. Never exceed 8 in a day; favor realistic pacing over packing the day.
-6. MEALS: every full day MUST include breakfast, lunch, and dinner as activities (activity_type "food") at realistic times (breakfast ~08:00, lunch ~12:30, dinner ~19:00) — meals are part of the per-day count above, not extra. On the arrival day, include only the meals that fall after arrival + transit; on the departure day, only meals before leaving for the airport. NAME THE PLACE: for every meal, use a venue from community_posts whose place_name fits that neighbourhood and time of day (entries with source "openstreetmap" are real mapped venues; their content says how local they are) and write the title as the venue's exact place_name. Never invent a restaurant, cafe or bar name that is not in community_posts; if nothing fits, describe the meal generically (e.g. "Lunch at a family-run taverna").
+6. MEALS: every full day MUST include breakfast, lunch, and dinner as activities (activity_type "food") at realistic times (breakfast ~08:00, lunch ~12:30, dinner ~19:00) — meals are part of the per-day count above, not extra. On the arrival day, include only the meals that fall after arrival + transit; on the departure day, only meals before leaving for the airport. ${NAME_THE_PLACE}
 7. Keeps each activity "description" to ONE short sentence (the goal is a fast, scannable plan, not an essay)
 8. Lists each day's activities in the ORDER the traveller does them, earliest first — the array order IS the schedule. On the arrival day, sequence arrival logistics first (e.g. a meal eaten en route from the airport, then hotel check-in) before any activity that needs the traveller already settled in. Never place a later-in-the-day activity before an earlier one.
 9. TIMING: give every activity a "start_time" in 24-hour "HH:MM" format. Times must be in chronological order, consistent with each activity's estimated_time_hours (so one activity ends before the next begins, leaving brief transit gaps), realistic venue/meal hours, and any flight arrival/departure bounds.
