@@ -2,7 +2,7 @@
 
 import { useState, useActionState } from "react";
 import Link from "next/link";
-import { Card } from "@/components/ui/Card";
+import { TripCover, RouteChips, splitStops, formatDateRangeShort, tripDays } from "@/components/TripCover";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
@@ -14,9 +14,15 @@ import {
 import type { Trip } from "@/lib/types";
 
 const statusColors: Record<string, string> = {
-  planned: "bg-blue-100 text-blue-700",
-  in_progress: "bg-green-100 text-green-700",
-  completed: "bg-zinc-100 text-zinc-600",
+  planned: "bg-brand-100 text-brand-800",
+  in_progress: "bg-green-100 text-green-800",
+  completed: "bg-zinc-200 text-zinc-700",
+};
+
+const statusLabels: Record<string, string> = {
+  planned: "Upcoming",
+  in_progress: "On trip",
+  completed: "Completed",
 };
 
 interface TripCardProps {
@@ -36,19 +42,8 @@ export function TripCard({ trip }: TripCardProps) {
     FormData
   >(deleteTripAction, undefined);
 
-  const start = new Date(trip.start_date).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    // Date-only value: format in UTC to avoid an off-by-one in timezones west of UTC.
-    timeZone: "UTC",
-  });
-  const end = new Date(trip.end_date).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+  const stops = splitStops(trip.destination);
+  const days = tripDays(trip.start_date, trip.end_date);
 
   function handleConfirmDelete() {
     setDeleteOpen(false);
@@ -59,72 +54,85 @@ export function TripCard({ trip }: TripCardProps) {
 
   return (
     <>
-      <Card className="transition-shadow hover:shadow-md">
-        <div className="flex items-start justify-between gap-2">
-          {/* Title / destination — clicking navigates to the trip */}
-          <Link
-            href={`/trips/${trip.trip_id}`}
-            className="min-w-0 flex-1 group"
-          >
-            <h2 className="truncate text-sm font-semibold text-zinc-900 group-hover:underline">
-              {trip.title}
-            </h2>
-            <p className="mt-0.5 truncate text-xs text-zinc-500">
-              {trip.destination}
-            </p>
-          </Link>
-
+      <article className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-card transition duration-200 hover:-translate-y-0.5 hover:shadow-lift">
+        {/* Cover */}
+        <div className="relative h-32 shrink-0 sm:h-36">
+          <TripCover seed={trip.destination} stops={stops.length} compact />
           <span
             className={[
-              "shrink-0 rounded-full px-2 py-0.5 text-xs font-medium capitalize",
-              statusColors[trip.status] ?? "bg-zinc-100 text-zinc-600",
+              "absolute left-3 top-3 rounded-full px-2.5 py-1 text-xs font-semibold shadow-sm",
+              statusColors[trip.status] ?? "bg-zinc-200 text-zinc-700",
             ].join(" ")}
           >
-            {trip.status.replace("_", " ")}
+            {statusLabels[trip.status] ?? trip.status.replace("_", " ")}
           </span>
         </div>
 
-        <p className="mt-3 text-xs text-zinc-400">
-          {start} — {end}
-        </p>
+        <div className="flex flex-1 flex-col p-4 sm:p-5">
+          {/* Title: the stretched link makes the whole card open the trip */}
+          <h2 className="font-display text-xl font-semibold leading-snug text-ink">
+            <Link
+              href={`/trips/${trip.trip_id}`}
+              className="rounded after:absolute after:inset-0 after:z-0 after:content-[''] focus-visible:outline-2"
+            >
+              {trip.title}
+            </Link>
+          </h2>
 
-        {/* Action row */}
-        <div className="mt-3 flex items-center gap-2">
-          {/* Archive / Unarchive */}
-          <form action={archiveDispatch}>
-            <input type="hidden" name="trip_id" value={trip.trip_id} />
+          <div className="mt-2">
+            <RouteChips stops={stops} tone="dark" />
+          </div>
+
+          <p className="mt-3 text-sm text-zinc-600">
+            {formatDateRangeShort(trip.start_date, trip.end_date)}
+            <span className="mx-1.5 text-zinc-300" aria-hidden="true">
+              /
+            </span>
+            {days} {days === 1 ? "day" : "days"}
+          </p>
+
+          {/* Action row */}
+          <div className="relative z-10 mt-auto flex items-center gap-1 pt-4">
+            <form action={archiveDispatch}>
+              <input type="hidden" name="trip_id" value={trip.trip_id} />
+              <Button
+                type="submit"
+                variant="ghost"
+                size="sm"
+                loading={archivePending}
+                className="text-xs"
+              >
+                {trip.archived ? "Unarchive" : "Archive"}
+              </Button>
+            </form>
+
             <Button
-              type="submit"
+              type="button"
               variant="ghost"
               size="sm"
-              loading={archivePending}
-              className="text-xs"
+              onClick={() => setDeleteOpen(true)}
+              loading={deletePending}
+              className="text-xs text-red-700 hover:bg-red-50 hover:text-red-800"
             >
-              {trip.archived ? "Unarchive" : "Archive"}
+              Delete
             </Button>
-          </form>
 
-          {/* Delete — opens confirm dialog */}
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setDeleteOpen(true)}
-            loading={deletePending}
-            className="text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
-          >
-            Delete
-          </Button>
+            <span
+              className="ml-auto text-sm font-medium text-brand-700 transition-transform group-hover:translate-x-0.5"
+              aria-hidden="true"
+            >
+              Open &rarr;
+            </span>
+          </div>
+
+          {archiveState?.error && (
+            <p className="mt-2 text-xs text-red-600">{archiveState.error}</p>
+          )}
+          {deleteState?.error && (
+            <p className="mt-2 text-xs text-red-600">{deleteState.error}</p>
+          )}
         </div>
-
-        {/* Inline error feedback */}
-        {archiveState?.error && (
-          <p className="mt-2 text-xs text-red-600">{archiveState.error}</p>
-        )}
-        {deleteState?.error && (
-          <p className="mt-2 text-xs text-red-600">{deleteState.error}</p>
-        )}
-      </Card>
+      </article>
 
       <ConfirmDialog
         open={deleteOpen}
