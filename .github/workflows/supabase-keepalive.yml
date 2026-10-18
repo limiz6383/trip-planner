@@ -34,11 +34,13 @@ jobs:
           # One row from `trips`. RLS may return an empty list for the anon
           # role; that is fine - the request still reaches Postgres, which is
           # what counts as activity.
-          status=$(curl -sS -o /dev/null -w "%{http_code}" \
+          resp=$(curl -sS -w "\n%{http_code}" \
             "${SUPABASE_URL%/}/rest/v1/trips?select=id&limit=1" \
-            -H "apikey: $SUPABASE_ANON_KEY")
+            -H "apikey: $SUPABASE_ANON_KEY") || { echo "::error::curl could not reach the URL in SUPABASE_URL (check it is just https://<ref>.supabase.co)"; exit 1; }
+          status=$(echo "$resp" | tail -n1)
+          body=$(echo "$resp" | sed '$d' | head -c 300)
           echo "Supabase responded with HTTP $status"
           if [ "$status" != "200" ]; then
-            echo "::error::Keep-alive failed (HTTP $status). Is the project paused or the key wrong?"
+            echo "::error::Keep-alive failed (HTTP $status): $body"
             exit 1
           fi
