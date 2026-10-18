@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
   try {
     const upstream = await fetch(url, {
       headers: {
-        "User-Agent": "trip-planner-autocomplete/1.0 (mizuho.li@king.com)",
+        "User-Agent": "trip-planner-autocomplete/1.0 (+https://github.com/limiz6383/trip-planner)",
       },
       // Don't let Next.js cache this at the framework layer — results should
       // always reflect the live query.

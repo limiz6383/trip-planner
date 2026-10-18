@@ -18,6 +18,8 @@ import { getCommunityPostsForDestination } from "@/lib/db/queries";
 export interface FetchOptions {
   /** Maximum number of posts to return (before ranking) */
   limit?: number;
+  /** Traveller's preference, 0.0 = very local .. 1.0 = very touristy. */
+  localTouristyDial?: number;
 }
 
 /**
