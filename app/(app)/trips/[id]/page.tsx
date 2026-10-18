@@ -130,6 +130,17 @@ function TripHeader({
   );
 }
 
+/** Subscribe-by-URL link, or undefined when the site URL or signing secret isn't configured. */
+function subscribeUrl(tripId: string): string | undefined {
+  const site = process.env.NEXT_PUBLIC_SITE_URL;
+  if (!site) return undefined;
+  try {
+    return `${site.replace(/\/$/, "")}/api/trips/${tripId}/calendar.ics?token=${calendarToken(tripId)}`;
+  } catch {
+    return undefined; // no signing secret: hide the option instead of failing the page
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -252,11 +263,7 @@ export default async function TripDetailPage({
                   ? { dailyBudgetUsd: brief.daily_budget_usd, party: brief.party_composition }
                   : null
               }
-              calendarSubscribeUrl={
-                process.env.NEXT_PUBLIC_SITE_URL
-                  ? `${process.env.NEXT_PUBLIC_SITE_URL}/api/trips/${trip.trip_id}/calendar.ics?token=${calendarToken(trip.trip_id)}`
-                  : undefined
-              }
+              calendarSubscribeUrl={subscribeUrl(trip.trip_id)}
             />
             {/*
              * PostItineraryBookingPanel lets the user view and edit their
