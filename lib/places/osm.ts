@@ -126,7 +126,8 @@ export interface LocalityResult {
  */
 export function scoreLocality(
   tags: Record<string, string>,
-  nearbySights: number
+  nearbySights: number,
+  sightsKnown = true
 ): LocalityResult {
   let score = 0.7;
   const reasons: string[] = [];
@@ -147,7 +148,11 @@ export function scoreLocality(
     reasons.push("close to a major sight");
   }
   if (reasons.length === 0) {
-    reasons.push("independent and away from the main sights");
+    reasons.push(
+      sightsKnown
+        ? "independent and away from the main sights"
+        : "independent venue (proximity to sights not available)"
+    );
   }
   if (tags.cuisine) score += 0.05;
 
@@ -198,7 +203,8 @@ function address(tags: Record<string, string>): string | null {
 export function elementsToPosts(
   elements: OverpassElement[],
   destination: string,
-  now: Date = new Date()
+  now: Date = new Date(),
+  sightsKnown = true
 ): CommunityPost[] {
   const sights: LatLon[] = [];
   const venues: { el: OverpassElement; at: LatLon; tags: Record<string, string> }[] = [];
@@ -226,7 +232,7 @@ export function elementsToPosts(
     seen.push({ name: key, at });
 
     const nearby = sights.filter((s) => haversineMeters(s, at) <= SIGHT_NEAR_METERS).length;
-    const { score, reasons } = scoreLocality(tags, nearby);
+    const { score, reasons } = scoreLocality(tags, nearby, sightsKnown);
 
     const cuisines = (tags.cuisine ?? "")
       .split(";")
