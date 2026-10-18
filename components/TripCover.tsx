@@ -92,9 +92,11 @@ export function TripCover({
         className="absolute inset-0 h-full w-full"
       >
         {/* sun + glow */}
-        <circle cx="610" cy="222" r="120" fill={p.sun} opacity="0.12" />
-        <circle cx="610" cy="222" r="70" fill={p.sun} opacity="0.2" />
-        <circle cx="610" cy="222" r="38" fill={p.sun} opacity="0.95" />
+        <g className="max-sm:opacity-35">
+          <circle cx="610" cy="222" r="120" fill={p.sun} opacity="0.12" />
+          <circle cx="610" cy="222" r="70" fill={p.sun} opacity="0.2" />
+          <circle cx="610" cy="222" r="38" fill={p.sun} opacity="0.95" />
+        </g>
         {/* far + near hills / sea swells */}
         <path
           d="M0 250 C90 210 170 232 260 214 C360 194 430 236 540 224 C650 212 720 190 800 214 L800 320 L0 320 Z"
