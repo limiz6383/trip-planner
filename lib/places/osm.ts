@@ -42,10 +42,11 @@ export interface LatLon {
 const FOOD_AMENITIES =
   "restaurant|cafe|bar|pub|fast_food|food_court|ice_cream|biergarten";
 const FOOD_SHOPS = "bakery|pastry|deli|confectionery";
-const SIGHT_TOURISM =
-  "attraction|museum|viewpoint|gallery|artwork|zoo|theme_park";
-const SIGHT_HISTORIC =
-  "monument|castle|ruins|memorial|archaeological_site|fort";
+// Named, genuinely visit-worthy sights only. Unnamed or tiny features (artwork,
+// memorial plaques such as Berlin's thousands of Stolpersteine) would make every
+// street look like a tourist zone.
+const SIGHT_TOURISM = "attraction|museum|viewpoint|gallery|zoo|theme_park";
+const SIGHT_HISTORIC = "monument|castle|ruins|archaeological_site|fort";
 
 /**
  * Overpass QL for named food venues plus the major sights around a point.
@@ -60,11 +61,11 @@ export function buildOverpassQuery(center: LatLon, radiusMeters: number): string
   nwr["shop"~"^(${FOOD_SHOPS})$"]["name"]${around};
 )->.food;
 (
-  nwr["tourism"~"^(${SIGHT_TOURISM})$"]${around};
-  nwr["historic"~"^(${SIGHT_HISTORIC})$"]${around};
+  nwr["tourism"~"^(${SIGHT_TOURISM})$"]["name"]${around};
+  nwr["historic"~"^(${SIGHT_HISTORIC})$"]["name"]${around};
 )->.sights;
 .food out center tags 1200;
-.sights out center tags 300;`;
+.sights out center tags 800;`;
 }
 
 // ---------------------------------------------------------------------------
@@ -109,7 +110,7 @@ export interface LocalityResult {
  *
  * This is a heuristic, not a measurement. It deliberately uses only signals the
  * map actually contains:
- *   - part of a chain (brand tags)              -> much less local
+ *   (chains are excluded before scoring - see elementsToPosts)
  *   - has its own Wikipedia/Wikidata entry      -> a famous landmark venue
  *   - tagged as a tourism feature               -> aimed at visitors
  *   - next to major sights                      -> the classic tourist-trap zone
@@ -119,13 +120,9 @@ export function scoreLocality(
   tags: Record<string, string>,
   nearbySights: number
 ): LocalityResult {
-  let score = 0.6;
+  let score = 0.7;
   const reasons: string[] = [];
 
-  if (tags.brand || tags["brand:wikidata"]) {
-    score -= 0.4;
-    reasons.push("part of a chain");
-  }
   if (tags.wikidata || tags.wikipedia) {
     score -= 0.15;
     reasons.push("a well-known landmark venue");
@@ -157,6 +154,16 @@ function isSight(tags: Record<string, string>): boolean {
   return Boolean(tags.tourism || tags.historic) && !tags.amenity && !tags.shop;
 }
 
+/** Chains are never what "somewhere local" means, so they are not suggested. */
+function isChain(tags: Record<string, string>): boolean {
+  return Boolean(tags.brand || tags["brand:wikidata"]);
+}
+
+/** Prefer an English/international name so suggestions read naturally. */
+function displayName(tags: Record<string, string>): string {
+  return (tags["name:en"] || tags.int_name || tags.name).trim();
+}
+
 function titleCase(s: string): string {
   return s.replace(/[_;]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).trim();
 }
@@ -176,8 +183,8 @@ function address(tags: Record<string, string>): string | null {
  * Converts a raw Overpass response into CommunityPost-shaped venues so the
  * existing ranking and prompt code can consume them unchanged.
  *
- * Unnamed elements are dropped (we only ever suggest places we can name), and
- * duplicates of the same name within 50 m (a way and its entrance node) are
+ * Unnamed elements and chains are dropped (we only suggest places we can name, and
+ * 'local' excludes chains), and duplicates of the same name within 50 m (a way and its entrance node) are
  * collapsed.
  */
 export function elementsToPosts(
@@ -193,8 +200,10 @@ export function elementsToPosts(
     const at = pointOf(el);
     if (!at) continue;
     if (isSight(tags)) {
-      sights.push(at);
-    } else if (tags.name && (tags.amenity || tags.shop)) {
+      // Only named / notable sights define a "tourist zone"; anonymous map
+      // features would make every street look busy.
+      if (tags.name || tags.wikidata) sights.push(at);
+    } else if (tags.name && (tags.amenity || tags.shop) && !isChain(tags)) {
       venues.push({ el, at, tags });
     }
   }
@@ -203,7 +212,8 @@ export function elementsToPosts(
   const posts: CommunityPost[] = [];
 
   for (const { el, at, tags } of venues) {
-    const key = tags.name.trim().toLowerCase();
+    const name = displayName(tags);
+    const key = name.toLowerCase();
     if (seen.some((s) => s.name === key && haversineMeters(s.at, at) < 50)) continue;
     seen.push({ name: key, at });
 
@@ -217,7 +227,8 @@ export function elementsToPosts(
     const addr = address(tags);
 
     const parts = [
-      `${tags.name} is a ${cuisines.length ? cuisines.join("/") + " " : ""}${venueKind(tags)}${addr ? ` at ${addr}` : ""} in ${destination}.`,
+      `${name} is a ${cuisines.length ? cuisines.join("/") + " " : ""}${venueKind(tags)}${addr ? ` at ${addr}` : ""} in ${destination}.`,
+      name !== tags.name.trim() ? `Local name: ${tags.name.trim()}.` : null,
       tags.opening_hours ? `Opening hours: ${tags.opening_hours}.` : null,
       `Locality: ${reasons.join("; ")}.`,
     ].filter(Boolean);
@@ -225,7 +236,7 @@ export function elementsToPosts(
     posts.push({
       post_id: `osm-${el.type}-${el.id}`,
       destination,
-      title: tags.name,
+      title: name,
       source: "openstreetmap",
       author: "OpenStreetMap contributors",
       author_type: "map",
@@ -233,7 +244,7 @@ export function elementsToPosts(
       tags: [tags.amenity ?? tags.shop ?? "place", ...cuisines.map((c) => c.toLowerCase())],
       estimated_cost_usd: null,
       locality_score: score,
-      place_name: tags.name,
+      place_name: name,
       location_lat: Number(at.lat.toFixed(6)),
       location_lon: Number(at.lon.toFixed(6)),
       created_at: now.toISOString(),

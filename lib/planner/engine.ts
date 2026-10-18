@@ -237,6 +237,9 @@ export class PlannerEngine {
     if (multiCity) {
       // Fetch + rank each city's posts independently and take a top slice per
       // city, so every leg gets fair representation in the capped context.
+      // The prompt keeps only the first 30 posts, so share that budget across the
+      // cities; otherwise the last leg of a 3+ city trip gets nothing.
+      const perCityCap = Math.max(5, Math.floor(30 / legs!.length));
       const perCity = await Promise.all(
         legs!.map((leg) =>
           this.source
@@ -244,15 +247,17 @@ export class PlannerEngine {
               limit: 120,
               localTouristyDial: brief.local_touristy_dial,
             })
-            .then((p) => rankPosts(p, brief.local_touristy_dial).slice(0, 18))
+            .then((p) => rankPosts(p, brief.local_touristy_dial).slice(0, perCityCap))
         )
       );
       ranked = perCity.flat();
     } else {
-      const posts = await this.source.fetchForDestination(brief.destination, {
-        limit: 200,
-        localTouristyDial: brief.local_touristy_dial,
-      });
+      // Use the leg's full label ("Paris, Texas, USA") when we have it: the trip's
+      // denormalised destination drops everything after the first comma.
+      const posts = await this.source.fetchForDestination(
+        legs?.length === 1 ? legs[0].city : brief.destination,
+        { limit: 200, localTouristyDial: brief.local_touristy_dial }
+      );
       ranked = rankPosts(posts, brief.local_touristy_dial);
     }
 
