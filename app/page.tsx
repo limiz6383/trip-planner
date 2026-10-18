@@ -1,3 +1,4 @@
+import { ArrowRightIcon } from "@/components/ui/Icons";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getUser } from "@/lib/auth";
@@ -60,13 +61,13 @@ function PlanPreview() {
           <TripCover seed="Paros Greece" stops={2} compact />
           <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
           <div className="absolute bottom-3 left-4 text-white">
-            <p className="font-display text-2xl font-bold leading-none">Paros &rarr; Athens</p>
+            <p className="flex items-center gap-2 font-display text-2xl font-bold leading-none">Paros <ArrowRightIcon className="h-5 w-5" /> Athens</p>
             <p className="mt-1 text-xs font-medium text-white/85">6 days, sample itinerary</p>
           </div>
         </div>
         <div className="flex items-center gap-3 border-b border-line bg-paper/60 px-4 py-3">
           <span className="flex h-10 w-10 flex-col items-center justify-center rounded-xl bg-brand-700 text-white">
-            <span className="text-[8px] font-semibold uppercase leading-none tracking-widest text-brand-100">Day</span>
+            <span className="text-[10px] font-semibold uppercase leading-none tracking-wider text-brand-100">Day</span>
             <span className="font-display text-lg font-bold leading-none">2</span>
           </span>
           <div>
@@ -83,7 +84,7 @@ function PlanPreview() {
             <li key={s.name} className="relative flex items-start gap-3">
               <span className="w-10 shrink-0 pt-2.5 text-right leading-none tabular-nums text-zinc-800">
                 <span className="block text-[13px] font-semibold">{s.time}</span>
-                <span className="mt-0.5 block text-[10px] font-medium uppercase text-zinc-500">{s.period}</span>
+                <span className="mt-0.5 block text-[11px] font-medium text-zinc-600">{s.period}</span>
               </span>
               <span className={["relative z-10 mt-3 h-2.5 w-2.5 shrink-0 rounded-full ring-4 ring-surface", TYPE_META[s.type].dot].join(" ")} />
               <div className={["min-w-0 flex-1 rounded-xl border p-2.5", s.lock ? "border-brand-300 bg-brand-50/60" : "border-line bg-paper/70"].join(" ")}>
@@ -139,12 +140,12 @@ function Landing({ demo }: { demo: boolean }) {
   return (
     <div className="flex min-h-svh flex-col overflow-x-clip bg-paper">
       {demo && (
-        <div className="bg-brand-900 px-4 py-2 text-center text-xs text-brand-50">
-          <span className="mr-2 rounded-full bg-sun-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+        <aside aria-label="Demo mode" className="bg-brand-900 px-4 py-2 text-center text-xs text-brand-50">
+          <span className="mr-2 rounded-full bg-sun-700 px-2 py-0.5 text-[11px] font-bold text-white">
             Demo mode
           </span>
           Sample data, no account needed. Nothing calls an external API.
-        </div>
+        </aside>
       )}
 
       <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
@@ -164,10 +165,6 @@ function Landing({ demo }: { demo: boolean }) {
       <main className="flex-1">
         <section className="mx-auto grid w-full max-w-6xl items-center gap-12 px-4 pb-14 pt-6 sm:px-6 sm:pt-10 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16 lg:pb-20">
           <div>
-            <p className="mb-4 inline-flex items-center gap-2 rounded-full bg-brand-100 px-3 py-1 text-xs font-semibold text-brand-800">
-              <span className="h-1.5 w-1.5 rounded-full bg-sun-500" aria-hidden="true" />
-              AI-assisted trip planning
-            </p>
             <h1 className="text-[2.6rem] font-bold leading-[1.02] text-ink sm:text-6xl lg:text-[4.25rem]">
               A trip plan that sounds like <em className="text-brand-700">you</em>, and like the place.
             </h1>
@@ -182,7 +179,7 @@ function Landing({ demo }: { demo: boolean }) {
                 <>
                   <Link href="/dashboard" className="inline-flex min-h-12 items-center justify-center rounded-xl bg-brand-700 px-7 text-base font-semibold text-white shadow-sm transition-colors hover:bg-brand-800">
                     Explore the demo
-                    <span aria-hidden="true" className="ml-2">&rarr;</span>
+                    <ArrowRightIcon className="ml-2 h-4 w-4" />
                   </Link>
                   <Link href="/trips/52979ee0-af40-4777-93b6-6f9f707559f7" className="inline-flex min-h-12 items-center justify-center rounded-xl border border-line-strong bg-surface px-6 text-base font-semibold text-zinc-800 transition-colors hover:bg-paper-2">
                     Open the sample Greece trip
@@ -192,7 +189,7 @@ function Landing({ demo }: { demo: boolean }) {
                 <>
                   <Link href="/signup" className="inline-flex min-h-12 items-center justify-center rounded-xl bg-brand-700 px-7 text-base font-semibold text-white shadow-sm transition-colors hover:bg-brand-800">
                     Start planning
-                    <span aria-hidden="true" className="ml-2">&rarr;</span>
+                    <ArrowRightIcon className="ml-2 h-4 w-4" />
                   </Link>
                   <Link href="/login" className="inline-flex min-h-12 items-center justify-center rounded-xl border border-line-strong bg-surface px-6 text-base font-semibold text-zinc-800 transition-colors hover:bg-paper-2">
                     Sign in

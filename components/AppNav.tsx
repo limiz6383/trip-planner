@@ -39,11 +39,11 @@ export function AppNav({ userEmail }: { userEmail: string }) {
 
   return (
     <>
-      <header className="sticky top-0 z-30 border-b border-line bg-paper/90 backdrop-blur-md">
+      <header className="sticky top-0 z-30 border-b border-line bg-paper/95 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
           <Link
             href="/dashboard"
-            className="rounded-lg focus-visible:outline-2"
+            className="inline-flex min-h-11 items-center rounded-lg focus-visible:outline-2"
             aria-label="Trip Planner home"
           >
             <Wordmark />
@@ -81,7 +81,7 @@ export function AppNav({ userEmail }: { userEmail: string }) {
           href="/dashboard"
           aria-current={onTrips ? "page" : undefined}
           className={[
-            "flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium",
+            "flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs font-medium",
             onTrips ? "text-brand-700" : "text-zinc-500",
           ].join(" ")}
         >
@@ -92,7 +92,7 @@ export function AppNav({ userEmail }: { userEmail: string }) {
           href="/trips/new"
           aria-current={onNew ? "page" : undefined}
           className={[
-            "flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium",
+            "flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs font-medium",
             onNew ? "text-brand-700" : "text-zinc-500",
           ].join(" ")}
         >

@@ -4,7 +4,6 @@ import Link from "next/link";
 export default function AppNotFound() {
   return (
     <div className="mx-auto flex max-w-md flex-col items-center gap-3 py-16 text-center">
-      <p className="text-sm font-semibold uppercase tracking-wider text-brand-700">Not found</p>
       <h1 className="text-3xl font-bold text-ink">We couldn&apos;t find that trip</h1>
       <p className="text-zinc-700">
         It may have been deleted, or the link is wrong. Your other trips are

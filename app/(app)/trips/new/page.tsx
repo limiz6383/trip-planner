@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowLeftIcon, ArrowUpIcon, ArrowDownIcon, CloseIcon } from "@/components/ui/Icons";
 import { useActionState, useState } from "react";
 import Link from "next/link";
 import { createTripAction, type TripActionState } from "@/app/actions/trips";
@@ -79,7 +80,7 @@ export default function NewTripPage() {
           href="/dashboard"
           className="-ml-2 inline-flex min-h-11 items-center rounded-full px-3 text-sm font-medium text-zinc-600 transition-colors hover:bg-paper-2 hover:text-zinc-900"
         >
-          <span aria-hidden="true" className="mr-1.5">&larr;</span> Back to trips
+          <ArrowLeftIcon className="mr-1.5 h-4 w-4" /> Back to trips
         </Link>
         <h1 className="mt-1 text-3xl font-bold text-ink sm:text-4xl">Plan a new trip</h1>
         <p className="mt-1.5 max-w-xl text-sm text-zinc-600 sm:text-base">
@@ -131,7 +132,7 @@ export default function NewTripPage() {
                         className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-zinc-500 hover:bg-paper-2 hover:text-zinc-900 disabled:opacity-30 sm:h-9 sm:w-9"
                         aria-label="Move city up"
                       >
-                        ↑
+                        <ArrowUpIcon className="h-4 w-4" />
                       </button>
                       <button
                         type="button"
@@ -140,7 +141,7 @@ export default function NewTripPage() {
                         className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-zinc-500 hover:bg-paper-2 hover:text-zinc-900 disabled:opacity-30 sm:h-9 sm:w-9"
                         aria-label="Move city down"
                       >
-                        ↓
+                        <ArrowDownIcon className="h-4 w-4" />
                       </button>
                       <button
                         type="button"
@@ -148,7 +149,7 @@ export default function NewTripPage() {
                         className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-zinc-500 hover:bg-red-50 hover:text-red-700 disabled:opacity-30 sm:h-9 sm:w-9"
                         aria-label="Remove city"
                       >
-                        ✕
+                        <CloseIcon className="h-4 w-4" />
                       </button>
                     </div>
                   )}

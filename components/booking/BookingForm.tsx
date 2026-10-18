@@ -313,7 +313,7 @@ function PlaceAutocomplete({
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="text-sm font-semibold text-zinc-700 uppercase tracking-wide">
+    <h3 className="text-base font-semibold text-zinc-800">
       {children}
     </h3>
   );
@@ -566,7 +566,7 @@ export function BookingForm({
             className="flex flex-col gap-4 rounded-lg border border-zinc-200 bg-zinc-50/50 p-4"
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+              <span className="text-sm font-medium text-zinc-600">
                 Flight {index + 1}
               </span>
               <button
@@ -653,7 +653,7 @@ export function BookingForm({
             className="flex flex-col gap-4 rounded-lg border border-zinc-200 bg-zinc-50/50 p-4"
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+              <span className="text-sm font-medium text-zinc-600">
                 Stay {index + 1}
               </span>
               <button
