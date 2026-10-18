@@ -334,7 +334,7 @@ If you don't have enough information yet, omit the JSON block and keep asking.`;
 const NAME_THE_PLACE = `NAME THE PLACE: for every meal, use a venue from community_posts whose place_name fits that neighbourhood and time of day (entries with source "openstreetmap" are real mapped venues; their content says how local they are) and write the name as that venue's exact place_name. Never invent a restaurant, cafe or bar name that is not in community_posts; if nothing fits, describe the meal generically (e.g. "Lunch at a family-run taverna"). Keep an existing named meal the traveller has not asked to change.`;
 
 /** Cost semantics shared by generation and every revision prompt. */
-const COST_RULES = `COSTS: "estimated_cost_usd" is the TOTAL for the WHOLE PARTY (every traveller) for that activity, not per person. The brief's "daily_budget_usd" is the budget PER TRAVELLER per day, so a normal day's total should land near daily_budget_usd x (adults + children) and the trip should not exceed that x the number of days. "daily_cost" must equal the sum of that day's activity costs and "total_cost_estimate" the sum of the days (the app recomputes both, so wrong arithmetic is simply discarded).`;
+const COST_RULES = `COSTS: "estimated_cost_usd" is the TOTAL for the WHOLE PARTY (every traveller) for that activity, not per person. The brief's "daily_budget_usd" is the budget PER TRAVELLER per day, so a normal day's total should land near daily_budget_usd x (adults + children) and the trip should not exceed that x the number of days. "daily_cost" must equal the sum of that day's activity costs and "total_cost_estimate" the sum of the days (the app recomputes both, so wrong arithmetic is simply discarded). Do NOT quote cost totals or budget arithmetic in "notes": the app shows live numbers, and a total written into the notes goes stale after the first edit.`;
 
 /** Geography rules shared by generation and every revision prompt. */
 const GEOGRAPHY_RULES = `GEOGRAPHY: every day must be a tidy route, not a zig-zag.
@@ -496,6 +496,8 @@ Rules:
 - Keep replies short and conversational — 2-5 sentences, no headings or lists unless they ask.
 - Be specific and grounded in their actual plan and the destination (name real places/dishes).
 - DO NOT rewrite the itinerary or output JSON. You are only talking.
+- You also see the budget (per traveller per day; plan costs are for the whole party) and the booked flights/stays. Use them when asked about money or timing.
+- If they say they are arriving or leaving earlier or later, or a transfer moves, say that applying will re-plan the whole trip (the evening before, transfers and costs), not just one day.
 - When the traveller has settled on changes, tell them to hit "Apply changes" to update the plan, and briefly recap what will change.`;
 
 /** System prompt for the destination overview/guide */

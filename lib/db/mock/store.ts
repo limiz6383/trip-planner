@@ -12,6 +12,7 @@
 
 import fixture from "./fixture.json";
 import { sumActivityCosts, roundMoney } from "@/lib/planner/costs";
+import { legForDate } from "@/lib/planner/legs";
 import type {
   Trip,
   TripLeg,
@@ -72,6 +73,19 @@ function seed(): MockTables {
   // so the demo starts from the same invariant the live code maintains.
   for (const d of days) {
     d.daily_cost = sumActivityCosts(activities.filter((a) => a.day_id === d.day_id));
+  }
+  // The exported fixture put the Paros -> Athens transfer day (27 Aug) under
+  // Paros. The product convention is that a transfer day belongs to the city
+  // being travelled TO (see legForDate / createItineraryFromLLMOutput).
+  const legs = table<TripLeg>("trip_legs");
+  const tripIdOf = new Map(itineraries.map((it) => [it.itinerary_id, it.trip_id]));
+  for (const d of days) {
+    const tripLegs = legs.filter((l) => l.trip_id === tripIdOf.get(d.itinerary_id));
+    const leg = legForDate(
+      d.date,
+      tripLegs.map((l) => ({ ...l, arrival_date: l.arrival_date, departure_date: l.departure_date }))
+    );
+    if (leg && tripLegs.length > 1) d.leg_id = leg.leg_id;
   }
   for (const it of itineraries) {
     it.total_cost_estimate = roundMoney(
