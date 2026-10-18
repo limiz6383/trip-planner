@@ -40,6 +40,7 @@ import type {
   AccommodationInput,
 } from "@/lib/db/queries.supabase";
 import { DEMO_USER_ID } from "@/lib/mock/flag";
+import { sumActivityCosts, roundMoney, normalizeLLMCosts } from "@/lib/planner/costs";
 import {
   db,
   newId,
@@ -331,6 +332,9 @@ export async function createItineraryFromLLMOutput(
   tripId: string,
   llmItinerary: LLMItinerary
 ): Promise<Itinerary & { days: (ItineraryDay & { activities: Activity[] })[] }> {
+  // Stored totals are always derived from the activities (never the model's sums).
+  normalizeLLMCosts(llmItinerary);
+
   for (const prior of db.itineraries.filter((i) => i.trip_id === tripId)) {
     prior.is_current = false;
   }
@@ -416,6 +420,33 @@ function buildActivity(
     sort_order: sortOrder,
     created_at: nowIso(),
   };
+}
+
+/**
+ * Recomputes every day's cost and the trip total from the stored activities
+ * and persists them. Call after ANY change to an activity's cost or day.
+ */
+export async function syncItineraryCosts(
+  _client: SupabaseClient,
+  itineraryId: string
+): Promise<{ total_cost_estimate: number; days: { day_id: string; daily_cost: number }[] }> {
+  const days = db.itinerary_days.filter((d) => d.itinerary_id === itineraryId);
+  let total = 0;
+  const out: { day_id: string; daily_cost: number }[] = [];
+  for (const day of days) {
+    day.daily_cost = sumActivityCosts(
+      db.activities.filter((a) => a.day_id === day.day_id)
+    );
+    total += day.daily_cost;
+    out.push({ day_id: day.day_id, daily_cost: day.daily_cost });
+  }
+  total = roundMoney(total);
+  const itinerary = db.itineraries.find((i) => i.itinerary_id === itineraryId);
+  if (itinerary) {
+    itinerary.total_cost_estimate = total;
+    itinerary.updated_at = nowIso();
+  }
+  return { total_cost_estimate: total, days: out };
 }
 
 export async function updateActivityFromLLMOutput(

@@ -33,6 +33,7 @@ import {
 import { createPlannerEngine } from "@/lib/planner/engine";
 import type { Activity } from "@/lib/types";
 import { isLLMConfigured } from "@/lib/llm/availability";
+import { syncCostsForDay, type SyncedCosts } from "@/lib/db/sync-costs";
 
 // ---- request / response shapes (exported so client components can import) ----
 
@@ -42,6 +43,7 @@ export interface ReviseActivityRequestBody {
 
 export interface ReviseActivityResponseBody {
   activity: Activity;
+  costs?: SyncedCosts;
 }
 
 export interface ReviseActivityErrorBody {
@@ -155,6 +157,9 @@ export async function POST(
       llmActivity
     );
 
+    // --- 5b. The swap changed this activity's cost: resync day + trip totals ---
+    const costs = (await syncCostsForDay(supabase, activity.day_id)) ?? undefined;
+
     // --- 6. Record the revision in the change log (non-fatal) ---
     try {
       await appendChangeLogEntry(
@@ -172,7 +177,7 @@ export async function POST(
     }
 
     return Response.json(
-      { activity: updated } satisfies ReviseActivityResponseBody,
+      { activity: updated, ...(costs ? { costs } : {}) } satisfies ReviseActivityResponseBody,
       { status: 200 }
     );
   } catch (err) {

@@ -10,6 +10,7 @@
  * which makes the demo reproducible.
  */
 
+import { travellerCount } from "@/lib/planner/costs";
 import type {
   LLMProvider,
   ConsultingTurnParams,
@@ -767,7 +768,13 @@ export class MockProvider implements LLMProvider {
         activities: ordered,
         daily_cost: 0,
       };
-      applyBudget(built, brief.daily_budget_usd);
+      applyBudget(
+        built,
+        // daily_budget_usd is per traveller; activity costs are for the whole party.
+        brief.daily_budget_usd
+          ? brief.daily_budget_usd * travellerCount(brief.party_composition)
+          : undefined
+      );
       built.daily_cost = ordered.reduce(
         (sum, a) => sum + (a.estimated_cost_usd ?? 0),
         0

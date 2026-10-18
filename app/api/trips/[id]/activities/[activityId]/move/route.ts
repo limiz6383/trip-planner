@@ -30,6 +30,7 @@ import {
   moveActivityToDay,
 } from "@/lib/db/queries";
 import type { Activity } from "@/lib/types";
+import { syncCostsForDay, type SyncedCosts } from "@/lib/db/sync-costs";
 
 export interface MoveActivityRequestBody {
   target_day_id: string;
@@ -37,6 +38,7 @@ export interface MoveActivityRequestBody {
 
 export interface MoveActivityResponseBody {
   activity: Activity;
+  costs?: SyncedCosts;
 }
 
 export interface MoveActivityErrorBody {
@@ -133,6 +135,9 @@ export async function POST(
       nextSortOrder
     );
 
+    // Both days' totals changed; one resync covers the whole itinerary.
+    const costs = (await syncCostsForDay(supabase, targetDayId)) ?? undefined;
+
     try {
       await appendChangeLogEntry(
         supabase,
@@ -149,7 +154,7 @@ export async function POST(
     }
 
     return Response.json(
-      { activity: moved } satisfies MoveActivityResponseBody,
+      { activity: moved, ...(costs ? { costs } : {}) } satisfies MoveActivityResponseBody,
       { status: 200 }
     );
   } catch (err) {

@@ -16,6 +16,7 @@ import { GenerateItineraryButton } from "@/components/itinerary/GenerateItinerar
 import { PrePlanFlow } from "@/components/booking/PrePlanFlow";
 import { PostItineraryBookingPanel } from "@/components/booking/PostItineraryBookingPanel";
 import { TripCover, RouteChips, splitStops, formatDateRangeShort, tripDays } from "@/components/TripCover";
+import { sumDayCosts, summarizeBudget } from "@/lib/planner/costs";
 import type { Trip, TripBrief, Booking, Itinerary, ItineraryDay, Activity } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -34,7 +35,7 @@ const STATUS_LABELS: Record<string, string> = {
   completed: "Completed",
 };
 
-function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
+function Stat({ label, value, hint, sub }: { label: string; value: string; hint?: string; sub?: string }) {
   return (
     <div className="rounded-2xl bg-black/20 px-3.5 py-3 ring-1 ring-white/15 backdrop-blur-sm">
       <dt className="text-[11px] font-semibold uppercase tracking-wider text-white/75">{label}</dt>
@@ -42,6 +43,7 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
         {value}
         {hint ? <span className="ml-1 font-sans text-xs font-medium text-white/75">{hint}</span> : null}
       </dd>
+      {sub ? <p className="mt-1 text-[11px] font-medium text-white/80">{sub}</p> : null}
     </div>
   );
 }
@@ -54,7 +56,9 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
 function TripHeader({
   trip,
   itinerary,
+  brief,
 }: {
+  brief: TripBrief | null;
   trip: Trip;
   itinerary: (Itinerary & { days: (ItineraryDay & { activities: Activity[] })[] }) | null;
 }) {
@@ -66,9 +70,14 @@ function TripHeader({
 
   const planDays = itinerary?.days ?? [];
   const activityCount = planDays.reduce((n, d) => n + (d.activities?.length ?? 0), 0);
-  const total =
-    itinerary?.total_cost_estimate ??
-    (planDays.length > 0 ? planDays.reduce((sum, d) => sum + (d.daily_cost ?? 0), 0) : null);
+  // Always the sum of the activities, so the header can't disagree with the list.
+  const total = planDays.length > 0 ? sumDayCosts(planDays) : null;
+  const budgetSummary = summarizeBudget({
+    dailyBudgetUsd: brief?.daily_budget_usd,
+    party: brief?.party_composition,
+    dayCount: planDays.length,
+    planned: total ?? 0,
+  });
 
   return (
     <header className="relative mb-6 overflow-hidden rounded-3xl text-white shadow-lift sm:mb-8">
@@ -113,7 +122,7 @@ function TripHeader({
             <Stat label="Days" value={String(planDays.length || days)} />
             <Stat label="Stops" value={String(stops.length)} hint={stops.length === 1 ? "city" : "cities"} />
             <Stat label="Activities" value={String(activityCount)} />
-            <Stat label="Estimate" value={total != null ? `$${Math.round(total).toLocaleString("en-US")}` : "n/a"} hint={total != null ? "total" : undefined} />
+            <Stat label="Estimate" value={total != null ? `$${Math.round(total).toLocaleString("en-US")}` : "n/a"} hint={total != null ? "total" : undefined} sub={budgetSummary ? (budgetSummary.remaining < 0 ? `$${Math.round(-budgetSummary.remaining).toLocaleString("en-US")} over budget` : `$${Math.round(budgetSummary.remaining).toLocaleString("en-US")} under budget`) : undefined} />
           </dl>
         )}
       </div>
@@ -180,7 +189,7 @@ export default async function TripDetailPage({
 
   return (
     <div>
-      <TripHeader trip={trip} itinerary={itinerary} />
+      <TripHeader trip={trip} itinerary={itinerary} brief={brief} />
 
       <div
         className={
@@ -238,6 +247,11 @@ export default async function TripDetailPage({
               tripId={trip.trip_id}
               itinerary={itinerary}
               tripTitle={trip.title}
+              budget={
+                brief
+                  ? { dailyBudgetUsd: brief.daily_budget_usd, party: brief.party_composition }
+                  : null
+              }
               calendarSubscribeUrl={
                 process.env.NEXT_PUBLIC_SITE_URL
                   ? `${process.env.NEXT_PUBLIC_SITE_URL}/api/trips/${trip.trip_id}/calendar.ics?token=${calendarToken(trip.trip_id)}`
