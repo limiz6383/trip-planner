@@ -60,6 +60,7 @@ export const replaceFlightsForTrip = impl.replaceFlightsForTrip;
 export const setActivityStartTime = impl.setActivityStartTime;
 export const setDayLocked = impl.setDayLocked;
 export const setLegDestinationGuide = impl.setLegDestinationGuide;
+export const syncItineraryCosts = impl.syncItineraryCosts;
 export const setTripArchived = impl.setTripArchived;
 export const setTripDestinationGuide = impl.setTripDestinationGuide;
 export const updateActivityFields = impl.updateActivityFields;

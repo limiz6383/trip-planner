@@ -35,6 +35,7 @@ import type {
   TripFlight,
   TripAccommodation,
 } from "@/lib/types";
+import { sumActivityCosts, roundMoney, normalizeLLMCosts } from "@/lib/planner/costs";
 
 // ---------------------------------------------------------------------------
 // Trips
@@ -533,6 +534,9 @@ export async function createItineraryFromLLMOutput(
   tripId: string,
   llmItinerary: LLMItinerary
 ): Promise<Itinerary & { days: (ItineraryDay & { activities: Activity[] })[] }> {
+  // Stored totals are always derived from the activities (never the model's sums).
+  normalizeLLMCosts(llmItinerary);
+
   // --- 1. Determine the next version number ---
   const existing = await getItinerariesForTrip(client, tripId);
   const nextVersion = existing.length > 0
@@ -1010,6 +1014,53 @@ export async function appendChangeLogEntry(
 // ---------------------------------------------------------------------------
 // Activity — LLM-driven update
 // ---------------------------------------------------------------------------
+
+/**
+ * Recomputes every day's cost and the trip total from the stored activities
+ * and persists them. Call after ANY change to an activity's cost or day.
+ */
+export async function syncItineraryCosts(
+  client: SupabaseClient,
+  itineraryId: string
+): Promise<{ total_cost_estimate: number; days: { day_id: string; daily_cost: number }[] }> {
+  const days = await getDaysForItinerary(client, itineraryId);
+  const dayIds = days.map((d) => d.day_id);
+  const byDay = new Map<string, { estimated_cost_usd: number | null }[]>();
+  if (dayIds.length > 0) {
+    const { data, error } = await client
+      .from("activities")
+      .select("day_id, estimated_cost_usd")
+      .in("day_id", dayIds);
+    if (error) throw error;
+    for (const row of (data ?? []) as { day_id: string; estimated_cost_usd: number | null }[]) {
+      const list = byDay.get(row.day_id) ?? [];
+      list.push(row);
+      byDay.set(row.day_id, list);
+    }
+  }
+
+  const out: { day_id: string; daily_cost: number }[] = [];
+  let total = 0;
+  for (const day of days) {
+    const cost = sumActivityCosts(byDay.get(day.day_id));
+    total += cost;
+    out.push({ day_id: day.day_id, daily_cost: cost });
+    if (day.daily_cost !== cost) {
+      const { error } = await client
+        .from("itinerary_days")
+        .update({ daily_cost: cost })
+        .eq("day_id", day.day_id);
+      if (error) throw error;
+    }
+  }
+  total = roundMoney(total);
+  const { error: totalError } = await client
+    .from("itineraries")
+    .update({ total_cost_estimate: total })
+    .eq("itinerary_id", itineraryId);
+  if (totalError) throw totalError;
+  return { total_cost_estimate: total, days: out };
+}
 
 /**
  * Replaces the content fields of an existing activity row with values from a

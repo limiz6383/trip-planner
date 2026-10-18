@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/Input";
 import { ItineraryGeneratingOverlay } from "@/components/itinerary/ItineraryGeneratingOverlay";
 import { TYPE_META, TypeChip } from "@/components/itinerary/activity-types";
 import { buildICS } from "@/lib/ics";
+import { sumActivityCosts, sumDayCosts, summarizeBudget } from "@/lib/planner/costs";
 import type {
   Itinerary,
   ItineraryDay,
@@ -91,6 +92,14 @@ export interface ItineraryViewProps {
   calendarSubscribeUrl?: string;
   /** Fired after a successful in-place mutation so the parent page can revalidate */
   onItineraryUpdated?: () => void;
+  /**
+   * The brief's budget, to show planned spend against it. `dailyBudgetUsd` is
+   * per traveller per day; activity costs are for the whole party.
+   */
+  budget?: {
+    dailyBudgetUsd: number;
+    party: { adults?: number; children?: number };
+  } | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1214,6 +1223,41 @@ function ActivityCard({
 // Day revise form (inline AI revision of a whole day)
 // ---------------------------------------------------------------------------
 
+function BudgetLine({
+  summary,
+  className = "mt-3 border-t border-line pt-3",
+}: {
+  summary: ReturnType<typeof summarizeBudget> & object;
+  className?: string;
+}) {
+  const over = summary.remaining < 0;
+  const tone = over
+    ? "text-red-800"
+    : summary.status === "near"
+    ? "text-amber-800"
+    : "text-green-800";
+  return (
+    <div className={className}>
+      <div className="flex items-baseline justify-between gap-3 text-xs">
+        <span className="text-zinc-700">
+          Budget {formatCost(summary.budgetTotal)}
+        </span>
+        <span className={["font-semibold tabular-nums", tone].join(" ")}>
+          {over
+            ? `${formatCost(-summary.remaining)} over`
+            : `${formatCost(summary.remaining)} left`}
+        </span>
+      </div>
+      <p className="mt-0.5 text-[11px] leading-snug text-zinc-600">
+        {summary.days} days &times; {summary.travellers}{" "}
+        {summary.travellers === 1 ? "traveller" : "travellers"} &times;{" "}
+        {formatCost(summary.partyDailyBudget / summary.travellers)} a day each.
+        Costs are for the whole party.
+      </p>
+    </div>
+  );
+}
+
 interface ReviseDayFormProps {
   dayId: string;
   tripId: string;
@@ -1435,9 +1479,9 @@ function DaySection({
               <span>
                 {activities.length} {activities.length === 1 ? "stop" : "stops"}
               </span>
-              {day.daily_cost != null && (
+              {activities.some((a) => a.estimated_cost_usd != null) && (
                 <span className="font-semibold tabular-nums text-zinc-800">
-                  {formatCost(day.daily_cost)} / day
+                  {formatCost(sumActivityCosts(activities))} / day
                 </span>
               )}
               {localDay.locked && (
@@ -2274,9 +2318,28 @@ export function ItineraryView({
   itinerary,
   tripTitle,
   calendarSubscribeUrl,
-  onItineraryUpdated,
+  onItineraryUpdated: onItineraryUpdatedProp,
+  budget,
 }: ItineraryViewProps) {
   const router = useRouter();
+
+  // Every successful mutation funnels through here. The server already resynced
+  // the stored day/trip totals; refreshing re-renders the server-rendered trip
+  // header (Estimate / budget) so it can't drift from the list below. Debounced
+  // so a burst of edits costs one refresh. Client state (localDays) survives a
+  // refresh within the same itinerary version.
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    },
+    []
+  );
+  const onItineraryUpdated = useCallback(() => {
+    onItineraryUpdatedProp?.();
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    refreshTimer.current = setTimeout(() => router.refresh(), 350);
+  }, [onItineraryUpdatedProp, router]);
 
   // Local copy of days so mutations reflect immediately without a full page refresh
   const [localDays, setLocalDays] = useState<
@@ -2744,12 +2807,19 @@ export function ItineraryView({
     [tripId, onItineraryUpdated, handleMoveToDay]
   );
 
-  // Compute total from day costs if total_cost_estimate is missing
-  const totalCost =
-    itinerary.total_cost_estimate ??
-    (localDays.length > 0
-      ? localDays.reduce((sum, d) => sum + (d.daily_cost ?? 0), 0)
-      : null);
+  // Costs are always derived from the activities in view, so the list, the
+  // budget card and the footer agree after any edit, delete, move or revise
+  // (the stored daily_cost / total can lag a render behind).
+  const dayCosts = localDays.map((d) => sumActivityCosts(d.activities));
+  const totalCost = localDays.length > 0 ? sumDayCosts(localDays) : null;
+  const budgetSummary = budget
+    ? summarizeBudget({
+        dailyBudgetUsd: budget.dailyBudgetUsd,
+        party: budget.party,
+        dayCount: localDays.length,
+        planned: totalCost ?? 0,
+      })
+    : null;
 
   // Multi-city: a header before the first day of each city block ("Athens · Days 1–3").
   const distinctCities = new Set(
@@ -2783,7 +2853,7 @@ export function ItineraryView({
     type: t,
     count: allActivities.filter((a) => (a.activity_type ?? "other") === t).length,
   })).filter((x) => x.count > 0);
-  const maxDayCost = Math.max(1, ...localDays.map((d) => d.daily_cost ?? 0));
+  const maxDayCost = Math.max(1, ...dayCosts);
   const userMessageCount = chatMessages.filter((m) => m.role === "user").length;
 
   const SUGGESTIONS = [
@@ -3034,7 +3104,7 @@ export function ItineraryView({
                 </ul>
               </section>
 
-              {localDays.some((d) => d.daily_cost != null) && (
+              {totalCost != null && (
                 <section aria-label="Budget by day" className="rounded-2xl border border-line bg-surface p-4 shadow-card">
                   <div className="flex items-baseline justify-between">
                     <h2 className="font-display text-base font-semibold text-ink">Budget by day</h2>
@@ -3053,16 +3123,17 @@ export function ItineraryView({
                           <span className="h-2 flex-1 overflow-hidden rounded-full bg-paper-2 group-hover:bg-white">
                             <span
                               className="block h-full rounded-full bg-brand-500"
-                              style={{ width: `${((d.daily_cost ?? 0) / maxDayCost) * 100}%` }}
+                              style={{ width: `${(dayCosts[i] / maxDayCost) * 100}%` }}
                             />
                           </span>
                           <span className="w-12 shrink-0 text-right tabular-nums text-zinc-800">
-                            {formatCost(d.daily_cost ?? 0)}
+                            {formatCost(dayCosts[i])}
                           </span>
                         </a>
                       </li>
                     ))}
                   </ol>
+                  {budgetSummary && <BudgetLine summary={budgetSummary} />}
                 </section>
               )}
             </div>
@@ -3280,6 +3351,7 @@ export function ItineraryView({
                 <span>Daily average</span>
                 <span className="tabular-nums">{formatCost(totalCost / localDays.length)}</span>
               </div>
+              {budgetSummary && <BudgetLine summary={budgetSummary} className="mt-3 border-t border-line pt-3" />}
             </div>
           )}
         </div>

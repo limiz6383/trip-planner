@@ -11,6 +11,7 @@
  */
 
 import fixture from "./fixture.json";
+import { sumActivityCosts, roundMoney } from "@/lib/planner/costs";
 import type {
   Trip,
   TripLeg,
@@ -62,14 +63,32 @@ function seed(): MockTables {
     return [];
   };
 
+  const days = table<ItineraryDay>("itinerary_days");
+  const activities = table<Activity>("activities");
+  const itineraries = table<Itinerary>("itineraries");
+
+  // The exported fixture carries the model's own arithmetic, which disagreed with
+  // its activities (a day stored as $480 whose activities sum to $105). Re-derive
+  // so the demo starts from the same invariant the live code maintains.
+  for (const d of days) {
+    d.daily_cost = sumActivityCosts(activities.filter((a) => a.day_id === d.day_id));
+  }
+  for (const it of itineraries) {
+    it.total_cost_estimate = roundMoney(
+      days
+        .filter((d) => d.itinerary_id === it.itinerary_id)
+        .reduce((sum, d) => sum + (d.daily_cost ?? 0), 0)
+    );
+  }
+
   return {
     trips: table<Trip>("trips"),
     trip_legs: table<TripLeg>("trip_legs"),
     trip_briefs: table<TripBrief>("trip_briefs"),
     bookings: table<Booking>("bookings"),
-    itineraries: table<Itinerary>("itineraries"),
-    itinerary_days: table<ItineraryDay>("itinerary_days"),
-    activities: table<Activity>("activities"),
+    itineraries,
+    itinerary_days: days,
+    activities,
     trip_flights: table<TripFlight>("trip_flights"),
     trip_accommodations: table<TripAccommodation>("trip_accommodations"),
     community_posts: table<CommunityPost>("community_posts"),

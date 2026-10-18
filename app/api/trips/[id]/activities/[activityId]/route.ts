@@ -35,6 +35,7 @@ import {
   deleteActivity,
 } from "@/lib/db/queries";
 import type { Activity, ActivityType } from "@/lib/types";
+import { syncCostsForDay, type SyncedCosts } from "@/lib/db/sync-costs";
 
 // ---- request / response shapes ----
 
@@ -50,6 +51,8 @@ export interface PatchActivityRequestBody {
 
 export interface PatchActivityResponseBody {
   activity: Activity;
+  /** Present when the edit changed a cost: the resynced per-day + trip totals. */
+  costs?: SyncedCosts;
 }
 
 export interface PatchActivityErrorBody {
@@ -67,6 +70,43 @@ const ALLOWED_FIELDS = new Set<string>([
   "start_time",
   "locked",
 ]);
+
+const ACTIVITY_TYPES = new Set<string>([
+  "food", "culture", "outdoor", "shopping", "transport", "accommodation", "entertainment", "other",
+]);
+
+/** Returns an error message for a bad field value, or null when the patch is sane. */
+function validatePatch(patch: Partial<Record<string, unknown>>): string | null {
+  if ("name" in patch && (typeof patch.name !== "string" || !patch.name.trim())) {
+    return "Name can't be empty.";
+  }
+  if ("estimated_cost_usd" in patch && patch.estimated_cost_usd !== null) {
+    const c = patch.estimated_cost_usd;
+    if (typeof c !== "number" || !Number.isFinite(c) || c < 0 || c > 1_000_000) {
+      return "Cost must be a number between 0 and 1,000,000.";
+    }
+  }
+  if ("estimated_time_hours" in patch && patch.estimated_time_hours !== null) {
+    const h = patch.estimated_time_hours;
+    if (typeof h !== "number" || !Number.isFinite(h) || h < 0 || h > 24) {
+      return "Duration must be between 0 and 24 hours.";
+    }
+  }
+  if ("activity_type" in patch && patch.activity_type !== null) {
+    if (typeof patch.activity_type !== "string" || !ACTIVITY_TYPES.has(patch.activity_type)) {
+      return "Unknown activity type.";
+    }
+  }
+  if ("start_time" in patch && patch.start_time !== null) {
+    if (typeof patch.start_time !== "string" || !/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(patch.start_time)) {
+      return "Start time must look like 09:30.";
+    }
+  }
+  if ("locked" in patch && typeof patch.locked !== "boolean") {
+    return "locked must be a boolean.";
+  }
+  return null;
+}
 
 // ---- handler ----
 
@@ -102,6 +142,11 @@ export async function PATCH(
 
   if (Object.keys(patch).length === 0) {
     return Response.json({ error: "No valid fields to update" } satisfies PatchActivityErrorBody, { status: 400 });
+  }
+
+  const invalid = validatePatch(patch);
+  if (invalid) {
+    return Response.json({ error: invalid } satisfies PatchActivityErrorBody, { status: 400 });
   }
 
   try {
@@ -149,7 +194,13 @@ export async function PATCH(
       { activity_id: activityId, day_id: after.day_id }
     );
 
-    const responseBody: PatchActivityResponseBody = { activity: after };
+    // A cost edit changes the day total and the trip total: keep them in step.
+    const costs =
+      "estimated_cost_usd" in patch
+        ? (await syncCostsForDay(supabase, after.day_id)) ?? undefined
+        : undefined;
+
+    const responseBody: PatchActivityResponseBody = { activity: after, ...(costs ? { costs } : {}) };
     return Response.json(responseBody, { status: 200 });
   } catch (err) {
     const message =
@@ -164,6 +215,7 @@ export async function PATCH(
 
 export interface DeleteActivityResponseBody {
   ok: true;
+  costs?: SyncedCosts;
 }
 
 export interface DeleteActivityErrorBody {
@@ -203,6 +255,7 @@ export async function DELETE(
     }
 
     await deleteActivity(supabase, activityId);
+    const costs = (await syncCostsForDay(supabase, activity.day_id)) ?? undefined;
 
     try {
       await appendChangeLogEntry(
@@ -219,9 +272,10 @@ export async function DELETE(
       // non-fatal
     }
 
-    return Response.json({ ok: true } satisfies DeleteActivityResponseBody, {
-      status: 200,
-    });
+    return Response.json(
+      { ok: true, ...(costs ? { costs } : {}) } satisfies DeleteActivityResponseBody,
+      { status: 200 }
+    );
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Failed to delete activity.";
