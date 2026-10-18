@@ -27,8 +27,9 @@ const AUTHOR_WEIGHTS: Record<AuthorType, number> = {
   local: 1.0,
   blogger: 0.7,
   // OpenStreetMap venues: real, named places with no personal endorsement.
-  // Below a blogger's pick, above a tourist's; the locality axis does the rest.
-  map: 0.6,
+  // Below a blogger's pick, a little above a tourist's: venues should not crowd
+  // out curated tips (see CompositeContentSource's cap); locality does the rest.
+  map: 0.5,
   tourist: 0.4,
   unknown: 0.3,
 };
