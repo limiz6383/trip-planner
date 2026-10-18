@@ -9,7 +9,6 @@ export default function NotFound() {
         <Wordmark />
       </header>
       <main className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center gap-3 px-4 pb-24 text-center">
-        <p className="text-sm font-semibold uppercase tracking-wider text-brand-700">404</p>
         <h1 className="text-3xl font-bold text-ink">This page doesn&apos;t exist</h1>
         <p className="text-zinc-700">Check the address, or head back to your trips.</p>
         <Link

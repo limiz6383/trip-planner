@@ -43,6 +43,7 @@
   --color-sun-100: #fcebdd;
   --color-sun-500: #e0702f;
   --color-sun-600: #c4531f;
+  --color-sun-700: #a8431a;
 
   /* Legacy palettes re-pointed at the identity */
   --color-indigo-50: var(--color-brand-50);
@@ -141,6 +142,24 @@ h2,
     outline: 2px solid var(--color-brand-500);
     outline-offset: 2px;
   }
+}
+
+/* Browser surfaces themed from the palette */
+::selection {
+  background: var(--color-brand-200);
+  color: var(--color-ink);
+}
+input,
+textarea {
+  caret-color: var(--color-brand-600);
+}
+html {
+  scrollbar-color: var(--color-line-strong) transparent;
+}
+.tabular-nums,
+time,
+dd {
+  font-variant-numeric: tabular-nums;
 }
 
 /* Subtle paper grain, pure CSS */

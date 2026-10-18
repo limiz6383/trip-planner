@@ -7,6 +7,8 @@
  * Purely decorative: aria-hidden, no interactivity, safe in server components.
  */
 
+import { ArrowRightIcon } from "@/components/ui/Icons";
+
 type Palette = {
   from: string;
   mid: string;
@@ -146,9 +148,7 @@ export function RouteChips({
       {stops.map((s, i) => (
         <li key={`${s}-${i}`} className="flex items-center gap-1.5">
           {i > 0 && (
-            <span className={arrow} aria-hidden="true">
-              &rarr;
-            </span>
+            <ArrowRightIcon className={["h-3.5 w-3.5", arrow].join(" ")} />
           )}
           <span className={["rounded-full px-2.5 py-0.5 text-xs font-medium", base].join(" ")}>
             {s}

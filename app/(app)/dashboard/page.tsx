@@ -232,7 +232,7 @@ export default async function DashboardPage({
         <Link
           href="/dashboard"
           className={[
-            "inline-flex min-h-10 items-center rounded-full px-4 text-sm font-medium transition-colors",
+            "inline-flex min-h-11 items-center rounded-full px-4 text-sm font-medium transition-colors",
             !showArchived
               ? "bg-surface text-ink shadow-card"
               : "text-zinc-600 hover:text-zinc-900",
@@ -243,7 +243,7 @@ export default async function DashboardPage({
         <Link
           href="/dashboard?view=archived"
           className={[
-            "inline-flex min-h-10 items-center rounded-full px-4 text-sm font-medium transition-colors",
+            "inline-flex min-h-11 items-center rounded-full px-4 text-sm font-medium transition-colors",
             showArchived
               ? "bg-surface text-ink shadow-card"
               : "text-zinc-600 hover:text-zinc-900",

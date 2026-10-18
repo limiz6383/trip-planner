@@ -987,7 +987,7 @@ function ActivityCard({
           <span className="block text-[13px] font-semibold">
             {formatClock(act.start_time).replace(/ (AM|PM)$/, "")}
           </span>
-          <span className="mt-0.5 block text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+          <span className="mt-0.5 block text-[11px] font-medium text-zinc-600">
             {formatClock(act.start_time).slice(-2)}
           </span>
         </p>
@@ -1133,7 +1133,7 @@ function ActivityCard({
               <div
                 className={[
                   "ml-auto flex flex-wrap items-center gap-0.5 transition-opacity",
-                  "sm:opacity-60 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100",
+                  "sm:opacity-75 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100",
                   moreOpen || act.locked ? "sm:opacity-100" : "",
                 ].join(" ")}
               >
@@ -1483,7 +1483,7 @@ function DaySection({
             className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-brand-700 text-white"
             aria-hidden="true"
           >
-            <span className="text-[9px] font-semibold uppercase leading-none tracking-widest text-brand-100">
+            <span className="text-[10px] font-semibold uppercase leading-none tracking-wider text-brand-100">
               Day
             </span>
             <span className="font-display text-xl font-bold leading-none">{dayNumber}</span>
@@ -1742,7 +1742,7 @@ function ChangelogDrawer({ tripId, onClose }: ChangelogDrawerProps) {
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-40 bg-ink/40 backdrop-blur-[2px]"
+        className="fixed inset-0 z-40 bg-ink/40"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -2085,8 +2085,8 @@ function DestinationGuideCard({
 
           {spots.length > 0 && (
             <div className="flex flex-col gap-2.5">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-600">
-                Top spots <span className="font-normal normal-case tracking-normal">· your plan covers {spotsHit} of {spots.length}</span>
+              <h4 className="text-sm font-semibold text-zinc-700">
+                Top spots <span className="font-normal text-zinc-600">· your plan covers {spotsHit} of {spots.length}</span>
               </h4>
               <ul className="grid gap-2 sm:grid-cols-2">
                 {spots.map((i) => (
@@ -2103,8 +2103,8 @@ function DestinationGuideCard({
 
           {foods.length > 0 && (
             <div className="flex flex-col gap-2.5">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-600">
-                Must-try food <span className="font-normal normal-case tracking-normal">· {foodsHit} on your plan</span>
+              <h4 className="text-sm font-semibold text-zinc-700">
+                Must-try food <span className="font-normal text-zinc-600">· {foodsHit} on your plan</span>
               </h4>
               <ul className="grid gap-2 sm:grid-cols-2">
                 {foods.map((i) => (
@@ -3096,7 +3096,7 @@ export function ItineraryView({
                   <SendIcon className="h-4 w-4" />
                 </button>
               </div>
-              <p className="-mt-1 text-[11px] text-violet-900/70">
+              <p className="-mt-1 text-xs text-violet-900/80">
                 Enter to send, Shift+Enter for a new line.
               </p>
 
@@ -3380,7 +3380,7 @@ export function ItineraryView({
               {/* Sticky day-jump strip */}
               <nav
                 aria-label="Jump to day"
-                className="sticky top-14 z-20 -mx-4 border-b border-line bg-paper/95 px-4 backdrop-blur-md sm:mx-0 sm:rounded-2xl sm:border sm:px-2"
+                className="sticky top-14 z-20 -mx-4 border-b border-line bg-paper px-4 sm:mx-0 sm:rounded-2xl sm:border sm:px-2"
               >
                 <div
                   ref={stripRef}

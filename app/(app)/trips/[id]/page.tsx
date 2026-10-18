@@ -1,3 +1,4 @@
+import { ArrowLeftIcon } from "@/components/ui/Icons";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/db/server";
@@ -37,13 +38,13 @@ const STATUS_LABELS: Record<string, string> = {
 
 function Stat({ label, value, hint, sub }: { label: string; value: string; hint?: string; sub?: string }) {
   return (
-    <div className="rounded-2xl bg-black/20 px-3.5 py-3 ring-1 ring-white/15 backdrop-blur-sm">
-      <dt className="text-[11px] font-semibold uppercase tracking-wider text-white/75">{label}</dt>
-      <dd className="mt-0.5 font-display text-2xl font-semibold leading-none text-white">
+    <div>
+      <dt className="text-xs font-medium text-white/80">{label}</dt>
+      <dd className="mt-1 font-display text-2xl font-semibold leading-none tabular-nums text-white">
         {value}
-        {hint ? <span className="ml-1 font-sans text-xs font-medium text-white/75">{hint}</span> : null}
+        {hint ? <span className="ml-1 font-sans text-xs font-medium text-white/80">{hint}</span> : null}
+        {sub ? <span className="mt-1.5 block font-sans text-xs font-medium leading-snug text-white/85">{sub}</span> : null}
       </dd>
-      {sub ? <p className="mt-1 text-[11px] font-medium text-white/80">{sub}</p> : null}
     </div>
   );
 }
@@ -91,7 +92,7 @@ function TripHeader({
             href="/dashboard"
             className="-ml-2 inline-flex min-h-11 items-center rounded-full px-3 text-sm font-medium text-white/90 transition-colors hover:bg-white/15 hover:text-white"
           >
-            <span aria-hidden="true" className="mr-1.5">&larr;</span> My Trips
+            <ArrowLeftIcon className="mr-1.5 h-4 w-4" /> My Trips
           </Link>
           <span
             className={[
@@ -118,7 +119,7 @@ function TripHeader({
         </div>
 
         {itinerary && (
-          <dl className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3">
+          <dl className="grid grid-cols-2 gap-x-5 gap-y-5 border-t border-white/20 pt-4 sm:grid-cols-4 sm:gap-x-8">
             <Stat label="Days" value={String(planDays.length || days)} />
             <Stat label="Stops" value={String(stops.length)} hint={stops.length === 1 ? "city" : "cities"} />
             <Stat label="Activities" value={String(activityCount)} />

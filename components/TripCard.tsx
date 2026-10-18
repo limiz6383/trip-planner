@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowRightIcon } from "@/components/ui/Icons";
 import { useState, useActionState } from "react";
 import Link from "next/link";
 import { TripCover, RouteChips, splitStops, formatDateRangeShort, tripDays } from "@/components/TripCover";
@@ -118,10 +119,10 @@ export function TripCard({ trip }: TripCardProps) {
             </Button>
 
             <span
-              className="ml-auto text-sm font-medium text-brand-700 transition-transform group-hover:translate-x-0.5"
+              className="ml-auto inline-flex items-center gap-1 text-sm font-medium text-brand-700 transition-transform group-hover:translate-x-0.5"
               aria-hidden="true"
             >
-              Open &rarr;
+              Open <ArrowRightIcon className="h-4 w-4" />
             </span>
           </div>
 
