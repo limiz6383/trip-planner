@@ -53,7 +53,7 @@ interface DayLike {
 
 /**
  * Forces each day's `city` to the leg its date belongs to (the model sometimes
- * drifts) and reports transfer days that have no transport activity. Mutates
+ * drifts; silently) and reports transfer days that have no transport activity. Mutates
  * `days`; returns human-readable warnings.
  */
 export function alignDaysToLegs(
@@ -66,11 +66,8 @@ export function alignDaysToLegs(
   days.forEach((day, index) => {
     const leg = legForDate(day.date, sorted);
     if (!leg) return;
-    if (day.city && short(day.city) !== short(leg.city)) {
-      warnings.push(
-        `Day ${index + 1} was labelled ${short(day.city)} but ${short(leg.city)} on ${day.date}; corrected.`
-      );
-    }
+    // A wrong or stale city label is corrected silently: the date decides, and
+    // persistence assigns days to legs by date anyway. Nothing for the traveller to do.
     day.city = leg.city;
     const li = sorted.indexOf(leg);
     const isTransferDay = li > 0 && sorted[li].arrival_date === day.date;
@@ -84,4 +81,52 @@ export function alignDaysToLegs(
     }
   });
   return warnings;
+}
+
+// ---------------------------------------------------------------------------
+// Date helpers + chaining for the trip form
+// ---------------------------------------------------------------------------
+
+export function addDaysISO(iso: string, n: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().split("T")[0];
+}
+
+export function daysBetweenISO(a: string, b: string): number {
+  const [y1, m1, d1] = a.split("-").map(Number);
+  const [y2, m2, d2] = b.split("-").map(Number);
+  return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86400000);
+}
+
+export interface LegDraftLike {
+  city: string;
+  arrival: string;
+  departure: string;
+}
+
+/**
+ * Re-chains the legs after `from` so each starts the day the previous one ends,
+ * preserving every leg's length. Used when the traveller moves a city or edits
+ * a date, so the visible order is always the chronological (= planned) order.
+ */
+export function rechainLegs<L extends LegDraftLike>(legs: readonly L[], from = 0): L[] {
+  const out = legs.map((l) => ({ ...l }));
+  for (let i = Math.max(1, from + 1); i < out.length; i++) {
+    const len = out[i].arrival && out[i].departure ? Math.max(0, daysBetweenISO(out[i].arrival, out[i].departure)) : 2;
+    out[i].arrival = out[i - 1].departure;
+    out[i].departure = addDaysISO(out[i].arrival, len);
+  }
+  return out;
+}
+
+/** Moves leg `i` by `dir` and re-chains from the earliest start so order == dates. */
+export function moveLegChronologically<L extends LegDraftLike>(legs: readonly L[], i: number, dir: -1 | 1): L[] {
+  const j = i + dir;
+  if (j < 0 || j >= legs.length) return [...legs];
+  const start = legs[0].arrival;
+  const next = legs.map((l) => ({ ...l }));
+  [next[i], next[j]] = [next[j], next[i]];
+  next[0].departure = addDaysISO(start, Math.max(0, daysBetweenISO(next[0].arrival, next[0].departure)));
+  next[0].arrival = start;
+  return rechainLegs(next, 0);
 }

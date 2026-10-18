@@ -1675,6 +1675,42 @@ function ChangelogDrawer({ tripId, onClose }: ChangelogDrawerProps) {
   const [entries, setEntries] = useState<ChangeLogEntry[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  // Modal behaviour: move focus in, close on Escape, keep Tab inside the panel,
+  // and hand focus back to whatever opened it.
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    closeRef.current?.focus();
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab" || !panelRef.current) return;
+      const focusable = panelRef.current.querySelectorAll<HTMLElement>(
+        "button, [href], input, textarea, select, [tabindex]:not([tabindex='-1'])"
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      opener?.focus?.();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Fetch on mount
   useEffect(() => {
@@ -1713,6 +1749,7 @@ function ChangelogDrawer({ tripId, onClose }: ChangelogDrawerProps) {
 
       {/* Drawer panel */}
       <div
+        ref={panelRef}
         className="fixed inset-y-0 right-0 z-50 flex w-full max-w-sm flex-col rounded-l-2xl bg-surface shadow-lift"
         role="dialog"
         aria-modal="true"
@@ -1724,6 +1761,7 @@ function ChangelogDrawer({ tripId, onClose }: ChangelogDrawerProps) {
             Change history
           </h2>
           <button
+            ref={closeRef}
             onClick={onClose}
             className={ICON_BTN}
             aria-label="Close change history"
@@ -2543,6 +2581,15 @@ export function ItineraryView({
   }
 
   const [exportOpen, setExportOpen] = useState(false);
+  // Escape closes the export menu (the click-away overlay only handles the mouse).
+  useEffect(() => {
+    if (!exportOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setExportOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [exportOpen]);
   const exportTitle = tripTitle?.trim() || "Trip itinerary";
 
   function handleExportICS() {
@@ -3222,7 +3269,7 @@ export function ItineraryView({
                   variant="secondary"
                   size="sm"
                   onClick={() => setChangelogOpen(true)}
-                  aria-label="View change history"
+                  aria-label="View changes"
                 >
                   View changes
                 </Button>

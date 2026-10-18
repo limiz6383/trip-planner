@@ -173,8 +173,8 @@ function Landing({ demo }: { demo: boolean }) {
             </h1>
             <p className="mt-5 max-w-xl text-lg leading-relaxed text-zinc-700">
               Tell the planner where and when. It asks about your style, drafts a
-              day-by-day itinerary around real local venues, and lets you revise,
-              lock or reorder any part of it.
+              day-by-day itinerary {demo ? "from sample local tips" : "using local tips and mapped venues"},
+              and lets you revise, lock or reorder any part of it.
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">

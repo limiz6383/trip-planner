@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Card } from "@/components/ui/Card";
 import { DestinationAutocomplete } from "@/components/DestinationAutocomplete";
+import { addDaysISO, rechainLegs, moveLegChronologically, validateLegs } from "@/lib/planner/legs";
 
 const initialState: TripActionState = undefined;
 
@@ -16,24 +17,33 @@ interface LegDraft {
   departure: string; // YYYY-MM-DD
 }
 
-function addDays(iso: string, n: number): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d + n));
-  return dt.toISOString().split("T")[0];
+const addDays = addDaysISO;
+
+/** Today in the traveller's own timezone (toISOString would be UTC, a day off in the evening). */
+function localToday(): string {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
 }
 
 export default function NewTripPage() {
   const [state, action, pending] = useActionState(createTripAction, initialState);
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = localToday();
 
   // One or more city legs. Defaults to a single 3-day leg.
   const [legs, setLegs] = useState<LegDraft[]>([
     { city: "", arrival: today, departure: addDays(today, 2) },
   ]);
 
+  // Cities run in date order, so editing a date or moving a city re-chains the
+  // following cities (each starts the day the previous one ends).
   function updateLeg(i: number, patch: Partial<LegDraft>) {
-    setLegs((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
+    setLegs((prev) => {
+      const next = prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l));
+      return "arrival" in patch || "departure" in patch ? rechainLegs(next, i) : next;
+    });
   }
   function addLeg() {
     setLegs((prev) => {
@@ -43,22 +53,24 @@ export default function NewTripPage() {
     });
   }
   function removeLeg(i: number) {
-    setLegs((prev) => prev.filter((_, idx) => idx !== i));
+    setLegs((prev) => {
+      const next = prev.filter((_, idx) => idx !== i);
+      // Close the gap the removed city leaves.
+      return next.length > 0 ? rechainLegs(next, Math.max(0, i - 1)) : next;
+    });
   }
   function moveLeg(i: number, dir: -1 | 1) {
-    setLegs((prev) => {
-      const j = i + dir;
-      if (j < 0 || j >= prev.length) return prev;
-      const next = [...prev];
-      [next[i], next[j]] = [next[j], next[i]];
-      return next;
-    });
+    setLegs((prev) => moveLegChronologically(prev, i, dir));
   }
 
   const multi = legs.length > 1;
-  const canSubmit =
-    legs.length > 0 &&
-    legs.every((l) => l.city.trim() && l.arrival && l.departure && l.departure >= l.arrival);
+  const missingCity = legs.some((l) => !l.city.trim());
+  const dateProblem = legs.every((l) => l.arrival && l.departure)
+    ? validateLegs(
+        legs.map((l) => ({ city: l.city || "A city", arrival_date: l.arrival, departure_date: l.departure }))
+      )
+    : "Pick an arrival and departure date for every city.";
+  const canSubmit = legs.length > 0 && !missingCity && !dateProblem;
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -178,6 +190,12 @@ export default function NewTripPage() {
           {/* Serialized legs for the server action */}
           <input type="hidden" name="legs" value={JSON.stringify(legs)} />
 
+          {!canSubmit && (missingCity || dateProblem) ? (
+            <p className="text-sm text-zinc-600" id="create-trip-hint">
+              {dateProblem ?? "Choose a destination for every city to continue."}
+            </p>
+          ) : null}
+
           {state?.error ? (
             <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">
               {state.error}
@@ -185,7 +203,7 @@ export default function NewTripPage() {
           ) : null}
 
           <div className="flex gap-3 pt-1">
-            <Button type="submit" loading={pending} disabled={!canSubmit} className="flex-1">
+            <Button type="submit" loading={pending} disabled={!canSubmit} aria-describedby={!canSubmit ? "create-trip-hint" : undefined} className="flex-1">
               Create trip
             </Button>
             <Link href="/dashboard" className="flex-1">

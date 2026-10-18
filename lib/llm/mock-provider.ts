@@ -876,10 +876,15 @@ export class MockProvider implements LLMProvider {
         prev.activities = prev.activities.filter(
           (a) => a.locked || (a.start_time ?? "") < "21:30"
         );
+        const removedLast = before - last.activities.length;
+        const parts: string[] = [];
+        if (removedLast > 0) parts.push(`the last day was trimmed to what fits before an early departure (${removedLast} removed)`);
+        if (late > 0) parts.push(`the evening before no longer runs late (${late} removed)`);
         rippleNotes.push(
-          `Last day trimmed to what fits before an early departure (${before - last.activities.length} activities removed)` +
-            (late > 0 ? `; the evening before no longer runs late (${late} removed)` : "") +
-            ". Costs re-estimated."
+          (parts.length > 0
+            ? `${parts.join("; ")}.`.replace(/^./, (c) => c.toUpperCase())
+            : "The last day already ended early enough, so nothing needed trimming.") +
+            " Costs re-estimated."
         );
       }
     }
