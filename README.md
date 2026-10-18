@@ -7,6 +7,50 @@ constraints, per-city destination guides, and a subscribable calendar feed.
 Built with Next.js (App Router), Supabase (Postgres + Auth, RLS-enforced), and
 the Anthropic API.
 
+**[Live demo →](https://trip-planner-tan-three.vercel.app)** — no signup, no API keys; runs entirely on fixtures.
+
+![My Trips dashboard with learned travel style](docs/screenshots/dashboard.png)
+
+| Day-by-day plan: times, costs, per-day and per-activity AI revise, lock, reorder | "Plan with AI": discuss changes first, then apply them as a new version |
+|---|---|
+| ![Day-by-day itinerary](docs/screenshots/day-by-day.png) | ![Plan with AI chat](docs/screenshots/plan-with-ai.png) |
+
+## How it was built
+
+I built this with Claude Code, working from a milestone plan rather than one big
+prompt: a skeleton and foundations first (M0), then auth and the app shell, the
+consulting session, itinerary generation, and manual editing (M1), booking-driven
+generation (M8), and multi-city trips in five phases. The core single-user product
+was working in a day; multi-city and logistics landed about ten days later. Demo
+mode came last, once the product was worth showing to people.
+
+**Product decisions along the way**
+
+- **Talk first, change later.** I started with a "revise the whole trip" text box,
+  then replaced it with a *Plan with AI* chat that discusses changes and only
+  rewrites the plan when you hit Apply. Chatting never changes the itinerary, and
+  every apply creates a new version you can review under *View changes*.
+- **Locked activities are time anchors.** Revisions at all three granularities
+  (whole trip, one day, one activity) keep locked items fixed and rebuild around
+  them, so the AI can't undo what the traveller has already decided.
+- **Cut what didn't earn its place.** I built a *Tidy up* action and removed it a
+  few commits later; manual reorder, move-to-day and drag-and-drop covered the need.
+- **Learn from past trips.** Preferences inferred from earlier trips gently bias new
+  itineraries and are shown on the dashboard, so the personalisation is visible
+  and not hidden in a prompt.
+- **A demo that costs nothing.** One flag swaps the LLM, database, auth and
+  geocoder for fixtures behind four seams, so the whole product is shareable with
+  no keys and no bill (see below).
+
+**What broke, and what I changed**
+
+- Row-level security rejected `INSERT … RETURNING` on trip creation; fixed in the
+  policies rather than by loosening them.
+- The model was inventing trip dates, so the brief's dates are now derived from the
+  trip row, never from the LLM.
+- Date-only values showed one day early in negative-UTC timezones, and activity
+  order drifted until I added an explicit `sort_order`.
+
 ## Try it — demo mode
 
 Demo mode runs the whole product with **no API keys, no database, and no
