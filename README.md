@@ -68,9 +68,9 @@ whatever the most tourists have already visited, which is the opposite of "where
 locals actually eat". OpenStreetMap has no ratings, so the app derives a *locality*
 score from what the map does know:
 
-- part of a chain (brand tags) → much less local
+- chains (brand tags) are left out entirely
 - has its own Wikipedia/Wikidata entry, or is tagged as a visitor attraction → less local
-- sits within 150 m of several major sights (the classic tourist-trap zone) → less local
+- sits within 150 m of several *named* major sights (the classic tourist-trap zone) → less local
 - independent and away from the main sights → local
 
 That score feeds the same ranking as everything else, so the existing
@@ -81,9 +81,10 @@ nothing fits it says so generically instead.
 **Honest limits.** The locality score is a heuristic, not a measurement, and it
 will misjudge some places (a genuinely local café on a tourist street, a chain the
 map doesn't tag). OpenStreetMap coverage varies by region and carries no ratings,
-prices or reviews. The public Overpass service is rate-limited, so results are
-cached in memory and a failed lookup falls back to generic suggestions rather than
-failing the plan. The hosted demo does not use any of this: its itinerary is a saved
+prices or reviews. Some venues are only named in the local script (for example Greek), so
+those names appear untransliterated. The public Overpass service is rate-limited, so
+results are cached in memory, each lookup has a 12-second budget, and a failed lookup
+falls back to generic suggestions rather than failing the plan. The hosted demo does not use any of this: its itinerary is a saved
 sample generated before this feature existed, and its curated posts (Tokyo and
 Berlin) are seeded sample data.
 
