@@ -27,16 +27,19 @@ const USER_AGENT =
 
 const OVERPASS_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
-  "https://overpass.private.coffee/api/interpreter",
+  "https://overpass.openstreetmap.fr/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
 ];
 
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // map data barely changes day to day
 // One budget for the whole lookup (geocode + Overpass). Generation waits on this,
 // so a slow public service must cost seconds, not a failed itinerary.
-const LOOKUP_BUDGET_MS = 12000;
+const LOOKUP_BUDGET_MS = 20000;
+// Public Overpass servers are often slow. Rather than waiting for one to time out,
+// start the next mirror a few seconds later and take whichever answers first.
+const HEDGE_DELAY_MS = 4000;
 const MIN_RADIUS_M = 2500;
-const MAX_RADIUS_M = 8000;
+const MAX_RADIUS_M = 6000; // smaller area = a much cheaper query on busy public servers
 const DEFAULT_RADIUS_M = 5000;
 
 // ---------------------------------------------------------------------------
@@ -84,11 +87,18 @@ async function geocodeCity(city: string, signal: AbortSignal): Promise<GeocodedC
 // ---------------------------------------------------------------------------
 
 async function queryOverpass(query: string, signal: AbortSignal): Promise<OverpassElement[]> {
-  // Remember why each server said no, so a failure is diagnosable instead of
-  // showing only the last server's status.
+  // Remember why each server said no, so a failure is diagnosable.
   const failures: string[] = [];
-  for (const endpoint of OVERPASS_ENDPOINTS) {
+  const stop = new AbortController(); // cancels the losers once one succeeds
+  const combined = AbortSignal.any([signal, stop.signal]);
+  let settled = false;
+
+  const attempt = async (endpoint: string, index: number): Promise<OverpassElement[]> => {
     const host = new URL(endpoint).host;
+    // Hedged start: mirror N waits N * HEDGE_DELAY_MS unless an earlier one has
+    // already answered.
+    if (index > 0) await new Promise((r) => setTimeout(r, index * HEDGE_DELAY_MS));
+    if (settled || combined.aborted) throw new Error("skipped");
     try {
       const res = await fetch(endpoint, {
         method: "POST",
@@ -100,29 +110,34 @@ async function queryOverpass(query: string, signal: AbortSignal): Promise<Overpa
         },
         body: `data=${encodeURIComponent(query)}`,
         cache: "no-store",
-        signal,
+        signal: combined,
       });
       if (!res.ok) {
         const body = (await res.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 120);
-        failures.push(`${host}: HTTP ${res.status}${body ? ` ${body}` : ""}`);
-        if (signal.aborted) break;
-        continue;
+        throw new Error(`HTTP ${res.status}${body ? ` ${body}` : ""}`);
       }
       const json = (await res.json()) as { elements?: OverpassElement[]; remark?: string };
       // Overpass reports a server-side timeout / out-of-memory as HTTP 200 with a
       // `remark` and a partial result. Treat that as a failure so a truncated
       // answer is neither used nor cached for hours.
-      if (json.remark) {
-        failures.push(`${host}: ${json.remark.slice(0, 120)}`);
-        continue;
-      }
+      if (json.remark) throw new Error(json.remark.slice(0, 120));
       return json.elements ?? [];
     } catch (err) {
-      failures.push(`${host}: ${err instanceof Error ? err.message : String(err)}`);
-      if (signal.aborted) break; // out of time: don't start the next endpoint
+      if (!settled) failures.push(`${host}: ${err instanceof Error ? err.message : String(err)}`);
+      throw err;
     }
+  };
+
+  try {
+    const elements = await Promise.any(OVERPASS_ENDPOINTS.map(attempt));
+    settled = true;
+    return elements;
+  } catch {
+    throw new Error(`Overpass unavailable - ${failures.join(" | ") || "no response"}`);
+  } finally {
+    settled = true;
+    stop.abort();
   }
-  throw new Error(`Overpass unavailable - ${failures.join(" | ")}`);
 }
 
 // ---------------------------------------------------------------------------
