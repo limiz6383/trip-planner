@@ -125,3 +125,43 @@ checkboxes behind the guide cards, `aria-current` on nav and the active day chip
 - Dark mode. A half-done dark theme is worse than none, so the page declares a light colour scheme.
 - Invented copy or numbers: stats, "free time" gaps and budget bars are computed from the itinerary;
   the landing page preview is labelled as a sample.
+
+## Design polish
+
+Pass done on top of the redesign above. Identity (paper, teal, violet for AI, serif display) is unchanged; no flows or routes changed.
+Screenshots in `docs/design/after/` were retaken from a production build in demo mode at 1280x800 and 390x844
+(landing, dashboard, new trip, trip top, day-by-day, activity edit, activity revise, destination guide, Plan with AI,
+change history, 404). Stale captures from the QA report (clipped Plan with AI panel, old "greece 2026" title) are replaced.
+
+**Changed**
+- Contrast (axe, WCAG 2.1 AA): demo pill white on sun-500 was 3.2:1, now sun-700 (new token) at 11px; the rest-state
+  "Revise" action was dimmed to 60% opacity and failed (3.4:1), now 75% on desktop and full on hover/focus.
+  Placeholder and small grey text moved one step darker.
+- Structure found by axe: stats `dl` had an invalid child (`p` inside `div`), guide sub-headings skipped a level
+  (h4 under h2), the Type select and the description/revise textareas had labels that were not linked to the control,
+  and the demo banner sat outside any landmark. All fixed.
+- Removed template tells: the "AI-assisted trip planning" pill above the landing headline, the uppercase "404" and
+  "Not found" kickers, uppercase micro-headings in the guide and booking form, and glass stat tiles on the trip hero
+  (now a quiet ruled row with sentence-case labels and tabular numerals). The nav keeps a light blur because it is a
+  sticky bar over scrolling content; the drawer scrim blur was decoration and is gone.
+- Icons: text glyphs used as icons (arrows, up/down/close on the new-trip city rows, "Open →") are now drawn SVGs in
+  one stroke weight (`components/ui/Icons.tsx`).
+- Touch targets on phones: logo link, Active/Archived switch now 44px. Textareas and the Type select are 16px on
+  phones (no iOS zoom) and tall enough that the placeholder is not clipped; start time and duration stack under 460px
+  instead of clipping the time value.
+- Consistency: textareas and selects use the 12px control radius like inputs; the inline "Revise" submit uses the AI
+  violet like every other AI control; day strip is opaque so day headers no longer show through it.
+- Copy: Plan with AI example no longer suggests a Czech dish for a Greece trip; empty change history says what will
+  appear there; revise placeholder shortened.
+- Browser surfaces: themed text selection, caret colour, scrollbar colour, tabular numerals on data.
+
+**Deliberately left**
+- Hero stat row and the 1-2-3 "What happens next" list: the stats are derived data, the list is a real sequence.
+- Landing headline italic "you": established identity, kept.
+- Dark mode: still not supported, page declares a light scheme.
+- Dashboard card title link is 23px tall on phones, but the whole card is the tap target.
+- Error boundary and loading skeleton were checked with a temporary throwing page and rendered correctly; no
+  screenshots are stored because they need a throwaway route.
+- Auth pages checked only with Supabase unconfigured (no sign-in attempted). Consulting chat, booking forms and
+  the generating overlay were not visually re-reviewed.
+- Fixture itinerary content (ferry 08:00 vs flight 09:30) still needs a product decision.
