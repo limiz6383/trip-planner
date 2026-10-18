@@ -27,6 +27,7 @@ const USER_AGENT =
 
 const OVERPASS_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
+  "https://overpass.private.coffee/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
 ];
 
@@ -83,32 +84,45 @@ async function geocodeCity(city: string, signal: AbortSignal): Promise<GeocodedC
 // ---------------------------------------------------------------------------
 
 async function queryOverpass(query: string, signal: AbortSignal): Promise<OverpassElement[]> {
-  let lastError: unknown;
+  // Remember why each server said no, so a failure is diagnosable instead of
+  // showing only the last server's status.
+  const failures: string[] = [];
   for (const endpoint of OVERPASS_ENDPOINTS) {
+    const host = new URL(endpoint).host;
     try {
       const res = await fetch(endpoint, {
         method: "POST",
         headers: {
           "User-Agent": USER_AGENT,
+          Accept: "application/json",
+          Referer: "https://github.com/limiz6383/trip-planner",
           "Content-Type": "application/x-www-form-urlencoded",
         },
         body: `data=${encodeURIComponent(query)}`,
         cache: "no-store",
         signal,
       });
-      if (!res.ok) throw new Error(`Overpass ${res.status}`);
+      if (!res.ok) {
+        const body = (await res.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 120);
+        failures.push(`${host}: HTTP ${res.status}${body ? ` ${body}` : ""}`);
+        if (signal.aborted) break;
+        continue;
+      }
       const json = (await res.json()) as { elements?: OverpassElement[]; remark?: string };
       // Overpass reports a server-side timeout / out-of-memory as HTTP 200 with a
       // `remark` and a partial result. Treat that as a failure so a truncated
       // answer is neither used nor cached for hours.
-      if (json.remark) throw new Error(`Overpass remark: ${json.remark}`);
+      if (json.remark) {
+        failures.push(`${host}: ${json.remark.slice(0, 120)}`);
+        continue;
+      }
       return json.elements ?? [];
     } catch (err) {
-      lastError = err;
+      failures.push(`${host}: ${err instanceof Error ? err.message : String(err)}`);
       if (signal.aborted) break; // out of time: don't start the next endpoint
     }
   }
-  throw lastError ?? new Error("Overpass unavailable");
+  throw new Error(`Overpass unavailable - ${failures.join(" | ")}`);
 }
 
 // ---------------------------------------------------------------------------
