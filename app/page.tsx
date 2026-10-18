@@ -137,7 +137,7 @@ const FEATURES: { title: string; body: string; icon: React.ReactNode }[] = [
 
 function Landing({ demo }: { demo: boolean }) {
   return (
-    <div className="flex min-h-svh flex-col bg-paper">
+    <div className="flex min-h-svh flex-col overflow-x-clip bg-paper">
       {demo && (
         <div className="bg-brand-900 px-4 py-2 text-center text-xs text-brand-50">
           <span className="mr-2 rounded-full bg-sun-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">

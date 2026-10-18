@@ -3193,7 +3193,7 @@ export function ItineraryView({
               {/* Sticky day-jump strip */}
               <nav
                 aria-label="Jump to day"
-                className="sticky top-14 z-20 -mx-4 border-b border-line bg-paper/90 px-4 backdrop-blur-md sm:mx-0 sm:rounded-2xl sm:border sm:px-2"
+                className="sticky top-14 z-20 -mx-4 border-b border-line bg-paper/95 px-4 backdrop-blur-md sm:mx-0 sm:rounded-2xl sm:border sm:px-2"
               >
                 <div
                   ref={stripRef}
