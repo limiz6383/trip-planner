@@ -53,9 +53,9 @@ export function ConfirmDialog({
     <dialog
       ref={dialogRef}
       onCancel={handleCancel}
-      className="m-auto w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-6 shadow-xl backdrop:bg-black/40 backdrop:backdrop-blur-sm open:flex open:flex-col open:gap-4"
+      className="m-auto w-full max-w-sm rounded-2xl border border-line bg-surface p-6 shadow-lift backdrop:bg-black/40 backdrop:backdrop-blur-sm open:flex open:flex-col open:gap-4"
     >
-      <h2 className="text-base font-semibold text-zinc-900">{title}</h2>
+      <h2 className="font-display text-lg font-semibold text-zinc-900">{title}</h2>
       <p className="text-sm text-zinc-500">{description}</p>
       <div className="flex justify-end gap-2 pt-2">
         <Button variant="secondary" size="sm" onClick={onCancel} type="button">

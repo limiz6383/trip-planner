@@ -22,14 +22,14 @@ export default async function AppLayout({
   const user = await requireUser();
 
   return (
-    <div className="flex min-h-svh flex-col bg-zinc-50">
+    <div className="flex min-h-svh flex-col bg-paper">
       <DemoBanner />
       <AppNav userEmail={user.email ?? ""} />
-      <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-6">
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-24 pt-5 sm:px-6 sm:pb-12 sm:pt-8">
         {children}
       </main>
       {!IS_MOCK && (
-        <footer className="px-4 pb-6 text-center text-xs text-zinc-400">
+        <footer className="px-4 pb-24 text-center text-xs text-zinc-500 sm:pb-8">
           Place data ©{" "}
           <a
             href="https://www.openstreetmap.org/copyright"
