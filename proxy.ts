@@ -1,5 +1,5 @@
 /**
- * Next.js middleware — runs on every matching request before the page renders.
+ * Next.js proxy (called `middleware` before Next 16) — runs on every matching request before the page renders.
  *
  * Responsibilities:
  *   1. Refreshes the Supabase session (rotates the access token if needed).
@@ -14,7 +14,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { IS_MOCK } from "@/lib/mock/flag";
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   // Demo mode has no session to refresh and no auth service to reach. Checked
   // before the env-var guard below, because a developer running the demo on
   // their own machine still has a populated .env.local.
@@ -59,7 +59,7 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  // Refresh the session — this is the primary purpose of middleware for Supabase SSR.
+  // Refresh the session — this is the primary purpose of the proxy for Supabase SSR.
   // getUser() re-validates the JWT with Supabase Auth server on every request.
   const {
     data: { user },

@@ -69,7 +69,7 @@ export async function createSupabaseServerClient() {
         } catch {
           // setAll is called from a Server Component; cookie mutations from
           // Server Components are not supported (only from Route Handlers /
-          // Server Actions). The session will be refreshed by middleware.
+          // Server Actions). The session will be refreshed by the proxy (proxy.ts).
         }
       },
     },

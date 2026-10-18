@@ -132,7 +132,7 @@ four seams:
   page, server action, or route handler knows which is live.
 - `lib/llm/provider.ts` resolves `defaultProvider` to `MockProvider`.
 - `lib/auth/index.ts` returns a fixture user instead of asking Supabase.
-- `middleware.ts` skips session refresh and sends `/login` to the dashboard.
+- `proxy.ts` skips session refresh and sends `/login` to the dashboard.
 
 Both query modules export the same 38 names, and the dispatcher types the mock
 against the real one — if either drifts, the build fails.
