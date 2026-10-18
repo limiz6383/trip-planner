@@ -28,10 +28,10 @@ interface DestinationAutocompleteProps {
 
 // Input field classes mirroring components/ui/Input.tsx exactly.
 const INPUT_BASE =
-  "w-full rounded-lg border px-3 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 " +
-  "focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent " +
+  "min-h-11 w-full rounded-xl border px-3.5 py-2.5 text-base text-zinc-900 placeholder:text-zinc-400 sm:text-sm " +
+  "focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent " +
   "disabled:bg-zinc-50 disabled:text-zinc-500 disabled:cursor-not-allowed " +
-  "border-zinc-300 bg-white";
+  "border-line-strong bg-surface";
 
 export function DestinationAutocomplete({
   defaultValue = "",
@@ -228,8 +228,8 @@ export function DestinationAutocomplete({
             role="listbox"
             aria-label="Destination suggestions"
             className={[
-              "absolute z-50 mt-1 w-full overflow-hidden rounded-lg border border-zinc-200",
-              "bg-white shadow-lg",
+              "absolute z-50 mt-1 w-full overflow-hidden rounded-xl border border-line",
+              "bg-surface shadow-lift",
             ].join(" ")}
           >
             {suggestions.map((result, index) => (
@@ -260,7 +260,7 @@ export function DestinationAutocomplete({
 
         {/* "No results" hint — only shown when we finished loading with nothing */}
         {open && !loading && suggestions.length === 0 && query.trim().length >= 2 && (
-          <div className="absolute z-50 mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-500 shadow-lg">
+          <div className="absolute z-50 mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-zinc-600 shadow-lift">
             No suggestions found — you can still type any destination.
           </div>
         )}
