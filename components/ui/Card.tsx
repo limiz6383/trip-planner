@@ -10,8 +10,8 @@ export function Card({ padded = true, className = "", children, ...props }: Card
     <div
       {...props}
       className={[
-        "rounded-xl border border-zinc-200 bg-white shadow-sm",
-        padded ? "p-4" : "",
+        "rounded-2xl border border-line bg-surface shadow-card",
+        padded ? "p-4 sm:p-5" : "",
         className,
       ]
         .filter(Boolean)
@@ -39,7 +39,7 @@ export function CardTitle({ className = "", children, ...props }: HTMLAttributes
   return (
     <h3
       {...props}
-      className={["text-base font-semibold text-zinc-900", className]
+      className={["font-display text-lg font-semibold text-ink", className]
         .filter(Boolean)
         .join(" ")}
     >

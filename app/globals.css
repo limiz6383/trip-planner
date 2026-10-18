@@ -1,26 +1,181 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+ * Design tokens — "travel journal" identity.
+ *
+ * Warm paper surfaces, a deep Aegean-teal brand colour, a violet reserved for
+ * anything AI-driven, and one distinct hue per activity type (used on the
+ * timeline rail, chips and the trip mix bar — never as the only signal).
+ *
+ * The legacy `zinc-*` and `indigo-*` scales are re-pointed at the warm-neutral
+ * and teal scales below, so screens that still use those utilities (booking,
+ * consulting chat, auth) pick up the new identity without per-file edits.
+ * No web fonts are downloaded: the stacks resolve to whatever the OS ships.
+ */
+@theme {
+  /* Type */
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: Charter, "Bitstream Charter", "Sitka Text", Cambria,
+    "Iowan Old Style", Georgia, ui-serif, serif;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  /* Surfaces */
+  --color-paper: #faf6ee;
+  --color-paper-2: #f3ede1;
+  --color-surface: #fffdf9;
+  --color-line: #e7dfd0;
+  --color-line-strong: #d6cbb7;
+  --color-ink: #23201b;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  /* Brand: Aegean teal */
+  --color-brand-50: #e8f4f4;
+  --color-brand-100: #d0e9ea;
+  --color-brand-200: #a5d3d6;
+  --color-brand-300: #74bbc0;
+  --color-brand-400: #3e9ea6;
+  --color-brand-500: #1f838c;
+  --color-brand-600: #0f6f7a;
+  --color-brand-700: #0b5963;
+  --color-brand-800: #0a444c;
+  --color-brand-900: #07323a;
+
+  /* Warm sun accent (sparingly) */
+  --color-sun-100: #fcebdd;
+  --color-sun-500: #e0702f;
+  --color-sun-600: #c4531f;
+
+  /* Legacy palettes re-pointed at the identity */
+  --color-indigo-50: var(--color-brand-50);
+  --color-indigo-100: var(--color-brand-100);
+  --color-indigo-200: var(--color-brand-200);
+  --color-indigo-300: var(--color-brand-300);
+  --color-indigo-400: var(--color-brand-400);
+  --color-indigo-500: var(--color-brand-500);
+  --color-indigo-600: var(--color-brand-600);
+  --color-indigo-700: var(--color-brand-700);
+  --color-indigo-800: var(--color-brand-800);
+  --color-indigo-900: var(--color-brand-900);
+
+  --color-zinc-50: #faf7f1;
+  --color-zinc-100: #f3eee4;
+  --color-zinc-200: #e7e0d2;
+  --color-zinc-300: #d6cdbb;
+  --color-zinc-400: #857c6d;
+  --color-zinc-500: #6b6355;
+  --color-zinc-600: #554e43;
+  --color-zinc-700: #433d34;
+  --color-zinc-800: #2f2b25;
+  --color-zinc-900: #23201b;
+
+  /* Activity types: dot/rail (solid), chip background, chip text (>= 4.5:1) */
+  --color-t-food: #dd6b2c;
+  --color-t-food-bg: #fcebdd;
+  --color-t-food-fg: #9a3e12;
+  --color-t-culture: #9a5bd0;
+  --color-t-culture-bg: #f2e9fa;
+  --color-t-culture-fg: #6b3a9a;
+  --color-t-outdoor: #3f9462;
+  --color-t-outdoor-bg: #e3f3e8;
+  --color-t-outdoor-fg: #1f6137;
+  --color-t-shopping: #d6487f;
+  --color-t-shopping-bg: #fbe6ee;
+  --color-t-shopping-fg: #a02957;
+  --color-t-transport: #3a77d6;
+  --color-t-transport-bg: #e4edfb;
+  --color-t-transport-fg: #1f4fa0;
+  --color-t-stay: #6a63d9;
+  --color-t-stay-bg: #eae9fb;
+  --color-t-stay-fg: #403aa8;
+  --color-t-fun: #d09a12;
+  --color-t-fun-bg: #fbf0cf;
+  --color-t-fun-fg: #755200;
+  --color-t-other: #9a9183;
+  --color-t-other-bg: #efeadf;
+  --color-t-other-fg: #554e43;
+
+  --shadow-card: 0 1px 0 rgb(35 32 27 / 0.04), 0 1px 2px rgb(35 32 27 / 0.05);
+  --shadow-lift: 0 1px 0 rgb(35 32 27 / 0.04), 0 10px 30px -12px rgb(35 32 27 / 0.28);
+
+  --animate-rise: rise 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
   }
 }
 
+:root {
+  --nav-h: 3.5rem;
+  color-scheme: light;
+}
+
+html {
+  background: var(--color-paper);
+  scroll-padding-top: calc(var(--nav-h) + 4.5rem);
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+/* Visible focus for everything that is not already styled */
+:focus-visible {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 2px;
+}
+
+/* Subtle paper grain, pure CSS */
+.paper-grain {
+  background-image: radial-gradient(
+      rgb(35 32 27 / 0.035) 1px,
+      transparent 1px
+    );
+  background-size: 14px 14px;
+}
+
+/* Horizontal scrollers without a visible bar (day strip) */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media print {
+  nav,
+  header {
+    display: none !important;
+  }
 }

@@ -27,12 +27,12 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           id={inputId}
           {...props}
           className={[
-            "w-full rounded-lg border px-3 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400",
-            "focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent",
+            "min-h-11 w-full rounded-xl border px-3.5 py-2.5 text-base text-zinc-900 placeholder:text-zinc-400 sm:text-sm",
+            "focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent",
             "disabled:bg-zinc-50 disabled:text-zinc-500 disabled:cursor-not-allowed",
             error
               ? "border-red-500 bg-red-50"
-              : "border-zinc-300 bg-white",
+              : "border-line-strong bg-surface",
             className,
           ]
             .filter(Boolean)
