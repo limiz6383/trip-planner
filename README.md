@@ -8,6 +8,10 @@ Built with Next.js (App Router), Supabase (Postgres + Auth, RLS-enforced), and
 the Anthropic API.
 
 **[Live demo →](https://trip-planner-tan-three.vercel.app)** — no signup, no API keys; runs entirely on fixtures.
+The hosted demo uses sample data and never calls an AI API. To try real AI-generated
+itineraries, [run it with your own keys](#running-against-real-services) — the
+hosted version isn't wired to a paid key on purpose, so nobody's usage is billed
+to me.
 
 ![My Trips dashboard with learned travel style](docs/screenshots/dashboard.png)
 
@@ -96,6 +100,11 @@ Both query modules export the same 38 names, and the dispatcher types the mock
 against the real one — if either drifts, the build fails.
 
 ## Running against real services
+
+Bring your own keys: a free [Supabase](https://supabase.com) project and an
+[Anthropic API key](https://console.anthropic.com). Every generate, revise, chat
+and destination-guide call is billed to *your* Anthropic account, so set a spend
+limit first.
 
 ```bash
 cp .env.local.example .env.local   # fill in the values
