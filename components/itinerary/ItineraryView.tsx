@@ -17,10 +17,10 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import type { DragEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { ItineraryGeneratingOverlay } from "@/components/itinerary/ItineraryGeneratingOverlay";
+import { TYPE_META, TypeChip } from "@/components/itinerary/activity-types";
 import { buildICS } from "@/lib/ics";
 import type {
   Itinerary,
@@ -117,17 +117,6 @@ const ACTIVITY_TYPE_LABELS: Record<ActivityType, string> = {
   accommodation: "Stay",
   entertainment: "Entertainment",
   other: "Other",
-};
-
-const ACTIVITY_TYPE_COLORS: Record<ActivityType, string> = {
-  food: "bg-orange-100 text-orange-700",
-  culture: "bg-purple-100 text-purple-700",
-  outdoor: "bg-green-100 text-green-700",
-  shopping: "bg-pink-100 text-pink-700",
-  transport: "bg-blue-100 text-blue-700",
-  accommodation: "bg-indigo-100 text-indigo-700",
-  entertainment: "bg-yellow-100 text-yellow-700",
-  other: "bg-zinc-100 text-zinc-600",
 };
 
 // ---------------------------------------------------------------------------
@@ -365,17 +354,7 @@ const CHANGE_TYPE_COLORS: Record<ChangeLogEntry["change_type"], string> = {
 // ---------------------------------------------------------------------------
 
 function ActivityTypeBadge({ type }: { type: ActivityType | null }) {
-  const resolved = type ?? "other";
-  return (
-    <span
-      className={[
-        "inline-block rounded-full px-2 py-0.5 text-xs font-medium",
-        ACTIVITY_TYPE_COLORS[resolved],
-      ].join(" ")}
-    >
-      {ACTIVITY_TYPE_LABELS[resolved]}
-    </span>
-  );
+  return <TypeChip type={type} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -383,9 +362,9 @@ function ActivityTypeBadge({ type }: { type: ActivityType | null }) {
 // ---------------------------------------------------------------------------
 
 const STATUS_COLORS: Record<string, string> = {
-  draft: "bg-zinc-100 text-zinc-600",
-  proposed: "bg-amber-100 text-amber-700",
-  confirmed: "bg-green-100 text-green-700",
+  draft: "bg-zinc-100 text-zinc-700",
+  proposed: "bg-amber-100 text-amber-900",
+  confirmed: "bg-green-100 text-green-800",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -407,7 +386,7 @@ function StatusBadge({ status }: { status: string }) {
   return (
     <span
       className={[
-        "inline-block rounded-full px-2.5 py-0.5 text-xs font-medium capitalize",
+        "inline-block rounded-full px-2.5 py-1 text-xs font-semibold capitalize",
         STATUS_COLORS[status] ?? "bg-zinc-100 text-zinc-600",
       ].join(" ")}
     >
@@ -483,6 +462,82 @@ function SparkleIcon() {
     </svg>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Small stroke icons used by the redesigned timeline
+// ---------------------------------------------------------------------------
+
+function StrokeIcon({
+  children,
+  className = "h-4 w-4",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {children}
+    </svg>
+  );
+}
+
+const ClockIcon = ({ className }: { className?: string }) => (
+  <StrokeIcon className={className}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3 2" />
+  </StrokeIcon>
+);
+const PinIcon = ({ className }: { className?: string }) => (
+  <StrokeIcon className={className}>
+    <path d="M12 21s7-5.6 7-11a7 7 0 0 0-14 0c0 5.4 7 11 7 11Z" />
+    <circle cx="12" cy="10" r="2.5" />
+  </StrokeIcon>
+);
+const MoreIcon = ({ className }: { className?: string }) => (
+  <StrokeIcon className={className}>
+    <circle cx="5" cy="12" r="1" />
+    <circle cx="12" cy="12" r="1" />
+    <circle cx="19" cy="12" r="1" />
+  </StrokeIcon>
+);
+const ChevronIcon = ({ className }: { className?: string }) => (
+  <StrokeIcon className={className}>
+    <path d="m6 9 6 6 6-6" />
+  </StrokeIcon>
+);
+const SendIcon = ({ className }: { className?: string }) => (
+  <StrokeIcon className={className}>
+    <path d="M5 12h14M13 6l6 6-6 6" />
+  </StrokeIcon>
+);
+const CheckIcon = ({ className }: { className?: string }) => (
+  <StrokeIcon className={className}>
+    <path d="m5 12.5 4.5 4.5L19 7.5" />
+  </StrokeIcon>
+);
+const ArrowUpIcon = ({ className }: { className?: string }) => (
+  <StrokeIcon className={className}>
+    <path d="m6 15 6-6 6 6" />
+  </StrokeIcon>
+);
+const ArrowDownIcon = ({ className }: { className?: string }) => (
+  <StrokeIcon className={className}>
+    <path d="m6 9 6 6 6-6" />
+  </StrokeIcon>
+);
+
+/** Round icon-only button: 44px on touch screens, 32px with a mouse. */
+const ICON_BTN =
+  "inline-flex h-11 w-11 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-paper-2 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-30 sm:h-8 sm:w-8";
 
 // ---------------------------------------------------------------------------
 // Activity revise form (inline AI revision)
@@ -821,6 +876,7 @@ function ActivityCard({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [dropBefore, setDropBefore] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   async function handleDelete() {
     setDeleting(true);
@@ -890,129 +946,212 @@ function ActivityCard({
   }
 
   const interactive = !editing && !revising;
+  const isFirst = !canMoveUp;
+  const isLast = !canMoveDown;
+  const typeKey: ActivityType = act.activity_type ?? "other";
 
   return (
-    <div
-      draggable={interactive}
-      onDragStart={(e) => {
-        e.dataTransfer.setData(
-          "text/plain",
-          JSON.stringify({ activityId: act.activity_id, fromDayId: dayId })
-        );
-        e.dataTransfer.effectAllowed = "move";
-        setDragging(true);
-      }}
-      onDragEnd={() => setDragging(false)}
-      onDragOver={(e) => {
-        if (!interactive) return;
-        e.preventDefault();
-        e.stopPropagation();
-        setDropBefore(true);
-      }}
-      onDragLeave={() => setDropBefore(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setDropBefore(false);
-        const dragged = readDrag(e);
-        if (dragged && dragged.activityId !== act.activity_id) {
-          onDropBeforeMe(dragged);
-        }
-      }}
-      className={[
-        "flex flex-col gap-1.5 rounded-lg border bg-zinc-50 p-3",
-        interactive ? "cursor-grab active:cursor-grabbing" : "",
-        dragging ? "opacity-40" : "",
-        dropBefore ? "border-t-2 border-t-indigo-500" : "",
-        act.locked ? "border-indigo-200" : "border-zinc-100",
-      ].join(" ")}
-    >
-      {editing ? (
-        <ActivityEditForm
-          activity={act}
-          tripId={tripId}
-          onSaved={handleSaved}
-          onCancel={() => setEditing(false)}
+    <div className={["group relative", isLast ? "" : "pb-3"].join(" ")}>
+      {/* Rail: a continuous line through every stop of the day, with a dot
+          coloured by activity type. */}
+      {!(isFirst && isLast) && (
+        <span
+          aria-hidden="true"
+          className={[
+            "absolute left-[3.55rem] w-px bg-line-strong",
+            isFirst ? "top-[1.15rem] bottom-0" : isLast ? "top-0 h-[1.15rem]" : "top-0 bottom-0",
+          ].join(" ")}
         />
-      ) : revising ? (
-        <ReviseActivityForm
-          activity={act}
-          tripId={tripId}
-          onRevised={handleRevised}
-          onCancel={() => setRevising(false)}
-        />
-      ) : (
-        <>
-          {/* Start time */}
-          {act.start_time && (
-            <p className="text-xs font-semibold text-indigo-600">
-              {formatClock(act.start_time)}
-            </p>
-          )}
+      )}
+      <span
+        aria-hidden="true"
+        className={[
+          "absolute left-[3.55rem] top-[0.8rem] h-[0.7rem] w-[0.7rem] -translate-x-1/2 rounded-full ring-4 ring-surface",
+          TYPE_META[typeKey].dot,
+        ].join(" ")}
+      />
 
-          {/* Header row: name + type badge + action buttons */}
-          <div className="flex items-start justify-between gap-2">
-            <p className="text-sm font-medium leading-snug text-zinc-900">
-              {act.name}
-            </p>
-            <div className="flex shrink-0 items-center gap-1">
+      {/* Time */}
+      {act.start_time && (
+        <p className="absolute left-0 top-[0.62rem] w-[3rem] text-right tabular-nums leading-none text-zinc-800">
+          <span className="block text-[13px] font-semibold">
+            {formatClock(act.start_time).replace(/ (AM|PM)$/, "")}
+          </span>
+          <span className="mt-0.5 block text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+            {formatClock(act.start_time).slice(-2)}
+          </span>
+        </p>
+      )}
+
+      <div
+        draggable={interactive}
+        onDragStart={(e) => {
+          e.dataTransfer.setData(
+            "text/plain",
+            JSON.stringify({ activityId: act.activity_id, fromDayId: dayId })
+          );
+          e.dataTransfer.effectAllowed = "move";
+          setDragging(true);
+        }}
+        onDragEnd={() => setDragging(false)}
+        onDragOver={(e) => {
+          if (!interactive) return;
+          e.preventDefault();
+          e.stopPropagation();
+          setDropBefore(true);
+        }}
+        onDragLeave={() => setDropBefore(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setDropBefore(false);
+          const dragged = readDrag(e);
+          if (dragged && dragged.activityId !== act.activity_id) {
+            onDropBeforeMe(dragged);
+          }
+        }}
+        className={[
+          "ml-[4.6rem] flex flex-col gap-2 rounded-xl border bg-paper/70 p-3 transition-shadow sm:p-3.5",
+          interactive ? "cursor-grab hover:shadow-card active:cursor-grabbing" : "",
+          dragging ? "opacity-40" : "",
+          dropBefore ? "border-t-2 border-t-brand-500" : "",
+          act.locked ? "border-brand-300 bg-brand-50/50" : "border-line",
+        ].join(" ")}
+      >
+        {editing ? (
+          <ActivityEditForm
+            activity={act}
+            tripId={tripId}
+            onSaved={handleSaved}
+            onCancel={() => setEditing(false)}
+          />
+        ) : revising ? (
+          <ReviseActivityForm
+            activity={act}
+            tripId={tripId}
+            onRevised={handleRevised}
+            onCancel={() => setRevising(false)}
+          />
+        ) : (
+          <>
+            {/* Title + type */}
+            <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1.5">
+              <h4 className="min-w-0 flex-1 basis-40 text-[15px] font-semibold leading-snug text-ink">
+                {act.name}
+              </h4>
               <ActivityTypeBadge type={act.activity_type} />
+            </div>
 
-              {/* Reorder up */}
-              <button
-                onClick={() => onReorder("up")}
-                disabled={!canMoveUp}
-                className="rounded p-1 text-zinc-400 transition-colors hover:bg-zinc-200 hover:text-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-30"
-                title="Move earlier"
-                aria-label={`Move ${act.name} earlier`}
+            {act.place_name && (
+              <p className="flex items-center gap-1 text-xs text-zinc-600">
+                <PinIcon className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
+                <span className="min-w-0">{act.place_name}</span>
+              </p>
+            )}
+
+            {act.description && (
+              <p className="text-sm leading-relaxed text-zinc-700">
+                {act.description}
+              </p>
+            )}
+
+            {act.source_attribution && (
+              <p className="text-xs italic text-zinc-500">
+                via {act.source_attribution}
+              </p>
+            )}
+
+            {/* Delete confirm */}
+            {confirmingDelete && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">
+                <span>Remove this activity?</span>
+                <span className="flex shrink-0 gap-1">
+                  <button
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="min-h-11 rounded-lg bg-red-600 px-3 text-xs font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50 sm:min-h-8"
+                  >
+                    {deleting ? "Removing…" : "Remove"}
+                  </button>
+                  <button
+                    onClick={() => setConfirmingDelete(false)}
+                    disabled={deleting}
+                    className="min-h-11 rounded-lg px-3 text-xs font-medium text-zinc-700 hover:bg-red-100 sm:min-h-8"
+                  >
+                    Cancel
+                  </button>
+                </span>
+              </div>
+            )}
+            {deleteError && (
+              <p className="text-xs text-red-700" role="alert">
+                {deleteError}
+              </p>
+            )}
+            {lockError && (
+              <p className="text-xs text-red-700" role="alert">
+                {lockError}
+              </p>
+            )}
+
+            {/* Meta + actions share one row. Actions are quiet until hover/focus
+                on desktop and always shown on touch screens. */}
+            <div className="-mb-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-line/80 pt-1.5">
+              {(act.estimated_time_hours != null ||
+                act.estimated_cost_usd != null ||
+                act.locked) && (
+                <div className="mr-auto flex flex-wrap items-center gap-x-3 gap-y-1 py-1 text-xs text-zinc-600">
+                  {act.estimated_time_hours != null && (
+                    <span className="inline-flex items-center gap-1">
+                      <ClockIcon className="h-3.5 w-3.5 text-zinc-400" />
+                      {formatTime(act.estimated_time_hours)}
+                    </span>
+                  )}
+                  {act.estimated_cost_usd != null && (
+                    <span className="rounded-md bg-paper-2 px-1.5 py-0.5 font-semibold tabular-nums text-zinc-800">
+                      {formatCost(act.estimated_cost_usd)}
+                    </span>
+                  )}
+                  {act.locked && (
+                    <span className="inline-flex items-center gap-1 font-medium text-brand-700">
+                      <LockIcon locked={true} />
+                      Locked
+                    </span>
+                  )}
+                </div>
+              )}
+              <div
+                className={[
+                  "ml-auto flex flex-wrap items-center gap-0.5 transition-opacity",
+                  "sm:opacity-60 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100",
+                  moreOpen || act.locked ? "sm:opacity-100" : "",
+                ].join(" ")}
               >
-                <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                  <path fillRule="evenodd" d="M10 5a1 1 0 01.7.29l5 5a1 1 0 01-1.4 1.42L10 7.41l-4.3 4.3a1 1 0 01-1.4-1.42l5-5A1 1 0 0110 5z" clipRule="evenodd" />
-                </svg>
-              </button>
-
-              {/* Reorder down */}
-              <button
-                onClick={() => onReorder("down")}
-                disabled={!canMoveDown}
-                className="rounded p-1 text-zinc-400 transition-colors hover:bg-zinc-200 hover:text-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-30"
-                title="Move later"
-                aria-label={`Move ${act.name} later`}
-              >
-                <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                  <path fillRule="evenodd" d="M10 15a1 1 0 01-.7-.29l-5-5a1 1 0 011.4-1.42L10 12.59l4.3-4.3a1 1 0 011.4 1.42l-5 5A1 1 0 0110 15z" clipRule="evenodd" />
-                </svg>
-              </button>
-
-              {/* AI revise button */}
               <button
                 onClick={() => setRevising(true)}
-                className="rounded p-1 text-zinc-400 transition-colors hover:bg-violet-100 hover:text-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                className="inline-flex h-11 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 sm:h-8"
                 title="Revise with AI"
                 aria-label={`Revise ${act.name} with AI`}
               >
                 <SparkleIcon />
+                Revise
               </button>
 
-              {/* Edit button */}
               <button
                 onClick={() => setEditing(true)}
-                className="rounded p-1 text-zinc-400 transition-colors hover:bg-zinc-200 hover:text-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                className={ICON_BTN}
                 title="Edit activity"
                 aria-label={`Edit ${act.name}`}
               >
                 <PencilIcon />
               </button>
 
-              {/* Lock toggle */}
               <button
                 onClick={handleToggleLock}
                 disabled={lockPending}
                 className={[
-                  "rounded p-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed",
-                  act.locked
-                    ? "text-indigo-600 hover:bg-indigo-100"
-                    : "text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700",
+                  ICON_BTN,
+                  act.locked ? "bg-brand-100 text-brand-700 hover:bg-brand-200" : "",
                 ].join(" ")}
                 title={act.locked ? "Unlock activity" : "Lock activity"}
                 aria-label={act.locked ? `Unlock ${act.name}` : `Lock ${act.name}`}
@@ -1021,88 +1160,52 @@ function ActivityCard({
                 <LockIcon locked={act.locked} />
               </button>
 
-              {/* Delete */}
               <button
-                onClick={() => setConfirmingDelete(true)}
-                className="rounded p-1 text-zinc-400 transition-colors hover:bg-red-100 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
-                title="Remove activity"
-                aria-label={`Remove ${act.name}`}
+                onClick={() => setMoreOpen((v) => !v)}
+                className={[ICON_BTN, moreOpen ? "bg-paper-2 text-zinc-900" : ""].join(" ")}
+                title="More actions"
+                aria-label={`More actions for ${act.name}`}
+                aria-expanded={moreOpen}
               >
-                <TrashIcon />
+                <MoreIcon />
               </button>
-            </div>
-          </div>
 
-          {/* Delete confirm */}
-          {confirmingDelete && (
-            <div className="flex items-center justify-between gap-2 rounded-md bg-red-50 px-2 py-1.5 text-xs text-red-700">
-              <span>Remove this activity?</span>
-              <span className="flex shrink-0 gap-1">
-                <button
-                  onClick={handleDelete}
-                  disabled={deleting}
-                  className="rounded bg-red-600 px-2 py-0.5 font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
-                >
-                  {deleting ? "Removing…" : "Remove"}
-                </button>
-                <button
-                  onClick={() => setConfirmingDelete(false)}
-                  disabled={deleting}
-                  className="rounded px-2 py-0.5 font-medium text-zinc-600 hover:bg-zinc-200"
-                >
-                  Cancel
-                </button>
-              </span>
-            </div>
-          )}
-          {deleteError && (
-            <p className="text-xs text-red-600" role="alert">
-              {deleteError}
-            </p>
-          )}
-
-          {/* Place name */}
-          {act.place_name && (
-            <p className="text-xs text-zinc-500">{act.place_name}</p>
-          )}
-
-          {/* Description */}
-          {act.description && (
-            <p className="text-xs leading-relaxed text-zinc-600">
-              {act.description}
-            </p>
-          )}
-
-          {/* Meta row: time + cost */}
-          {(act.estimated_time_hours != null ||
-            act.estimated_cost_usd != null) && (
-            <div className="flex items-center gap-3 text-xs text-zinc-500">
-              {act.estimated_time_hours != null && (
-                <span>{formatTime(act.estimated_time_hours)}</span>
+              {moreOpen && (
+                <>
+                  <span className="mx-1 hidden h-5 w-px bg-line-strong sm:block" aria-hidden="true" />
+                  <button
+                    onClick={() => onReorder("up")}
+                    disabled={!canMoveUp}
+                    className={ICON_BTN}
+                    title="Move earlier"
+                    aria-label={`Move ${act.name} earlier`}
+                  >
+                    <ArrowUpIcon className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => onReorder("down")}
+                    disabled={!canMoveDown}
+                    className={ICON_BTN}
+                    title="Move later"
+                    aria-label={`Move ${act.name} later`}
+                  >
+                    <ArrowDownIcon className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => setConfirmingDelete(true)}
+                    className={[ICON_BTN, "hover:bg-red-50 hover:text-red-700"].join(" ")}
+                    title="Remove activity"
+                    aria-label={`Remove ${act.name}`}
+                  >
+                    <TrashIcon />
+                  </button>
+                </>
               )}
-              {act.estimated_cost_usd != null && (
-                <span className="font-medium text-zinc-700">
-                  {formatCost(act.estimated_cost_usd)}
-                </span>
-              )}
+              </div>
             </div>
-          )}
-
-          {/* Source attribution */}
-          {act.source_attribution && (
-            <p className="text-xs italic text-zinc-400">
-              via {act.source_attribution}
-            </p>
-          )}
-
-          {/* Lock error */}
-          {lockError && (
-            <p className="text-xs text-red-600" role="alert">
-              {lockError}
-            </p>
-          )}
-        </>
-      )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -1283,36 +1386,80 @@ function DaySection({
     }
   }
 
+  const dateObj = new Date(day.date);
+  const weekday = dateObj.toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" });
+  const monthDay = dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  const cityShort = day.city ? day.city.split(",")[0] : null;
+
+  /** Free time between the end of one stop and the start of the next. */
+  function gapBefore(index: number): string | null {
+    if (index === 0) return null;
+    const prevEnd = activityEndMinutes(activities[index - 1]);
+    const start = parseClock(activities[index].start_time);
+    if (prevEnd == null || start == null) return null;
+    const gap = start - prevEnd;
+    if (gap < 20) return null;
+    const h = Math.floor(gap / 60);
+    const m = Math.round(gap % 60);
+    return h === 0 ? `${m} min free` : m === 0 ? `${h}h free` : `${h}h ${m}m free`;
+  }
+
   return (
-    <div className="flex flex-col gap-3">
+    <section
+      id={`day-${dayNumber}`}
+      aria-labelledby={`day-${dayNumber}-title`}
+      className="scroll-mt-32 overflow-hidden rounded-2xl border border-line bg-surface shadow-card"
+    >
       {/* Day header */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white">
-            {dayNumber}
-          </span>
-          <span className="text-sm font-semibold text-zinc-800">
-            {formatDate(day.date)}
-          </span>
-          {localDay.locked && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700">
-              <LockIcon locked={true} />
-              Locked
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-line bg-paper/60 px-4 py-3 sm:px-5">
+        <div className="flex min-w-0 items-center gap-3">
+          <span
+            className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-brand-700 text-white"
+            aria-hidden="true"
+          >
+            <span className="text-[9px] font-semibold uppercase leading-none tracking-widest text-brand-100">
+              Day
             </span>
-          )}
+            <span className="font-display text-xl font-bold leading-none">{dayNumber}</span>
+          </span>
+          <div className="min-w-0">
+            <h3
+              id={`day-${dayNumber}-title`}
+              className="font-display text-lg font-semibold leading-tight text-ink"
+            >
+              <span className="sr-only">Day {dayNumber}: </span>
+              {weekday}, {monthDay}
+            </h3>
+            <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-zinc-600">
+              {cityShort && <span className="font-medium text-zinc-700">{cityShort}</span>}
+              <span>
+                {activities.length} {activities.length === 1 ? "stop" : "stops"}
+              </span>
+              {day.daily_cost != null && (
+                <span className="font-semibold tabular-nums text-zinc-800">
+                  {formatCost(day.daily_cost)} / day
+                </span>
+              )}
+              {localDay.locked && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-brand-100 px-2 py-0.5 font-medium text-brand-800">
+                  <LockIcon locked={true} />
+                  Locked
+                </span>
+              )}
+            </p>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {day.daily_cost != null && (
-            <span className="text-xs font-medium text-zinc-500">
-              {formatCost(day.daily_cost)} / day
-            </span>
-          )}
-
+        <div className="flex items-center gap-1.5">
           {/* AI revise-day toggle */}
           <button
             onClick={() => setRevisingDay((v) => !v)}
-            className="flex items-center gap-1 rounded-lg bg-violet-100 px-2 py-1 text-xs font-medium text-violet-700 transition-colors hover:bg-violet-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+            className={[
+              "inline-flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 sm:min-h-9",
+              revisingDay
+                ? "bg-violet-600 text-white"
+                : "bg-violet-100 text-violet-800 hover:bg-violet-200",
+            ].join(" ")}
             title="Revise this day with AI"
             aria-expanded={revisingDay}
           >
@@ -1325,10 +1472,10 @@ function DaySection({
             onClick={handleToggleDayLock}
             disabled={lockPending}
             className={[
-              "flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed",
+              "inline-flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed sm:min-h-9",
               localDay.locked
-                ? "bg-indigo-100 text-indigo-700 hover:bg-indigo-200"
-                : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200",
+                ? "bg-brand-100 text-brand-800 hover:bg-brand-200"
+                : "border border-line-strong bg-surface text-zinc-700 hover:bg-paper-2",
             ].join(" ")}
             title={localDay.locked ? "Unlock this day" : "Lock this day"}
             aria-pressed={localDay.locked}
@@ -1339,83 +1486,99 @@ function DaySection({
         </div>
       </div>
 
-      {lockError && (
-        <p className="text-xs text-red-600" role="alert">
-          {lockError}
-        </p>
-      )}
-
-      {/* AI revise-day form */}
-      {revisingDay && (
-        <ReviseDayForm
-          dayId={day.day_id}
-          tripId={tripId}
-          onRevised={(acts) => {
-            onDayActivitiesReplaced(day.day_id, acts);
-            setRevisingDay(false);
-          }}
-          onCancel={() => setRevisingDay(false)}
-        />
-      )}
-
-      {/* Activity list — also a drop zone (drop here = move to end of this day) */}
-      <div
-        className={[
-          "flex flex-col gap-2 rounded-lg pl-8 transition-colors",
-          isDragOver ? "bg-indigo-50 ring-2 ring-indigo-300" : "",
-        ].join(" ")}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setIsDragOver(true);
-        }}
-        onDragLeave={(e) => {
-          // Only clear when leaving the container, not when moving over a child.
-          if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-            setIsDragOver(false);
-          }
-        }}
-        onDrop={(e) => {
-          e.preventDefault();
-          setIsDragOver(false);
-          const dragged = readDrag(e);
-          if (dragged) {
-            onActivityDrop(day.day_id, null, dragged.activityId, dragged.fromDayId);
-          }
-        }}
-      >
-        {activities.length > 0 ? (
-          activities.map((activity, index) => (
-            <ActivityCard
-              key={activity.activity_id}
-              activity={activity}
-              tripId={tripId}
-              dayId={day.day_id}
-              onActivityUpdated={onActivityUpdated}
-              canMoveUp={index > 0}
-              canMoveDown={index < activities.length - 1}
-              onReorder={(direction) =>
-                onReorderActivity(day.day_id, activity.activity_id, direction)
-              }
-              onDropBeforeMe={(dragged) =>
-                onActivityDrop(
-                  day.day_id,
-                  activity.activity_id,
-                  dragged.activityId,
-                  dragged.fromDayId
-                )
-              }
-              onDeleted={() =>
-                onActivityDeleted(day.day_id, activity.activity_id)
-              }
-            />
-          ))
-        ) : (
-          <p className="py-2 text-xs italic text-zinc-400">
-            No activities planned for this day. Drag one here to move it.
+      <div className="flex flex-col gap-3 p-4 sm:p-5">
+        {lockError && (
+          <p className="text-xs text-red-700" role="alert">
+            {lockError}
           </p>
         )}
+
+        {/* AI revise-day form */}
+        {revisingDay && (
+          <ReviseDayForm
+            dayId={day.day_id}
+            tripId={tripId}
+            onRevised={(acts) => {
+              onDayActivitiesReplaced(day.day_id, acts);
+              setRevisingDay(false);
+            }}
+            onCancel={() => setRevisingDay(false)}
+          />
+        )}
+
+        {/* Activity list: also a drop zone (drop here = move to end of this day) */}
+        <div
+          className={[
+            "flex flex-col rounded-xl transition-colors",
+            isDragOver ? "bg-brand-50 ring-2 ring-brand-300" : "",
+          ].join(" ")}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setIsDragOver(true);
+          }}
+          onDragLeave={(e) => {
+            // Only clear when leaving the container, not when moving over a child.
+            if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+              setIsDragOver(false);
+            }
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            setIsDragOver(false);
+            const dragged = readDrag(e);
+            if (dragged) {
+              onActivityDrop(day.day_id, null, dragged.activityId, dragged.fromDayId);
+            }
+          }}
+        >
+          {activities.length > 0 ? (
+            activities.map((activity, index) => {
+              const gap = gapBefore(index);
+              return (
+                <div key={activity.activity_id}>
+                  {gap && (
+                    <p className="relative ml-[4.6rem] pb-2 text-[11px] font-medium text-zinc-500">
+                      <span
+                        aria-hidden="true"
+                        className="absolute -left-[1.05rem] top-0 h-full w-px bg-line-strong"
+                      />
+                      {gap}
+                    </p>
+                  )}
+                  <ActivityCard
+                    activity={activity}
+                    tripId={tripId}
+                    dayId={day.day_id}
+                    onActivityUpdated={onActivityUpdated}
+                    canMoveUp={index > 0}
+                    canMoveDown={index < activities.length - 1}
+                    onReorder={(direction) =>
+                      onReorderActivity(day.day_id, activity.activity_id, direction)
+                    }
+                    onDropBeforeMe={(dragged) =>
+                      onActivityDrop(
+                        day.day_id,
+                        activity.activity_id,
+                        dragged.activityId,
+                        dragged.fromDayId
+                      )
+                    }
+                    onDeleted={() =>
+                      onActivityDeleted(day.day_id, activity.activity_id)
+                    }
+                  />
+                </div>
+              );
+            })
+          ) : (
+            <p className="rounded-xl border border-dashed border-line-strong px-4 py-6 text-center text-sm text-zinc-600">
+              Nothing planned for this day yet. Drag an activity here, or use
+              Revise day to ask for ideas.
+            </p>
+          )}
+        </div>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -1573,21 +1736,6 @@ function normalizeText(s: string): string {
     .trim();
 }
 
-function CheckDot({ on }: { on: boolean }) {
-  return (
-    <span
-      className={[
-        "flex h-4 w-4 flex-none items-center justify-center rounded-full text-[10px] font-bold",
-        on ? "bg-green-100 text-green-700" : "bg-zinc-100 text-zinc-300",
-      ].join(" ")}
-      title={on ? "Already in your plan" : "Not in your plan yet"}
-      aria-label={on ? "In your plan" : "Not in your plan"}
-    >
-      {on ? "\u2713" : "\u25cb"}
-    </span>
-  );
-}
-
 /** The activity that covers this highlight, if any. */
 function coveringActivity(
   name: string,
@@ -1622,7 +1770,14 @@ interface GuideItemState {
   lockedIn: boolean;
 }
 
-/** One selectable highlight row. */
+/**
+ * One selectable highlight, drawn as a card. The native checkbox stays in the
+ * DOM (visually hidden) so keyboard + screen-reader behaviour is unchanged;
+ * the box, border and status tag are driven off its :checked state.
+ *
+ * Two independent signals, deliberately kept apart: the checkbox is the
+ * traveller's intent, the status tag says what the plan contains right now.
+ */
 function PickRow({
   item,
   selected,
@@ -1634,12 +1789,27 @@ function PickRow({
 }) {
   const disabled = item.lockedIn && selected;
 
+  let tag: { text: string; cls: string } | null = null;
+  if (item.lockedIn && selected) {
+    tag = { text: "Locked in your plan", cls: "bg-brand-100 text-brand-800" };
+  } else if (item.covered && selected) {
+    tag = { text: "In your plan", cls: "bg-green-100 text-green-800" };
+  } else if (item.covered && !selected) {
+    tag = { text: "Will be removed", cls: "bg-amber-100 text-amber-900" };
+  } else if (!item.covered && selected) {
+    tag = { text: "Will be added", cls: "bg-violet-100 text-violet-800" };
+  }
+
   return (
     <li>
       <label
         className={[
-          "flex cursor-pointer items-start gap-2 rounded-md px-1.5 py-1 text-sm transition-colors",
-          disabled ? "cursor-not-allowed opacity-70" : "hover:bg-zinc-50",
+          "group relative flex h-full gap-3 rounded-xl border p-3 transition-colors",
+          "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-500 has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-surface",
+          selected
+            ? "border-brand-400 bg-brand-50/70"
+            : "border-line bg-paper/60 hover:border-line-strong hover:bg-paper",
+          disabled ? "cursor-not-allowed opacity-80" : "cursor-pointer",
         ].join(" ")}
         title={
           disabled
@@ -1652,26 +1822,67 @@ function PickRow({
           checked={selected}
           disabled={disabled}
           onChange={onToggle}
-          className="mt-0.5 h-4 w-4 flex-none rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+          className="peer sr-only"
         />
-        <CheckDot on={item.covered} />
-        <span>
-          <span className="font-medium text-zinc-800">{item.name}</span>
-          {item.why ? <span className="text-zinc-500"> — {item.why}</span> : null}
+        <span
+          aria-hidden="true"
+          className={[
+            "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition-colors",
+            selected
+              ? "border-brand-600 bg-brand-600 text-white"
+              : "border-line-strong bg-surface text-transparent",
+          ].join(" ")}
+        >
+          <CheckIcon className="h-3.5 w-3.5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold leading-snug text-ink">
+            {item.name}
+          </span>
+          {item.why ? (
+            <span className="mt-0.5 block text-[13px] leading-snug text-zinc-600">
+              {item.why}
+            </span>
+          ) : null}
+          {tag && (
+            <span
+              className={[
+                "mt-2 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                tag.cls,
+              ].join(" ")}
+            >
+              {tag.text}
+            </span>
+          )}
         </span>
       </label>
     </li>
   );
 }
 
+function CoverageBar({ hit, total }: { hit: number; total: number }) {
+  const pct = total === 0 ? 0 : Math.round((hit / total) * 100);
+  return (
+    <span
+      className="block h-1.5 w-full overflow-hidden rounded-full bg-paper-2"
+      role="presentation"
+    >
+      <span
+        className="block h-full rounded-full bg-brand-500 transition-[width] duration-500"
+        style={{ width: `${pct}%` }}
+      />
+    </span>
+  );
+}
+
 /**
- * One collapsible "About {city}" card.
+ * One collapsible "About {city}" card. Collapsed by default: the header
+ * already tells you how much of the city's highlights the plan covers, and the
+ * day-by-day plan stays the first thing on the page.
  *
- * Two independent signals per row, deliberately kept apart: the checkbox is the
- * traveller's intent (what they want in the plan) and the dot is coverage (what
- * the plan currently contains). Coverage is a fuzzy name match, so it must
- * never be used as the checkbox's source of truth — after a rebuild the model
- * rewords activities and the match drifts.
+ * Coverage is a fuzzy name match, so it must never be used as the checkbox's
+ * source of truth — after a rebuild the model rewords activities and the match
+ * drifts.
  */
 function DestinationGuideCard({
   guide,
@@ -1684,47 +1895,82 @@ function DestinationGuideCard({
   selected: Set<string>;
   onToggle: (key: string) => void;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   const spots = items.filter((i) => i.kind === "spot");
   const foods = items.filter((i) => i.kind === "food");
   const spotsHit = spots.filter((i) => i.covered).length;
   const foodsHit = foods.filter((i) => i.covered).length;
+  const hit = spotsHit + foodsHit;
+  const total = spots.length + foods.length;
+  const bodyId = `guide-${normalizeText(guide.destination).replace(/ /g, "-")}`;
 
   return (
-    <Card>
+    <section className="overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 text-left"
+        className="flex w-full items-start gap-3 p-4 text-left transition-colors hover:bg-paper/60 sm:p-5"
         aria-expanded={open}
+        aria-controls={bodyId}
       >
-        <CardTitle>About {guide.destination}</CardTitle>
         <span
-          className={[
-            "shrink-0 text-zinc-400 transition-transform",
-            open ? "rotate-180" : "",
-          ].join(" ")}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-100 text-brand-700"
           aria-hidden="true"
         >
-          &#9662;
+          <StrokeIcon className="h-5 w-5">
+            <circle cx="12" cy="12" r="9" />
+            <path d="m15.5 8.5-2 5-5 2 2-5 5-2Z" />
+          </StrokeIcon>
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-display text-lg font-semibold leading-tight text-ink">
+            About {guide.destination}
+          </span>
+          {total > 0 && (
+            <span className="mt-1 block text-xs text-zinc-600">
+              Your plan covers{" "}
+              <strong className="font-semibold text-zinc-800">
+                {hit} of {total}
+              </strong>{" "}
+              highlights
+              <span className="hidden sm:inline">
+                {" "}
+                ({spotsHit}/{spots.length} spots, {foodsHit}/{foods.length} food)
+              </span>
+            </span>
+          )}
+          {total > 0 && (
+            <span className="mt-2 block max-w-xs">
+              <CoverageBar hit={hit} total={total} />
+            </span>
+          )}
+        </span>
+        <span className="mt-1 flex shrink-0 items-center gap-1 text-xs font-medium text-brand-700">
+          <span className="hidden sm:inline">{open ? "Hide" : "Choose highlights"}</span>
+          <ChevronIcon
+            className={["h-5 w-5 transition-transform", open ? "rotate-180" : ""].join(" ")}
+          />
         </span>
       </button>
 
       {open && (
-        <div className="mt-2 flex flex-col gap-4">
+        <div
+          id={bodyId}
+          className="flex flex-col gap-5 border-t border-line px-4 pb-5 pt-4 sm:px-5"
+        >
           {guide.known_for && (
-            <p className="text-sm leading-relaxed text-zinc-600">
+            <p className="max-w-prose text-sm leading-relaxed text-zinc-700">
               {guide.known_for}
             </p>
           )}
 
           {spots.length > 0 && (
-            <div className="flex flex-col gap-1.5">
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                Top spots — your plan covers {spotsHit} of {spots.length}
+            <div className="flex flex-col gap-2.5">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-600">
+                Top spots <span className="font-normal normal-case tracking-normal">· your plan covers {spotsHit} of {spots.length}</span>
               </h4>
-              <ul className="flex flex-col">
+              <ul className="grid gap-2 sm:grid-cols-2">
                 {spots.map((i) => (
                   <PickRow
                     key={i.key}
@@ -1738,11 +1984,11 @@ function DestinationGuideCard({
           )}
 
           {foods.length > 0 && (
-            <div className="flex flex-col gap-1.5">
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                Must-try food — {foodsHit} on your plan
+            <div className="flex flex-col gap-2.5">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-600">
+                Must-try food <span className="font-normal normal-case tracking-normal">· {foodsHit} on your plan</span>
               </h4>
-              <ul className="flex flex-col">
+              <ul className="grid gap-2 sm:grid-cols-2">
                 {foods.map((i) => (
                   <PickRow
                     key={i.key}
@@ -1756,7 +2002,7 @@ function DestinationGuideCard({
           )}
         </div>
       )}
-    </Card>
+    </section>
   );
 }
 
@@ -1935,12 +2181,18 @@ function DestinationGuides({
 
   if (loading) {
     return (
-      <Card>
-        <div className="flex items-center gap-2 text-sm text-zinc-500">
-          <span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-300 border-t-indigo-600" />
-          Loading destination highlights&#8230;
+      <div
+        className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-4 shadow-card sm:p-5"
+        role="status"
+      >
+        <span className="h-11 w-11 shrink-0 animate-pulse rounded-xl bg-brand-100" aria-hidden="true" />
+        <div className="flex-1">
+          <p className="text-sm font-medium text-zinc-700">
+            Loading destination highlights&#8230;
+          </p>
+          <span className="mt-2 block h-1.5 w-40 animate-pulse rounded-full bg-paper-2" aria-hidden="true" />
         </div>
-      </Card>
+      </div>
     );
   }
 
@@ -1953,10 +2205,13 @@ function DestinationGuides({
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-xs text-zinc-500">
-        Tick what you want in the plan and untick what you don&#39;t, then
-        rebuild — the itinerary is regenerated around your picks.
-      </p>
+      <div>
+        <h2 className="text-2xl font-bold text-ink">Destination highlights</h2>
+        <p className="mt-1 max-w-prose text-sm text-zinc-600">
+          Tick what you want in the plan and untick what you don&#39;t, then
+          rebuild — the itinerary is regenerated around your picks.
+        </p>
+      </div>
 
       {guides.map((cg) => (
         <DestinationGuideCard
@@ -1969,8 +2224,8 @@ function DestinationGuides({
       ))}
 
       {(addCount > 0 || dropCount > 0 || rebuilding) && (
-        <div className="sticky bottom-3 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-200 bg-indigo-50/95 px-4 py-3 shadow-sm backdrop-blur">
-          <div className="text-sm text-indigo-900">
+        <div className="sticky bottom-20 z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-brand-900 px-4 py-3 text-white shadow-lift sm:bottom-4">
+          <div className="text-sm" role="status">
             {addCount > 0 && (
               <span>
                 Adding <strong>{addCount}</strong>
@@ -1979,32 +2234,34 @@ function DestinationGuides({
             {addCount > 0 && dropCount > 0 && <span>, </span>}
             {dropCount > 0 && (
               <span>
-                removing <strong>{dropCount}</strong>
+                {addCount > 0 ? "removing" : "Removing"} <strong>{dropCount}</strong>
               </span>
             )}
+            {addCount === 0 && dropCount === 0 && <span>Rebuilding your plan&#8230;</span>}
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="secondary"
+            <button
+              type="button"
               onClick={() => setOverride(new Set(baseline))}
               disabled={rebuilding}
+              className="min-h-11 rounded-xl px-4 text-sm font-medium text-brand-100 transition-colors hover:bg-white/10 disabled:opacity-50 sm:min-h-9"
             >
               Reset
-            </Button>
-            <Button
-              size="sm"
+            </button>
+            <button
+              type="button"
               onClick={handleRebuild}
               disabled={rebuilding}
+              className="min-h-11 rounded-xl bg-white px-4 text-sm font-semibold text-brand-900 transition-colors hover:bg-brand-50 disabled:opacity-60 sm:min-h-9"
             >
               {rebuilding ? "Rebuilding\u2026" : "Rebuild plan"}
-            </Button>
+            </button>
           </div>
         </div>
       )}
 
       {error && (
-        <p className="text-sm text-red-600" role="alert">
+        <p className="text-sm text-red-700" role="alert">
           {error}
         </p>
       )}
@@ -2040,6 +2297,13 @@ export function ItineraryView({
   }
 
   const [changelogOpen, setChangelogOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
+
+  // Day-jump strip: highlight the day currently in view (scroll-spy) and keep
+  // its chip visible inside the horizontally scrolling strip.
+  const [activeDay, setActiveDay] = useState(1);
+  const stripRef = useRef<HTMLDivElement>(null);
+  const asideRef = useRef<HTMLElement>(null);
 
   // Conversational planner: discuss, then apply.
   const [chatOpen, setChatOpen] = useState(false);
@@ -2067,6 +2331,49 @@ export function ItineraryView({
       el.style.height = `${Math.min(el.scrollHeight, 128)}px`;
     }
   }, [chatInput]);
+
+  // On narrow screens the planner opens above the fold-line the button sits on,
+  // so bring it into view. (On desktop it lives in the sticky side column.)
+  useEffect(() => {
+    if (!chatOpen) return;
+    if (window.matchMedia("(min-width: 1024px)").matches) return;
+    asideRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [chatOpen]);
+
+  // Scroll-spy for the day strip. Presentation only; it reads the DOM.
+  const dayCount = localDays.length;
+  useEffect(() => {
+    if (revising || dayCount === 0) return;
+    const sections = Array.from(
+      document.querySelectorAll<HTMLElement>("section[id^='day-']")
+    );
+    if (sections.length === 0 || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+        if (visible) {
+          const n = Number(visible.target.id.replace("day-", ""));
+          if (!Number.isNaN(n)) setActiveDay(n);
+        }
+      },
+      { rootMargin: "-25% 0px -60% 0px", threshold: 0 }
+    );
+    sections.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, [dayCount, revising]);
+
+  useEffect(() => {
+    const strip = stripRef.current;
+    const chip = strip?.querySelector<HTMLElement>(`[data-day='${activeDay}']`);
+    if (strip && chip) {
+      strip.scrollTo({
+        left: chip.offsetLeft - strip.clientWidth / 2 + chip.clientWidth / 2,
+        behavior: "smooth",
+      });
+    }
+  }, [activeDay]);
 
   async function handleSendChat() {
     const text = chatInput.trim();
@@ -2470,136 +2777,114 @@ export function ItineraryView({
     return <ItineraryGeneratingOverlay />;
   }
 
+  // ---- Derived, display-only summaries (recomputed as days change) ----
+  const allActivities = localDays.flatMap((d) => d.activities ?? []);
+  const typeCounts = ACTIVITY_TYPES.map((t) => ({
+    type: t,
+    count: allActivities.filter((a) => (a.activity_type ?? "other") === t).length,
+  })).filter((x) => x.count > 0);
+  const maxDayCost = Math.max(1, ...localDays.map((d) => d.daily_cost ?? 0));
+  const userMessageCount = chatMessages.filter((m) => m.role === "user").length;
+
+  const SUGGESTIONS = [
+    "Make day 2 more relaxed",
+    "Swap one dinner for a local taverna",
+    "Add a rainy-day backup",
+    "Fewer long transfers",
+  ];
+
+  const MENU_ITEM =
+    "block min-h-11 w-full rounded-lg px-3 py-2 text-left text-sm text-zinc-800 hover:bg-paper-2 focus-visible:bg-paper-2 focus-visible:outline-none";
+
   return (
     <>
-      <div className="flex flex-col gap-4">
-        {/* ---- Itinerary header card ---- */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Your Itinerary</CardTitle>
-            {/* View changes drawer trigger (change-log mount point) */}
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setChatError(null);
-                  setChatOpen((v) => !v);
-                }}
-                aria-expanded={chatOpen}
-                aria-label="Plan with AI"
-              >
-                <span className="flex items-center gap-1.5">
-                  <SparkleIcon />
-                  Plan with AI
-                </span>
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setChangelogOpen(true)}
-                aria-label="View change history"
-              >
-                View changes
-              </Button>
-              <div className="relative">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setExportOpen((v) => !v)}
-                  aria-expanded={exportOpen}
-                  aria-label="Export itinerary"
-                >
-                  Export
-                </Button>
-                {exportOpen && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-10"
-                      aria-hidden="true"
-                      onClick={() => setExportOpen(false)}
-                    />
-                    <div className="absolute right-0 z-20 mt-1 w-52 rounded-lg border border-zinc-200 bg-white p-1 shadow-lg">
-                      <button
-                        onClick={handleExportPDF}
-                        className="block w-full rounded px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-100"
-                      >
-                        Save as PDF
-                      </button>
-                      <button
-                        onClick={handleExportICS}
-                        className="block w-full rounded px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-100"
-                      >
-                        Add to calendar (.ics)
-                      </button>
-                      {calendarSubscribeUrl && (
-                        <button
-                          onClick={() => {
-                            setExportOpen(false);
-                            setSubscribeOpen(true);
-                          }}
-                          className="block w-full rounded px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-100"
-                        >
-                          Subscribe (auto-sync)…
-                        </button>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-              <StatusBadge status={itinerary.status} />
-              <span className="text-xs text-zinc-400">
-                v{itinerary.version}
-              </span>
-            </div>
-          </CardHeader>
-
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start lg:gap-8">
+        {/* ============ Side column: AI planner + trip summary ============ */}
+        <aside
+          ref={asideRef}
+          aria-label="Trip tools and summary"
+          className={[
+            "order-first flex scroll-mt-32 flex-col gap-4 lg:order-none lg:col-start-2 lg:row-start-1",
+            "lg:sticky lg:top-20 lg:max-h-[calc(100svh-6rem)] lg:overflow-y-auto lg:pb-2",
+            chatOpen || (subscribeOpen && calendarSubscribeUrl) ? "" : "max-lg:hidden",
+          ].join(" ")}
+        >
           {/* Conversational planner: discuss, then apply */}
           {chatOpen && (
-            <div className="mb-3 flex flex-col gap-2 rounded-lg border border-violet-200 bg-violet-50 p-3">
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-sm font-medium text-violet-800">
-                  <SparkleIcon />
-                  Plan with AI
-                </span>
+            <section
+              aria-label="Plan with AI"
+              className="animate-rise flex flex-col gap-3 rounded-2xl border border-violet-200 bg-gradient-to-b from-violet-50 to-surface p-4 shadow-card"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-600 text-white" aria-hidden="true">
+                    <SparkleIcon />
+                  </span>
+                  <div>
+                    <h2 className="font-display text-lg font-semibold leading-tight text-violet-950">
+                      Plan with AI
+                    </h2>
+                    <p className="text-xs text-violet-800">Talk it through, then apply.</p>
+                  </div>
+                </div>
                 <button
                   onClick={() => setChatOpen(false)}
-                  className="rounded p-1 text-violet-400 hover:bg-violet-100 hover:text-violet-700"
+                  className="-mr-1.5 -mt-1 inline-flex h-11 w-11 items-center justify-center rounded-lg text-violet-700 hover:bg-violet-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
                   aria-label="Close planner"
                 >
-                  ✕
+                  <StrokeIcon>
+                    <path d="M6 6l12 12M18 6 6 18" />
+                  </StrokeIcon>
                 </button>
               </div>
 
-              {/* Transcript */}
+              {/* Transcript / starter prompts */}
               {chatMessages.length === 0 ? (
-                <p className="text-xs text-violet-700/80">
-                  Bounce ideas about your trip — e.g. &ldquo;add svíčková for a
-                  dinner&rdquo; or &ldquo;what&apos;s a good rainy-day swap for
-                  day 2?&rdquo; When you&apos;re happy, hit{" "}
-                  <span className="font-medium">Apply changes</span>.
-                </p>
+                <div className="flex flex-col gap-2.5">
+                  <p className="text-sm leading-snug text-violet-950/80">
+                    Bounce ideas about your trip, e.g. &ldquo;add svíčková for a
+                    dinner&rdquo; or &ldquo;what&apos;s a good rainy-day swap for
+                    day 2?&rdquo;
+                  </p>
+                  <ul className="flex flex-wrap gap-2" aria-label="Suggested prompts">
+                    {SUGGESTIONS.map((q) => (
+                      <li key={q}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setChatInput(q);
+                            chatInputRef.current?.focus();
+                          }}
+                          className="min-h-11 rounded-full border border-violet-200 bg-white px-3.5 text-left text-xs font-medium text-violet-900 transition-colors hover:bg-violet-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 sm:min-h-9"
+                        >
+                          {q}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               ) : (
                 <div
                   ref={chatScrollRef}
-                  className="flex max-h-72 flex-col gap-2 overflow-y-auto rounded-lg bg-white p-2"
+                  className="flex max-h-80 flex-col gap-2.5 overflow-y-auto rounded-xl bg-white/80 p-2.5 ring-1 ring-violet-100"
+                  aria-live="polite"
                 >
                   {chatMessages.map((m, i) => (
                     <div
                       key={i}
                       className={[
-                        "max-w-[85%] rounded-lg px-3 py-2 text-sm",
+                        "max-w-[88%] rounded-2xl px-3.5 py-2 text-sm leading-snug",
                         m.role === "user"
-                          ? "self-end bg-violet-600 text-white"
-                          : "self-start bg-zinc-100 text-zinc-800",
+                          ? "self-end rounded-br-md bg-violet-600 text-white"
+                          : "self-start rounded-bl-md bg-paper-2 text-zinc-800",
                       ].join(" ")}
                     >
                       {m.content}
                     </div>
                   ))}
                   {chatSending && (
-                    <div className="self-start rounded-lg bg-zinc-100 px-3 py-2 text-sm text-zinc-400">
-                      <span className="inline-flex gap-1">
+                    <div className="self-start rounded-2xl rounded-bl-md bg-paper-2 px-3.5 py-3 text-sm text-zinc-500">
+                      <span className="inline-flex gap-1" role="status" aria-label="Planner is typing">
                         <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400" />
                         <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 [animation-delay:120ms]" />
                         <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 [animation-delay:240ms]" />
@@ -2610,13 +2895,13 @@ export function ItineraryView({
               )}
 
               {chatError && (
-                <p className="text-xs text-red-600" role="alert">
+                <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800" role="alert">
                   {chatError}
                 </p>
               )}
 
               {/* Composer */}
-              <div className="flex items-end gap-2">
+              <div className="flex items-end gap-2 rounded-2xl border border-violet-200 bg-white p-1.5 focus-within:ring-2 focus-within:ring-violet-500">
                 <textarea
                   ref={chatInputRef}
                   value={chatInput}
@@ -2630,53 +2915,79 @@ export function ItineraryView({
                   disabled={chatSending}
                   autoFocus
                   rows={1}
-                  className="min-w-0 flex-1 resize-none overflow-y-auto rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm leading-relaxed text-zinc-900 placeholder:text-zinc-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:bg-zinc-50"
-                  placeholder="Ask or suggest something…  (Enter to send, Shift+Enter for a new line)"
+                  aria-label="Message the planner"
+                  className="min-h-11 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-2.5 py-2.5 text-base leading-relaxed text-zinc-900 placeholder:text-zinc-500 focus:outline-none disabled:opacity-60 sm:text-sm"
+                  placeholder="Ask or suggest something…"
                 />
-                <Button
-                  variant="secondary"
-                  size="sm"
+                <button
+                  type="button"
                   onClick={handleSendChat}
-                  loading={chatSending}
                   disabled={chatSending || !chatInput.trim()}
+                  className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-xl bg-violet-100 px-3.5 text-sm font-semibold text-violet-900 transition-colors hover:bg-violet-200 disabled:cursor-not-allowed disabled:bg-paper-2 disabled:text-zinc-500"
                 >
                   Send
-                </Button>
+                  <SendIcon className="h-4 w-4" />
+                </button>
               </div>
+              <p className="-mt-1 text-[11px] text-violet-900/70">
+                Enter to send, Shift+Enter for a new line.
+              </p>
 
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs text-violet-700/70">
+              {/* Apply / discard: nothing changes until you apply */}
+              <div className="rounded-xl bg-violet-100/60 p-3">
+                <p className="text-xs leading-snug text-violet-950/80">
                   Chatting doesn&apos;t change your plan. Locked activities are
                   kept; Apply creates a new version.
                 </p>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={handleApplyChat}
-                  disabled={
-                    chatSending ||
-                    chatMessages.filter((m) => m.role === "user").length === 0
-                  }
-                >
-                  Apply changes
-                </Button>
+                <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="ai"
+                    size="sm"
+                    onClick={handleApplyChat}
+                    disabled={chatSending || userMessageCount === 0}
+                  >
+                    Apply changes
+                    {userMessageCount > 0 && (
+                      <span className="rounded-full bg-white/25 px-1.5 text-xs">
+                        {userMessageCount}
+                      </span>
+                    )}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setChatMessages([]);
+                      setChatInput("");
+                      setChatError(null);
+                    }}
+                    disabled={chatSending || (userMessageCount === 0 && !chatInput)}
+                  >
+                    Discard chat
+                  </Button>
+                </div>
               </div>
-            </div>
+            </section>
           )}
 
           {/* Subscribe-by-URL panel */}
           {subscribeOpen && calendarSubscribeUrl && (
-            <div className="mb-3 flex flex-col gap-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+            <section
+              aria-label="Calendar subscription"
+              className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-4 shadow-card"
+            >
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-zinc-800">
-                  Subscribe in your calendar (auto-syncs)
-                </span>
+                <h2 className="font-display text-base font-semibold text-ink">
+                  Subscribe in your calendar
+                </h2>
                 <button
                   onClick={() => setSubscribeOpen(false)}
-                  className="rounded p-1 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700"
+                  className={ICON_BTN}
                   aria-label="Close subscribe panel"
                 >
-                  ✕
+                  <StrokeIcon>
+                    <path d="M6 6l12 12M18 6 6 18" />
+                  </StrokeIcon>
                 </button>
               </div>
               <div className="flex gap-2">
@@ -2684,113 +2995,294 @@ export function ItineraryView({
                   readOnly
                   value={calendarSubscribeUrl}
                   onFocus={(e) => e.currentTarget.select()}
-                  className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-xs text-zinc-700"
+                  aria-label="Calendar feed URL"
+                  className="min-h-11 min-w-0 flex-1 rounded-xl border border-line-strong bg-paper px-3 text-xs text-zinc-700 sm:min-h-9"
                 />
                 <Button variant="secondary" size="sm" onClick={handleCopySubscribe}>
                   {copied ? "Copied" : "Copy"}
                 </Button>
               </div>
-              <p className="text-xs text-zinc-500">
-                In Google Calendar (web): <span className="font-medium">Other calendars → + → From URL</span>, paste this link. It updates automatically when you change the trip. Anyone with the link can view this itinerary.
+              <p className="text-xs leading-snug text-zinc-600">
+                In Google Calendar (web): <span className="font-medium">Other calendars → + → From URL</span>, paste this link. It auto-syncs when you change the trip. Anyone with the link can view this itinerary.
+              </p>
+            </section>
+          )}
+
+          {/* Trip summary (desktop only; mobile gets the cover stats + day strip) */}
+          {localDays.length > 0 && (
+            <div className="hidden flex-col gap-4 lg:flex">
+              <section aria-label="Trip mix" className="rounded-2xl border border-line bg-surface p-4 shadow-card">
+                <h2 className="font-display text-base font-semibold text-ink">Trip mix</h2>
+                <p className="text-xs text-zinc-600">{allActivities.length} activities by type</p>
+                <div className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-paper-2" role="img" aria-label={typeCounts.map((x) => `${TYPE_META[x.type].label} ${x.count}`).join(", ")}>
+                  {typeCounts.map((x) => (
+                    <span
+                      key={x.type}
+                      className={TYPE_META[x.type].bar}
+                      style={{ width: `${(x.count / Math.max(allActivities.length, 1)) * 100}%` }}
+                    />
+                  ))}
+                </div>
+                <ul className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5">
+                  {typeCounts.map((x) => (
+                    <li key={x.type} className="flex items-center gap-1.5 text-xs text-zinc-700">
+                      <span className={["h-2 w-2 shrink-0 rounded-full", TYPE_META[x.type].dot].join(" ")} aria-hidden="true" />
+                      <span className="truncate">{TYPE_META[x.type].label}</span>
+                      <span className="ml-auto font-semibold tabular-nums text-zinc-900">{x.count}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+
+              {localDays.some((d) => d.daily_cost != null) && (
+                <section aria-label="Budget by day" className="rounded-2xl border border-line bg-surface p-4 shadow-card">
+                  <div className="flex items-baseline justify-between">
+                    <h2 className="font-display text-base font-semibold text-ink">Budget by day</h2>
+                    {totalCost != null && (
+                      <span className="text-sm font-semibold tabular-nums text-ink">{formatCost(totalCost)}</span>
+                    )}
+                  </div>
+                  <ol className="mt-3 flex flex-col gap-1.5">
+                    {localDays.map((d, i) => (
+                      <li key={d.day_id}>
+                        <a
+                          href={`#day-${i + 1}`}
+                          className="group flex items-center gap-2.5 rounded-lg px-1 py-1 text-xs hover:bg-paper-2"
+                        >
+                          <span className="w-9 shrink-0 font-semibold text-zinc-700">Day {i + 1}</span>
+                          <span className="h-2 flex-1 overflow-hidden rounded-full bg-paper-2 group-hover:bg-white">
+                            <span
+                              className="block h-full rounded-full bg-brand-500"
+                              style={{ width: `${((d.daily_cost ?? 0) / maxDayCost) * 100}%` }}
+                            />
+                          </span>
+                          <span className="w-12 shrink-0 text-right tabular-nums text-zinc-800">
+                            {formatCost(d.daily_cost ?? 0)}
+                          </span>
+                        </a>
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+              )}
+            </div>
+          )}
+        </aside>
+
+        {/* ============ Main column ============ */}
+        <div className="flex min-w-0 flex-col gap-6 lg:col-start-1 lg:row-start-1">
+          {/* ---- Overview + actions ---- */}
+          <section aria-labelledby="itinerary-title" className="rounded-2xl border border-line bg-surface p-4 shadow-card sm:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+              <div className="flex items-center gap-2.5">
+                <h2 id="itinerary-title" className="text-2xl font-bold text-ink">
+                  Your itinerary
+                </h2>
+                <StatusBadge status={itinerary.status} />
+                <span className="text-xs text-zinc-500">v{itinerary.version}</span>
+              </div>
+
+              <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center">
+                <Button
+                  variant="ai"
+                  size="sm"
+                  className="col-span-2 sm:col-span-1"
+                  onClick={() => {
+                    setChatError(null);
+                    setChatOpen((v) => !v);
+                  }}
+                  aria-expanded={chatOpen}
+                  aria-label="Plan with AI"
+                >
+                  <SparkleIcon />
+                  Plan with AI
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setChangelogOpen(true)}
+                  aria-label="View change history"
+                >
+                  View changes
+                </Button>
+                <div className="relative">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => setExportOpen((v) => !v)}
+                    aria-expanded={exportOpen}
+                    aria-label="Export itinerary"
+                  >
+                    Export
+                    <ChevronIcon className="h-4 w-4" />
+                  </Button>
+                  {exportOpen && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-30"
+                        aria-hidden="true"
+                        onClick={() => setExportOpen(false)}
+                      />
+                      <div className="absolute right-0 z-40 mt-1.5 w-60 rounded-xl border border-line bg-surface p-1.5 shadow-lift">
+                        <button onClick={handleExportPDF} className={MENU_ITEM}>
+                          Save as PDF
+                        </button>
+                        <button onClick={handleExportICS} className={MENU_ITEM}>
+                          Add to calendar (.ics)
+                        </button>
+                        {calendarSubscribeUrl && (
+                          <button
+                            onClick={() => {
+                              setExportOpen(false);
+                              setSubscribeOpen(true);
+                            }}
+                            className={MENU_ITEM}
+                          >
+                            Subscribe (auto-sync)…
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {itinerary.notes && (
+              <div className="mt-4 border-t border-line pt-4">
+                <p
+                  className={[
+                    "max-w-prose text-[15px] leading-relaxed text-zinc-700",
+                    notesOpen ? "" : "line-clamp-3",
+                  ].join(" ")}
+                >
+                  {itinerary.notes}
+                </p>
+                {itinerary.notes.length > 200 && (
+                  <button
+                    type="button"
+                    onClick={() => setNotesOpen((v) => !v)}
+                    aria-expanded={notesOpen}
+                    className="mt-1 inline-flex min-h-11 items-center text-sm font-medium text-brand-700 hover:text-brand-900 sm:min-h-8"
+                  >
+                    {notesOpen ? "Show less" : "Read the full overview"}
+                  </button>
+                )}
+              </div>
+            )}
+          </section>
+
+          {/* ---- Destination guide(s) (overview + per-city coverage) ---- */}
+          <DestinationGuides
+            tripId={tripId}
+            days={localDays}
+            onRebuilt={() => {
+              // A rebuild persists a new version; refresh so the server re-renders
+              // it, matching how the chat "Apply changes" path updates state.
+              onItineraryUpdated?.();
+              router.refresh();
+            }}
+          />
+
+          {/* ---- Day-by-day ---- */}
+          {localDays.length > 0 ? (
+            <div className="flex flex-col gap-4">
+              <h2 className="text-2xl font-bold text-ink">Day by day</h2>
+
+              {/* Sticky day-jump strip */}
+              <nav
+                aria-label="Jump to day"
+                className="sticky top-14 z-20 -mx-4 border-b border-line bg-paper/90 px-4 backdrop-blur-md sm:mx-0 sm:rounded-2xl sm:border sm:px-2"
+              >
+                <div
+                  ref={stripRef}
+                  className="no-scrollbar flex gap-1.5 overflow-x-auto py-2"
+                >
+                  {localDays.map((d, i) => {
+                    const dt = new Date(d.date);
+                    const on = activeDay === i + 1;
+                    return (
+                      <a
+                        key={d.day_id}
+                        href={`#day-${i + 1}`}
+                        data-day={i + 1}
+                        aria-current={on ? "true" : undefined}
+                        className={[
+                          "flex min-h-11 shrink-0 flex-col items-center justify-center rounded-xl px-3.5 text-center leading-tight transition-colors",
+                          on
+                            ? "bg-brand-700 text-white"
+                            : "text-zinc-700 hover:bg-paper-2",
+                        ].join(" ")}
+                      >
+                        <span className="text-xs font-bold">Day {i + 1}</span>
+                        <span className={["text-[11px]", on ? "text-brand-100" : "text-zinc-600"].join(" ")}>
+                          {dt.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}
+                        </span>
+                      </a>
+                    );
+                  })}
+                </div>
+              </nav>
+
+              <div className="flex flex-col gap-5">
+                {localDays.map((day, index) => (
+                  <div key={day.day_id} className="flex flex-col gap-3">
+                    {cityHeaderAt.has(index) && (
+                      <div className="flex items-baseline gap-3 pt-2">
+                        <span className="font-display text-xl font-bold text-ink">
+                          {cityHeaderAt.get(index)!.city.split(",")[0]}
+                        </span>
+                        <span className="rounded-full bg-brand-100 px-2.5 py-0.5 text-xs font-semibold text-brand-800">
+                          {cityHeaderAt.get(index)!.from === cityHeaderAt.get(index)!.to
+                            ? `Day ${cityHeaderAt.get(index)!.from}`
+                            : `Days ${cityHeaderAt.get(index)!.from}–${cityHeaderAt.get(index)!.to}`}
+                        </span>
+                        <span className="h-px flex-1 bg-line-strong" aria-hidden="true" />
+                      </div>
+                    )}
+                    <DaySection
+                      day={day}
+                      dayNumber={index + 1}
+                      tripId={tripId}
+                      onDayUpdated={handleDayUpdated}
+                      onActivityUpdated={handleActivityUpdated}
+                      onDayActivitiesReplaced={handleDayActivitiesReplaced}
+                      onReorderActivity={handleReorderActivity}
+                      onActivityDrop={handleActivityDrop}
+                      onActivityDeleted={handleActivityDeleted}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-line-strong bg-surface/60 px-4 py-12 text-center">
+              <p className="font-display text-lg font-semibold text-ink">
+                No days in this itinerary yet
+              </p>
+              <p className="mt-1 text-sm text-zinc-600">
+                Open Plan with AI to describe what you want, then apply it.
               </p>
             </div>
           )}
 
-          {itinerary.notes && (
-            <p className="mb-3 text-sm text-zinc-600">{itinerary.notes}</p>
-          )}
-
-          <div className="flex flex-wrap gap-4 text-sm text-zinc-600">
-            <span>
-              <span className="font-medium text-zinc-900">
-                {localDays.length}
-              </span>{" "}
-              {localDays.length === 1 ? "day" : "days"}
-            </span>
-            {totalCost != null && (
-              <span>
-                Total estimate:{" "}
-                <span className="font-medium text-zinc-900">
+          {/* ---- Cost summary footer ---- */}
+          {totalCost != null && localDays.length > 0 && (
+            <div className="rounded-2xl border border-line bg-paper-2/70 px-5 py-4">
+              <div className="flex items-baseline justify-between text-sm">
+                <span className="text-zinc-700">Trip total estimate</span>
+                <span className="font-display text-2xl font-bold tabular-nums text-ink">
                   {formatCost(totalCost)}
                 </span>
-              </span>
-            )}
-          </div>
-        </Card>
-
-        {/* ---- Destination guide(s) (overview + per-city coverage) ---- */}
-        <DestinationGuides
-          tripId={tripId}
-          days={localDays}
-          onRebuilt={() => {
-            // A rebuild persists a new version; refresh so the server re-renders
-            // it, matching how the chat "Apply changes" path updates state.
-            onItineraryUpdated?.();
-            router.refresh();
-          }}
-        />
-
-        {/* ---- Day-by-day list ---- */}
-        {localDays.length > 0 ? (
-          <Card>
-            <div className="flex flex-col gap-6 divide-y divide-zinc-100">
-              {localDays.map((day, index) => (
-                <div
-                  key={day.day_id}
-                  className={index === 0 ? "" : "pt-6"}
-                >
-                  {cityHeaderAt.has(index) && (
-                    <div className="mb-3 flex items-baseline gap-2 border-l-4 border-indigo-500 pl-3">
-                      <span className="text-base font-bold text-zinc-900">
-                        {cityHeaderAt.get(index)!.city.split(",")[0]}
-                      </span>
-                      <span className="text-xs font-medium text-zinc-500">
-                        {cityHeaderAt.get(index)!.from === cityHeaderAt.get(index)!.to
-                          ? `Day ${cityHeaderAt.get(index)!.from}`
-                          : `Days ${cityHeaderAt.get(index)!.from}–${cityHeaderAt.get(index)!.to}`}
-                      </span>
-                    </div>
-                  )}
-                  <DaySection
-                    day={day}
-                    dayNumber={index + 1}
-                    tripId={tripId}
-                    onDayUpdated={handleDayUpdated}
-                    onActivityUpdated={handleActivityUpdated}
-                    onDayActivitiesReplaced={handleDayActivitiesReplaced}
-                    onReorderActivity={handleReorderActivity}
-                    onActivityDrop={handleActivityDrop}
-                    onActivityDeleted={handleActivityDeleted}
-                  />
-                </div>
-              ))}
-            </div>
-          </Card>
-        ) : (
-          <Card>
-            <p className="py-6 text-center text-sm text-zinc-400">
-              No days in this itinerary yet.
-            </p>
-          </Card>
-        )}
-
-        {/* ---- Cost summary footer ---- */}
-        {totalCost != null && localDays.length > 0 && (
-          <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-zinc-600">Trip total estimate</span>
-              <span className="font-semibold text-zinc-900">
-                {formatCost(totalCost)}
-              </span>
-            </div>
-            {localDays.length > 0 && totalCost != null && (
-              <div className="mt-1 flex items-center justify-between text-xs text-zinc-400">
-                <span>Daily average</span>
-                <span>{formatCost(totalCost / localDays.length)}</span>
               </div>
-            )}
-          </div>
-        )}
+              <div className="mt-1 flex items-center justify-between text-xs text-zinc-600">
+                <span>Daily average</span>
+                <span className="tabular-nums">{formatCost(totalCost / localDays.length)}</span>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ---- Changelog drawer (portal-style, rendered at root) ---- */}
