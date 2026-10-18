@@ -1079,6 +1079,8 @@ export async function updateActivityFromLLMOutput(
     .update({
       name: llmActivity.name,
       description: llmActivity.description ?? null,
+      // Only overwrite the time when the revision supplied one.
+      ...(llmActivity.start_time ? { start_time: llmActivity.start_time } : {}),
       estimated_time_hours: llmActivity.estimated_time_hours ?? null,
       estimated_cost_usd: llmActivity.estimated_cost_usd ?? null,
       place_name: llmActivity.place_name ?? null,

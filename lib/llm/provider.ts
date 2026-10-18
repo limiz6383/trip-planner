@@ -167,6 +167,8 @@ export interface ReviseActivityParams {
   rankedPosts: CommunityPost[];
   /** ISO date string for the day this activity belongs to. */
   dayDateContext: string;
+  /** The rest of that day (for timing + location context). */
+  dayActivities?: Activity[];
 }
 
 /**
@@ -418,24 +420,33 @@ Respond ONLY with valid JSON matching this exact shape:
 }`;
 
 /** System prompt for single-activity revision */
-const ACTIVITY_REVISION_SYSTEM_PROMPT = `You are an expert travel planner helping a user swap one activity in their itinerary.
+const ACTIVITY_REVISION_SYSTEM_PROMPT = `You are an expert travel planner editing ONE activity in a traveller's itinerary.
 
 You will receive:
-- The current activity to replace
-- The user's revision instruction (e.g. "swap for something cheaper", "find a more local option", "different cuisine")
-- The trip brief for context (budget, preferences, location)
-- The date of the day this activity belongs to
-- Community-sourced place recommendations for the destination
+- current_activity: what is planned now, including its start_time and place
+- day_activities: the rest of that day in order (with start times), so you can keep the day coherent
+- revision_instruction: what the traveller typed, in their own words
+- the trip brief (budget, preferences, location), the date, and community_posts (real places)
 
-If the replacement is a meal or drink: ${NAME_THE_PLACE}
+The instruction is a request to CHANGE this activity, not the text of its new title. Work out what they mean:
+- A time ("breakfast at 8am", "move to 7pm") sets "start_time" (24-hour HH:MM). Do not put the time or the request in "name".
+- A meal or drink ("breakfast", "coffee", "dinner") makes it a real food stop: activity_type "food", a sensible title (e.g. "Breakfast at <place>"), and a specific venue in "place_name". ${NAME_THE_PLACE}
+- A different kind of thing ("something outdoors", "a museum") replaces it with one real place of that kind near the rest of the day.
+- A constraint ("cheaper", "more local", "vegetarian") keeps the idea and adjusts the choice.
+- Anything the traveller did not ask to change stays as it is now (time, duration, type), unless the change forces it.
+
+Keep the activity near the neighbouring stops in day_activities and consistent with their times (no overlap with the previous or next activity). Give "lat" and "lon" for the actual place (copy location_lat/location_lon exactly if it is a community_posts venue; never 0,0). "estimated_cost_usd" is the TOTAL for the whole party.
 
 Return ONLY a single replacement activity as valid JSON matching this exact shape:
 {
-  "name": "string",
+  "name": "string (a normal title, never the user's instruction)",
   "description": "string (one sentence)",
+  "start_time": "HH:MM",
   "estimated_time_hours": 1.5,
   "estimated_cost_usd": 20,
   "place_name": "string",
+  "lat": 37.97,
+  "lon": 23.72,
   "source_attribution": "string or empty",
   "activity_type": "food|culture|outdoor|shopping|transport|accommodation|entertainment|other"
 }
@@ -916,11 +927,20 @@ export class AnthropicProvider implements LLMProvider {
       current_activity: {
         name: params.activity.name,
         description: params.activity.description,
+        start_time: params.activity.start_time,
         estimated_time_hours: params.activity.estimated_time_hours,
         estimated_cost_usd: params.activity.estimated_cost_usd,
         place_name: params.activity.place_name,
         activity_type: params.activity.activity_type,
       },
+      day_activities: (params.dayActivities ?? []).map((a) => ({
+        name: a.name,
+        start_time: a.start_time,
+        estimated_time_hours: a.estimated_time_hours,
+        place_name: a.place_name,
+        activity_type: a.activity_type,
+        is_current: a.activity_id === params.activity.activity_id,
+      })),
       revision_instruction: params.instruction,
       day_date: params.dayDateContext,
       brief: params.brief,
@@ -929,7 +949,7 @@ export class AnthropicProvider implements LLMProvider {
 
     const response = await client.messages.create({
       model: ITINERARY_MODEL,
-      max_tokens: 512,
+      max_tokens: 800,
       system: ACTIVITY_REVISION_SYSTEM_PROMPT,
       messages: [
         { role: "user", content: userContent },
