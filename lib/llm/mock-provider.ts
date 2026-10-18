@@ -19,6 +19,7 @@ import type {
   ReviseItineraryParams,
   ReviseActivityParams,
   ReviseDayParams,
+  ReviseDayResult,
   DiscussItineraryParams,
 } from "./provider";
 import { findCityGuide } from "@/lib/mock/city-guides";
@@ -854,6 +855,35 @@ export class MockProvider implements LLMProvider {
       }
     }
 
+    // --- 2b. Logistics ripple ("leaving early on the last day"): the neighbouring
+    // days change too, which is the behaviour the real prompt asks for. ---
+    const rippled = /LOGISTICS change/.test(params.instruction);
+    const rippleNotes: string[] = [];
+    if (rippled) {
+      const days = revised.days ?? [];
+      const lastIdx = days.length - 1;
+      const dep = /departure|leav|depart/i.test(params.instruction);
+      if (dep && lastIdx >= 1) {
+        const last = days[lastIdx];
+        const before = last.activities.length;
+        last.activities = last.activities.filter(
+          (a) => a.locked || a.activity_type === "transport" || (a.start_time ?? "") < "08:00"
+        );
+        const prev = days[lastIdx - 1];
+        const late = prev.activities.filter(
+          (a) => !a.locked && (a.start_time ?? "") >= "21:30"
+        ).length;
+        prev.activities = prev.activities.filter(
+          (a) => a.locked || (a.start_time ?? "") < "21:30"
+        );
+        rippleNotes.push(
+          `Last day trimmed to what fits before an early departure (${before - last.activities.length} activities removed)` +
+            (late > 0 ? `; the evening before no longer runs late (${late} removed)` : "") +
+            ". Costs re-estimated."
+        );
+      }
+    }
+
     // --- 3. Work in the ticked items that aren't already covered. ---
     const candidateDays = (revised.days ?? []).filter(
       (_d, i) => i > 0 && i < (revised.days ?? []).length - 1
@@ -908,8 +938,9 @@ export class MockProvider implements LLMProvider {
       parts.push(`added ${include.map((p) => p.name).join(", ")}`);
     if (exclude.length > 0)
       parts.push(`dropped ${exclude.map((p) => p.name).join(", ")}`);
-    revised.notes =
-      parts.length > 0
+    revised.notes = rippled
+      ? `${rippleNotes.join(" ") || "Re-planned around the new timing."} Demo mode — no model was called.`
+      : parts.length > 0
         ? `Rebuilt around your picks — ${parts.join("; ")}. Demo mode — no model was called.`
         : `Revised for "${params.instruction}". Demo mode — no model was called.`;
 
@@ -945,7 +976,7 @@ export class MockProvider implements LLMProvider {
     };
   }
 
-  async reviseDay(params: ReviseDayParams): Promise<LLMActivity[]> {
+  async reviseDay(params: ReviseDayParams): Promise<ReviseDayResult> {
     await pause(1100);
 
     const instruction = params.instruction.toLowerCase();
@@ -978,9 +1009,12 @@ export class MockProvider implements LLMProvider {
       };
     });
 
-    return [...locked, ...rebuilt]
-      .sort((a, b) => (a.start_time ?? "").localeCompare(b.start_time ?? ""))
-      .slice(0, 8);
+    return {
+      activities: [...locked, ...rebuilt]
+        .sort((a, b) => (a.start_time ?? "").localeCompare(b.start_time ?? ""))
+        .slice(0, 8),
+      ripple: null,
+    };
   }
 
   async generateDestinationGuide(

@@ -44,6 +44,14 @@ import { PostgresContentSource } from "@/lib/retrieval/source";
 import { CompositeContentSource, OsmContentSource } from "@/lib/places/source";
 import { IS_MOCK } from "@/lib/mock/flag";
 import { defaultProvider } from "@/lib/llm/provider";
+import type { DayRevisionContext, ReviseDayResult } from "@/lib/llm/provider";
+import { normalizeLLMCosts } from "@/lib/planner/costs";
+import { alignDaysToLegs, legForDate } from "@/lib/planner/legs";
+import {
+  buildVenueIndex,
+  reorderDayForGeography,
+  type LatLon,
+} from "@/lib/planner/geo";
 import {
   deriveLockedConstraint,
   mergeLockedDays,
@@ -119,6 +127,10 @@ export interface ReviseItineraryInput {
   /** Guide items the traveller un-ticked — none may appear in the result. */
   mustExclude?: GuidePick[];
   booking?: Booking | null;
+  /** Multi-city logistics, so revisions respect cities, transfers and stays. */
+  legs?: TripLeg[];
+  flights?: TripFlight[];
+  accommodations?: TripAccommodation[];
   /**
    * ISO date (YYYY-MM-DD) for today. When provided, past days are preserved in
    * addition to explicitly locked days/activities (mid-trip revision). When
@@ -135,6 +147,7 @@ export interface ReviseActivityInput {
   dayDate: string;
   /** Free-text revision instruction from the user. */
   instruction: string;
+  legs?: TripLeg[];
 }
 
 export interface ReviseDayInput {
@@ -152,6 +165,58 @@ export interface ReviseDayInput {
   /** Guide items the traveller un-ticked — none may appear in the result. */
   mustExclude?: GuidePick[];
   booking?: Booking | null;
+  /** Position of the day in the trip + neighbouring plan, for ripple detection. */
+  context?: DayRevisionContext;
+  legs?: TripLeg[];
+  flights?: TripFlight[];
+  accommodations?: TripAccommodation[];
+}
+
+export interface ReviseDayOutput extends ReviseDayResult {
+  /** Human-readable notes about route adjustments made to the day. */
+  geoNotes: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Helpers shared by generation and the revisions
+// ---------------------------------------------------------------------------
+
+/**
+ * Post-processes a model itinerary deterministically:
+ *   - stored costs always equal the sum of the activities;
+ *   - each day's city matches its date's leg, and transfer days are checked;
+ *   - each day's stops are re-ordered when that cuts real backtracking (only
+ *     unlocked sightseeing stops, swapping time slots, never causing overlaps);
+ *   - anything we could not fix is returned as a warning.
+ * Mutates and returns the itinerary; `notes` gets a short "Route check" line.
+ */
+export function polishItinerary(
+  itinerary: LLMItinerary,
+  venues: ReadonlyMap<string, LatLon>,
+  legs?: { city: string; arrival_date: string; departure_date: string }[]
+): { itinerary: LLMItinerary; warnings: string[]; adjustments: string[] } {
+  const warnings = alignDaysToLegs(itinerary.days ?? [], legs);
+  const adjustments: string[] = [];
+  (itinerary.days ?? []).forEach((day, i) => {
+    if (!Array.isArray(day.activities)) day.activities = [];
+    const r = reorderDayForGeography(day.activities, venues);
+    if (r.changed) {
+      day.activities = r.activities;
+      adjustments.push(
+        `Day ${i + 1}: re-ordered stops, route ${r.before.pathKm.toFixed(1)} km to ${r.afterKm.toFixed(1)} km.`
+      );
+    } else if (r.unresolved) {
+      warnings.push(
+        `Day ${i + 1} may backtrack (route ${r.before.pathKm.toFixed(1)} km; ${r.before.bestKm.toFixed(1)} km if re-ordered). Ask to group it by area.`
+      );
+    }
+  });
+  normalizeLLMCosts(itinerary);
+  const lines = [...warnings];
+  if (lines.length > 0) {
+    itinerary.notes = `${itinerary.notes ?? ""}${itinerary.notes ? "\n\n" : ""}Route check: ${lines.join(" ")}`;
+  }
+  return { itinerary, warnings, adjustments };
 }
 
 // ---------------------------------------------------------------------------
@@ -281,6 +346,13 @@ export class PlannerEngine {
       accommodations,
     });
 
+    // --- Step 4b: deterministic post-processing (costs, city order, route) ---
+    generated = polishItinerary(
+      generated,
+      buildVenueIndex(ranked),
+      legs
+    ).itinerary;
+
     // --- Step 5: Merge locked days (deterministic override of LLM output) ---
     let lockedConstraintViolations: string[] = [];
     if (existingItinerary && currentDate) {
@@ -293,6 +365,37 @@ export class PlannerEngine {
   }
 
   /**
+   * Ranked posts for a revision. Multi-city: per-leg slices (or just the leg
+   * covering `date` for a single-day/activity revision); single-city: the
+   * brief's destination.
+   */
+  private async rankedFor(
+    brief: TripBrief,
+    legs: TripLeg[] | undefined,
+    date?: string
+  ) {
+    const dial = brief.local_touristy_dial;
+    if (legs && legs.length > 1) {
+      const target = date ? legForDate(date, legs) : null;
+      const chosen = target ? [target] : legs;
+      const cap = target ? 30 : Math.max(5, Math.floor(30 / chosen.length));
+      const perCity = await Promise.all(
+        chosen.map((leg) =>
+          this.source
+            .fetchForDestination(leg.city, { limit: 120, localTouristyDial: dial })
+            .then((p) => rankPosts(p, dial).slice(0, cap))
+        )
+      );
+      return perCity.flat();
+    }
+    const posts = await this.source.fetchForDestination(
+      legs?.length === 1 ? legs[0].city : brief.destination,
+      { limit: 200, localTouristyDial: dial }
+    );
+    return rankPosts(posts, dial);
+  }
+
+  /**
    * Revises the entire current itinerary according to a free-text instruction.
    *
    * Mirrors the generation path (fetch posts → rank → call the model) but feeds
@@ -301,13 +404,11 @@ export class PlannerEngine {
    * (which creates a new version via createItineraryFromLLMOutput).
    */
   async reviseItinerary(input: ReviseItineraryInput): Promise<LLMItinerary> {
-    const { brief, currentItinerary, instruction, booking, currentDate, standingPreferences, mustInclude, mustExclude } = input;
+    const { brief, currentItinerary, instruction, booking, currentDate, standingPreferences, mustInclude, mustExclude, legs, flights, accommodations } = input;
 
-    const posts = await this.source.fetchForDestination(brief.destination, {
-      limit: 200,
-      localTouristyDial: brief.local_touristy_dial,
-    });
-    const ranked = rankPosts(posts, brief.local_touristy_dial);
+    // Multi-city trips: the denormalised brief.destination ("Paros → Athens")
+    // matches no city's posts, so fetch per leg exactly like generation does.
+    const ranked = await this.rankedFor(brief, legs);
 
     // Derive locks from the current itinerary. Passing "" as the reference date
     // when currentDate is absent means no day is treated as past, so only
@@ -325,7 +426,18 @@ export class PlannerEngine {
       standingPreferences,
       mustInclude,
       mustExclude,
+      legs: legs?.map((l) => ({
+        city: l.city,
+        arrival_date: l.arrival_date,
+        departure_date: l.departure_date,
+      })),
+      flights,
+      accommodations,
     });
+
+    // Costs, city order and route sanity before locks are re-applied (locked
+    // content is then restored verbatim, so it is never re-ordered).
+    polishItinerary(revised, buildVenueIndex(ranked), legs);
 
     // Deterministically guarantee locked content survives regardless of model
     // output, and carry lock state forward into the persisted new version.
@@ -339,11 +451,7 @@ export class PlannerEngine {
   async reviseActivity(input: ReviseActivityInput): Promise<LLMActivity> {
     const { brief, activity, dayDate, instruction } = input;
 
-    const posts = await this.source.fetchForDestination(brief.destination, {
-      limit: 200,
-      localTouristyDial: brief.local_touristy_dial,
-    });
-    const ranked = rankPosts(posts, brief.local_touristy_dial);
+    const ranked = await this.rankedFor(brief, input.legs, dayDate);
 
     return this.llm.reviseActivity({
       activity,
@@ -358,14 +466,11 @@ export class PlannerEngine {
    * Revises all activities for a single day. Returns the day's new activity
    * list (locked activities preserved + carried forward); caller persists it.
    */
-  async reviseDay(input: ReviseDayInput): Promise<LLMActivity[]> {
-    const { brief, dayDate, activities, instruction, booking, standingPreferences } = input;
+  async reviseDay(input: ReviseDayInput): Promise<ReviseDayOutput> {
+    const { brief, dayDate, activities, instruction, booking, standingPreferences, context, legs, flights, accommodations } = input;
 
-    const posts = await this.source.fetchForDestination(brief.destination, {
-      limit: 200,
-      localTouristyDial: brief.local_touristy_dial,
-    });
-    const ranked = rankPosts(posts, brief.local_touristy_dial);
+    // Source venues from the city this day is actually in.
+    const ranked = await this.rankedFor(brief, legs, dayDate);
 
     // Express the day's current activities in the LLM shape (with lock flags so
     // the model is told what it must preserve).
@@ -389,10 +494,38 @@ export class PlannerEngine {
       instruction,
       standingPreferences,
       booking: booking ?? null,
+      context: context
+        ? {
+            ...context,
+            legs: legs?.map((l) => ({
+              city: l.city,
+              arrival_date: l.arrival_date,
+              departure_date: l.departure_date,
+            })),
+            flights,
+            accommodations,
+          }
+        : undefined,
     });
 
-    // Deterministically guarantee locked activities survive and stay locked.
-    return applyLocksToDayRevision(revised, activities);
+    // Keep the day a tidy route (unlocked sightseeing stops only), then
+    // guarantee locked activities survive and stay locked.
+    const geo = reorderDayForGeography(revised.activities, buildVenueIndex(ranked));
+    const geoNotes: string[] = [];
+    if (geo.changed) {
+      geoNotes.push(
+        `Re-ordered stops to cut backtracking (${geo.before.pathKm.toFixed(1)} km to ${geo.afterKm.toFixed(1)} km).`
+      );
+    } else if (geo.unresolved) {
+      geoNotes.push(
+        `This day may still backtrack (${geo.before.pathKm.toFixed(1)} km route). Ask to group it by area.`
+      );
+    }
+    return {
+      activities: applyLocksToDayRevision(geo.activities, activities),
+      ripple: revised.ripple,
+      geoNotes,
+    };
   }
 
   /** Generate a general destination overview (cache the result). */

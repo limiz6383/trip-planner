@@ -149,6 +149,10 @@ export interface ReviseItineraryParams {
    * revised plan unless it is locked.
    */
   mustExclude?: GuidePick[];
+  /** Real trip logistics, so a logistics ripple can be planned against them. */
+  legs?: LegContext[];
+  flights?: TripFlight[];
+  accommodations?: TripAccommodation[];
 }
 
 /**
@@ -180,6 +184,33 @@ export interface ReviseDayParams {
   /** Earlier revision asks to keep honoring unless the current one overrides. */
   standingPreferences?: string[];
   booking?: Booking | null;
+  /** Where this day sits in the trip, and the real logistics around it. */
+  context?: DayRevisionContext;
+}
+
+/** What the day reviser needs to know about the rest of the trip. */
+export interface DayRevisionContext {
+  day_number: number;
+  day_count: number;
+  is_first_day: boolean;
+  is_last_day: boolean;
+  city?: string;
+  previous_day?: string;
+  next_day?: string;
+  legs?: LegContext[];
+  flights?: TripFlight[];
+  accommodations?: TripAccommodation[];
+}
+
+/** Result of a single-day revision. */
+export interface ReviseDayResult {
+  activities: LLMActivity[];
+  /**
+   * Set when the model judged that the instruction changes logistics reaching
+   * beyond this day (departure time, arrival, transfers). The caller then
+   * escalates to a whole-trip revision.
+   */
+  ripple: { reason: string } | null;
 }
 
 /**
@@ -213,7 +244,7 @@ export interface LLMProvider {
    * Revises all activities for a single day according to a free-text
    * instruction. Returns the day's new activity list; caller persists it.
    */
-  reviseDay(params: ReviseDayParams): Promise<LLMActivity[]>;
+  reviseDay(params: ReviseDayParams): Promise<ReviseDayResult>;
 
   /**
    * Generates a general overview of a destination (what it's known for, the
@@ -264,7 +295,7 @@ LOGISTICS — If a "Booked logistics" block appears in the context, the user has
 - If no "Booked logistics" block appears, behave as today — do not mention flights or accommodation unless the user raises them.
 
 Your goal is to gather ONLY the following remaining fields through natural conversation (do not gather destination, start_date, end_date, or any logistics already provided):
-- Daily budget in USD
+- Daily budget in USD PER TRAVELLER (make clear it is per person per day, not for the whole group)
 - Travel vibe / keywords (e.g. "relaxing", "foodie", "adventure")
 - Party composition (number of adults, children, infants)
 - Local vs touristy preference (on a scale from 0.0 very local to 1.0 very touristy)
@@ -302,6 +333,17 @@ If you don't have enough information yet, omit the JSON block and keep asking.`;
 /** System prompt for whole-itinerary revision */
 const NAME_THE_PLACE = `NAME THE PLACE: for every meal, use a venue from community_posts whose place_name fits that neighbourhood and time of day (entries with source "openstreetmap" are real mapped venues; their content says how local they are) and write the name as that venue's exact place_name. Never invent a restaurant, cafe or bar name that is not in community_posts; if nothing fits, describe the meal generically (e.g. "Lunch at a family-run taverna"). Keep an existing named meal the traveller has not asked to change.`;
 
+/** Cost semantics shared by generation and every revision prompt. */
+const COST_RULES = `COSTS: "estimated_cost_usd" is the TOTAL for the WHOLE PARTY (every traveller) for that activity, not per person. The brief's "daily_budget_usd" is the budget PER TRAVELLER per day, so a normal day's total should land near daily_budget_usd x (adults + children) and the trip should not exceed that x the number of days. "daily_cost" must equal the sum of that day's activity costs and "total_cost_estimate" the sum of the days (the app recomputes both, so wrong arithmetic is simply discarded).`;
+
+/** Geography rules shared by generation and every revision prompt. */
+const GEOGRAPHY_RULES = `GEOGRAPHY: every day must be a tidy route, not a zig-zag.
+- Group a day's sights by neighbourhood/area and order them so the traveller sweeps through the city in one direction or one loop. Never cross town and come back in the same day; if two stops are far apart, put them on different days.
+- Meals belong in the area of the activity just before or after them (use community_posts venues whose location is close).
+- Start and end the day near the accommodation where it is known. A day trip (another island/town) should be the main event of its day, with the round-trip transit counted in the schedule.
+- Give EVERY activity "lat" and "lon": approximate decimal-degree coordinates of the actual place. For a venue that appears in community_posts copy its location_lat/location_lon exactly. Never output 0,0; if unsure use the centre of the neighbourhood. The app uses these to check the route.
+- Multi-city: the days follow the cities in the order of "legs" (each city's days are contiguous), the move between two cities happens ON the shared date as a "transport" activity, and no city's sights appear on another city's days.`;
+
 const ITINERARY_REVISION_SYSTEM_PROMPT = `You are an expert travel itinerary planner helping a user revise an existing plan.
 
 You will receive:
@@ -335,6 +377,16 @@ Your job is to apply the instruction to produce a revised itinerary. Rules:
 9. Prioritise community posts that match the revised intent.
 10. List each day's activities in the ORDER the traveller does them, earliest first — the array order IS the schedule. On the arrival day, sequence arrival logistics first (e.g. a meal eaten en route from the airport, then check-in) before activities that need the traveller settled in. Never place a later-in-the-day activity before an earlier one.
 11. TIMING: give every activity a "start_time" in 24-hour "HH:MM" format, chronological and consistent with each activity's estimated_time_hours and realistic venue/meal hours.
+12. ${COST_RULES}
+13. ${GEOGRAPHY_RULES}
+14. LOGISTICS RIPPLE: when the instruction changes WHEN the traveller arrives, leaves or moves between cities (e.g. "I'm leaving early on the last day", "my ferry is at 8am", "we land at 11pm"), it is a trip-wide change, not a one-day edit. Work through the whole chain and change every day it touches:
+   - the affected day: end/start it around the new time, including check-out, the transfer to the airport/station (use real transit time) and a safety buffer; keep only what fits;
+   - the evening/day BEFORE: no late nights, late dinners or far-flung plans that clash with an early start; leave time to pack;
+   - the day AFTER an arrival change: it may absorb a highlight that no longer fits;
+   - costs: re-estimate every changed activity and keep daily_cost / total_cost_estimate consistent; removed activities no longer count;
+   - never silently drop a locked item; if it now conflicts, keep it and say so in "notes".
+   Treat the traveller's stated time as authoritative over the booked time in "booking"/"flights" for planning (the app cannot edit the booking itself), state that assumption in "notes", and in "notes" list in one or two sentences which days you changed and why. The date range and day count stay the same.
+15. If "legs", "flights" or "accommodations" are provided they are the real trip logistics: keep each city's days inside its leg, keep transfers on the transfer dates, cluster each day near the stay that covers it, and never contradict a flight time unless rule 14 says the traveller changed it.
 
 Respond ONLY with valid JSON matching this exact shape:
 {
@@ -355,6 +407,8 @@ Respond ONLY with valid JSON matching this exact shape:
           "estimated_time_hours": 1.5,
           "estimated_cost_usd": 20,
           "place_name": "string",
+          "lat": 37.97,
+          "lon": 23.72,
           "source_attribution": "string or empty",
           "activity_type": "food|culture|outdoor|shopping|transport|accommodation|entertainment|other"
         }
@@ -399,7 +453,10 @@ You will receive:
 - standing_preferences: things the traveller asked for in EARLIER revisions
 - Community-sourced place recommendations
 
+You also receive "trip_context": which day this is (day_number of day_count), whether it is the first/last day, the previous and next day's plan in brief, the city, and the real logistics (booking / flights / accommodations / legs).
+
 Rules:
+0. SCOPE: apply the instruction to THIS day only, EXCEPT when it changes trip logistics that reach beyond today: arrival or departure time, leaving early or late on the last day, check-out, a ferry/flight/train time, a city move. In that case still produce your best plan for THIS day, and set "affects_other_days": true with a short "ripple_reason" (the app then re-plans the neighbouring days, the budget and the notes). For ordinary style asks ("more outdoorsy", "cheaper lunch") set it to false.
 1. Apply the instruction to THIS day only; keep unaffected activities where reasonable.
 2. STANDING PREFERENCES ARE STICKY. Everything in standing_preferences was explicitly requested earlier and must still hold. Do NOT undo or compromise an earlier request while satisfying the new one — only drop one if the current instruction directly contradicts it.
 2. LOCKED ITEMS ARE NON-NEGOTIABLE. Any activity with "locked": true must be reproduced EXACTLY (do not change, reorder, reprice, or remove it) and the rest of the day planned around it.
@@ -407,9 +464,13 @@ Rules:
 4. Keep breakfast, lunch, and dinner present (activity_type "food") at realistic times unless the instruction explicitly changes meals. ${NAME_THE_PLACE}
 5. Give every activity a "start_time" in 24-hour "HH:MM" format — chronological, consistent with each activity's estimated_time_hours and realistic venue/meal hours.
 6. Keep each "description" to ONE short sentence.
+7. ${COST_RULES}
+8. ${GEOGRAPHY_RULES}
 
 Respond ONLY with valid JSON matching this exact shape:
 {
+  "affects_other_days": false,
+  "ripple_reason": "",
   "activities": [
     {
       "name": "string",
@@ -418,6 +479,8 @@ Respond ONLY with valid JSON matching this exact shape:
       "estimated_time_hours": 1.5,
       "estimated_cost_usd": 20,
       "place_name": "string",
+      "lat": 37.97,
+      "lon": 23.72,
       "source_attribution": "string or empty",
       "activity_type": "food|culture|outdoor|shopping|transport|accommodation|entertainment|other"
     }
@@ -459,13 +522,17 @@ You will receive a trip brief, a set of community-sourced place recommendations,
 Generate a detailed day-by-day itinerary that:
 1. Respects the budget, pace, and preferences in the brief
 2. Prioritises places from the community posts, especially those matching the local/touristy dial
-3. Produces a realistic schedule with appropriate timing and logical geography
-4. Estimates costs for each activity
+3. Produces a realistic schedule with appropriate timing and logical geography (see GEOGRAPHY below)
+4. Estimates costs for each activity (see COSTS below)
 5. Sizes each day to the traveller's PACE from the brief: relaxed ≈ 3-4 activities, moderate ≈ 4-5, fast ≈ 6-7. Default to about 4 when pace is moderate or unspecified. These counts INCLUDE meals. Never exceed 8 in a day; favor realistic pacing over packing the day.
 6. MEALS: every full day MUST include breakfast, lunch, and dinner as activities (activity_type "food") at realistic times (breakfast ~08:00, lunch ~12:30, dinner ~19:00) — meals are part of the per-day count above, not extra. On the arrival day, include only the meals that fall after arrival + transit; on the departure day, only meals before leaving for the airport. ${NAME_THE_PLACE}
 7. Keeps each activity "description" to ONE short sentence (the goal is a fast, scannable plan, not an essay)
 8. Lists each day's activities in the ORDER the traveller does them, earliest first — the array order IS the schedule. On the arrival day, sequence arrival logistics first (e.g. a meal eaten en route from the airport, then hotel check-in) before any activity that needs the traveller already settled in. Never place a later-in-the-day activity before an earlier one.
 9. TIMING: give every activity a "start_time" in 24-hour "HH:MM" format. Times must be in chronological order, consistent with each activity's estimated_time_hours (so one activity ends before the next begins, leaving brief transit gaps), realistic venue/meal hours, and any flight arrival/departure bounds.
+
+${COST_RULES}
+
+${GEOGRAPHY_RULES}
 
 BOOKING CONSTRAINTS — apply these rules when a booking object is provided:
 
@@ -530,6 +597,8 @@ Respond ONLY with valid JSON matching this exact shape:
           "estimated_time_hours": 1.5,
           "estimated_cost_usd": 20,
           "place_name": "string",
+          "lat": 37.97,
+          "lon": 23.72,
           "source_attribution": "string or empty",
           "activity_type": "food|culture|outdoor|shopping|transport|accommodation|entertainment|other"
         }
@@ -779,6 +848,11 @@ export class AnthropicProvider implements LLMProvider {
         : {}),
       community_posts: params.rankedPosts.slice(0, 30),
       ...(params.booking ? { booking: params.booking } : {}),
+      ...(params.legs && params.legs.length > 1 ? { legs: params.legs } : {}),
+      ...(params.flights && params.flights.length > 0 ? { flights: params.flights } : {}),
+      ...(params.accommodations && params.accommodations.length > 0
+        ? { accommodations: params.accommodations }
+        : {}),
     });
 
     const response = await client.messages.create({
@@ -889,7 +963,7 @@ export class AnthropicProvider implements LLMProvider {
     return activity;
   }
 
-  async reviseDay(params: ReviseDayParams): Promise<LLMActivity[]> {
+  async reviseDay(params: ReviseDayParams): Promise<ReviseDayResult> {
     const client = this.getClient();
 
     const userContent = JSON.stringify({
@@ -900,6 +974,7 @@ export class AnthropicProvider implements LLMProvider {
       standing_preferences: params.standingPreferences ?? [],
       community_posts: params.rankedPosts.slice(0, 20),
       ...(params.booking ? { booking: params.booking } : {}),
+      ...(params.context ? { trip_context: params.context } : {}),
     });
 
     const response = await client.messages.create({
@@ -928,9 +1003,13 @@ export class AnthropicProvider implements LLMProvider {
       if (s !== -1 && e !== -1 && e > s) jsonStr = jsonStr.slice(s, e + 1);
     }
 
-    let parsed: { activities?: LLMActivity[] };
+    let parsed: {
+      activities?: LLMActivity[];
+      affects_other_days?: boolean;
+      ripple_reason?: string;
+    };
     try {
-      parsed = JSON.parse(jsonStr) as { activities?: LLMActivity[] };
+      parsed = JSON.parse(jsonStr) as typeof parsed;
     } catch (err) {
       throw new Error(
         `LLM returned invalid JSON for day revision. Raw response:\n${raw}\nParse error: ${err}`
@@ -938,7 +1017,19 @@ export class AnthropicProvider implements LLMProvider {
     }
 
     const activities = Array.isArray(parsed.activities) ? parsed.activities : [];
-    return activities.slice(0, 8); // safety ceiling; pace drives the real count
+    return {
+      // safety ceiling; pace drives the real count
+      activities: activities.slice(0, 8),
+      ripple:
+        parsed.affects_other_days === true
+          ? {
+              reason:
+                typeof parsed.ripple_reason === "string" && parsed.ripple_reason.trim()
+                  ? parsed.ripple_reason.trim()
+                  : "This change affects other days.",
+            }
+          : null,
+    };
   }
 
   async generateDestinationGuide(destination: string): Promise<DestinationGuide> {

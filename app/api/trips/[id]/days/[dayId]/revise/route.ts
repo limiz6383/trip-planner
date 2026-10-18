@@ -6,11 +6,19 @@
  * day's activities in place; locked activities are preserved. Auth-gated.
  * Records a "revision" change_log entry.
  *
+ * SCOPE: if the instruction changes trip logistics that reach beyond the day
+ * ("I'm leaving early on the last day", "our ferry is at 8am"), the revision is
+ * escalated to a WHOLE-TRIP revision (new itinerary version, locks respected)
+ * so the neighbouring days, transfers and budget follow. See
+ * lib/planner/ripple.ts. The response says which happened via `scope`.
+ *
  * Request body:
  *   { instruction: string }
  *
  * Response (200):
- *   { activities: Activity[] }   // the day's new activities, ordered by start_time
+ *   { scope: "day",  activities: Activity[], notes: string[] }
+ *   { scope: "trip", itinerary_id, version, reason, notice }  // whole trip re-planned
+ *   409 { error } when another revision of this trip is still running
  *
  * Error responses:
  *   401  { error: "Unauthorized" }
@@ -26,25 +34,58 @@ import {
   getDayById,
   getActivitiesForDay,
   getTripBrief,
-  getBookingForTrip,
+  getCurrentItineraryHydrated,
   getRevisionInstructions,
   replaceDayActivitiesFromLLM,
+  createItineraryFromLLMOutput,
   appendChangeLogEntry,
 } from "@/lib/db/queries";
-import { createPlannerEngine } from "@/lib/planner/engine";
-import type { Activity } from "@/lib/types";
+import { createPlannerEngine, type HydratedItinerary } from "@/lib/planner/engine";
+import type { Activity, TripBrief } from "@/lib/types";
 import { isLLMConfigured } from "@/lib/llm/availability";
+import { loadTripLogistics } from "@/lib/server/trip-logistics";
+import { tryAcquire } from "@/lib/server/inflight";
+import { syncCostsForDay, type SyncedCosts } from "@/lib/db/sync-costs";
+import {
+  detectTripWideImpact,
+  buildRippleInstruction,
+  type RippleKind,
+} from "@/lib/planner/ripple";
 
 export interface ReviseDayRequestBody {
   instruction: string;
 }
 
-export interface ReviseDayResponseBody {
-  activities: Activity[];
-}
+export type ReviseDayResponseBody =
+  | {
+      scope: "day";
+      activities: Activity[];
+      /** Route adjustments made to the day, if any. */
+      notes: string[];
+      costs?: SyncedCosts;
+    }
+  | {
+      scope: "trip";
+      itinerary_id: string;
+      version: number;
+      /** Why this was treated as a whole-trip change. */
+      reason: string;
+      /** Plain-language summary for the traveller. */
+      notice: string;
+    };
 
 export interface ReviseDayErrorBody {
   error: string;
+}
+
+/** One-line summary of a day for the model's trip_context. */
+function summarizeDay(day: HydratedItinerary["days"][number] | undefined): string | undefined {
+  if (!day) return undefined;
+  const acts = (day.activities ?? [])
+    .slice(0, 8)
+    .map((a) => `${(a.start_time ?? "").slice(0, 5)} ${a.name}`.trim())
+    .join("; ");
+  return `${day.date}${day.city ? ` (${day.city.split(",")[0]})` : ""}: ${acts || "nothing planned"}`;
 }
 
 export async function POST(
@@ -95,6 +136,15 @@ export async function POST(
     );
   }
 
+  // One model revision per trip at a time (double-click, second tab).
+  const release = tryAcquire(`revise:${tripId}`);
+  if (!release) {
+    return Response.json(
+      { error: "Another change to this trip is still being applied. Give it a moment." } satisfies ReviseDayErrorBody,
+      { status: 409 }
+    );
+  }
+
   try {
     const supabase = await createSupabaseServerClient();
 
@@ -107,7 +157,7 @@ export async function POST(
       );
     }
 
-    // --- 2. Load brief (required), the day's activities, and booking ---
+    // --- 2. Load brief (required), the whole current itinerary and logistics ---
     const brief = await getTripBrief(supabase, tripId);
     if (!brief) {
       return Response.json(
@@ -115,25 +165,125 @@ export async function POST(
         { status: 400 }
       );
     }
-    const [activities, booking, standingPreferences] = await Promise.all([
+    const [activities, logistics, standingPreferences, hydrated] = await Promise.all([
       getActivitiesForDay(supabase, dayId),
-      getBookingForTrip(supabase, tripId),
+      loadTripLogistics(supabase, tripId),
       getRevisionInstructions(supabase, tripId),
+      getCurrentItineraryHydrated(supabase, tripId),
     ]);
 
-    // --- 3. Revise the day via the planner pipeline ---
+    const days = hydrated?.days ?? [];
+    const dayIndex = days.findIndex((d) => d.day_id === dayId);
+    const dayNumber = dayIndex + 1;
+    const position = dayIndex >= 0 ? { dayNumber, dayCount: days.length } : null;
+
     const engine = createPlannerEngine(supabase);
+
+    // --- 3a. Whole-trip escalation ---
+    async function escalate(kind: RippleKind, reason: string) {
+      if (!hydrated || !position) {
+        throw new Error("Couldn't find the current itinerary to re-plan.");
+      }
+      const composed = buildRippleInstruction({
+        userInstruction: instruction as string,
+        dayDate: day!.date,
+        dayNumber: position.dayNumber,
+        dayCount: position.dayCount,
+        kind,
+      });
+      const llmItinerary = await engine.reviseItinerary({
+        brief: brief as TripBrief,
+        currentItinerary: hydrated,
+        instruction: composed,
+        standingPreferences,
+        booking: logistics.booking,
+        legs: logistics.legs,
+        flights: logistics.flights,
+        accommodations: logistics.accommodations,
+      });
+      const persisted = await createItineraryFromLLMOutput(supabase, tripId, llmItinerary);
+
+      try {
+        await appendChangeLogEntry(
+          supabase,
+          tripId,
+          user!.id,
+          "revision",
+          `Re-planned the whole trip after a change to ${day!.date}: "${instruction}"`,
+          { itinerary_id: hydrated.itinerary_id, version: hydrated.version },
+          {
+            itinerary_id: persisted.itinerary_id,
+            version: persisted.version,
+            total_cost_estimate: persisted.total_cost_estimate,
+          },
+          // The traveller's own words stay the standing preference (not the
+          // long composed prompt), so later revisions keep honouring them.
+          { instruction, kind: "user", scope: "trip", via: "day", day_id: dayId, ripple: kind }
+        );
+      } catch {
+        // Change log write failing must not break the primary response
+      }
+
+      const lockedNote = day!.locked
+        ? ` Day ${position.dayNumber} is locked, so it was left exactly as it was; unlock it and ask again to change it.`
+        : "";
+      return Response.json(
+        {
+          scope: "trip",
+          itinerary_id: persisted.itinerary_id,
+          version: persisted.version,
+          reason,
+          notice:
+            `Re-planned the whole trip (now version ${persisted.version}). ${reason}` +
+            ` Check the neighbouring days and the budget, and update your booking details if the flight or check-out time changed.` +
+            lockedNote,
+        } satisfies ReviseDayResponseBody,
+        { status: 200 }
+      );
+    }
+
+    const detected = detectTripWideImpact(instruction, position);
+    if (detected) return await escalate(detected.kind, detected.reason);
+
+    // --- 3b. Single-day revision ---
     const revised = await engine.reviseDay({
       brief,
       dayDate: day.date,
       activities,
       instruction,
       standingPreferences,
-      booking,
+      booking: logistics.booking,
+      legs: logistics.legs,
+      flights: logistics.flights,
+      accommodations: logistics.accommodations,
+      context: position
+        ? {
+            day_number: position.dayNumber,
+            day_count: position.dayCount,
+            is_first_day: position.dayNumber === 1,
+            is_last_day: position.dayNumber === position.dayCount,
+            city: days[dayIndex].city ?? undefined,
+            previous_day: summarizeDay(days[dayIndex - 1]),
+            next_day: summarizeDay(days[dayIndex + 1]),
+          }
+        : undefined,
     });
 
-    // --- 4. Replace the day's activities and return them ---
-    const updated = await replaceDayActivitiesFromLLM(supabase, dayId, revised);
+    // The model flagged a logistics change the patterns missed: discard this
+    // one-day answer and re-plan the whole trip instead.
+    if (revised.ripple && position) {
+      const kind: RippleKind =
+        position.dayNumber === position.dayCount
+          ? "departure"
+          : position.dayNumber === 1
+          ? "arrival"
+          : "transfer";
+      return await escalate(kind, revised.ripple.reason);
+    }
+
+    // --- 4. Replace the day's activities, resync costs, and return them ---
+    const updated = await replaceDayActivitiesFromLLM(supabase, dayId, revised.activities);
+    const costs = (await syncCostsForDay(supabase, dayId)) ?? undefined;
 
     // --- 5. Change log (non-fatal) ---
     try {
@@ -152,7 +302,12 @@ export async function POST(
     }
 
     return Response.json(
-      { activities: updated } satisfies ReviseDayResponseBody,
+      {
+        scope: "day",
+        activities: updated,
+        notes: revised.geoNotes,
+        ...(costs ? { costs } : {}),
+      } satisfies ReviseDayResponseBody,
       { status: 200 }
     );
   } catch (err) {
@@ -162,5 +317,7 @@ export async function POST(
       { error: message } satisfies ReviseDayErrorBody,
       { status: 500 }
     );
+  } finally {
+    release();
   }
 }

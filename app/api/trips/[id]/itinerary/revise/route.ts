@@ -23,7 +23,6 @@ import { getUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/db/server";
 import {
   getTripBrief,
-  getBookingForTrip,
   getCurrentItineraryHydrated,
   createItineraryFromLLMOutput,
   getRevisionInstructions,
@@ -32,6 +31,8 @@ import {
 import { createPlannerEngine } from "@/lib/planner/engine";
 import type { Itinerary, GuidePick } from "@/lib/types";
 import { isLLMConfigured } from "@/lib/llm/availability";
+import { loadTripLogistics } from "@/lib/server/trip-logistics";
+import { tryAcquire } from "@/lib/server/inflight";
 
 // ---- request / response shapes (exported so client components can import) ----
 
@@ -154,6 +155,15 @@ export async function POST(
     );
   }
 
+  // One model revision per trip at a time (double-click, second tab).
+  const release = tryAcquire(`revise:${tripId}`);
+  if (!release) {
+    return Response.json(
+      { error: "Another change to this trip is still being applied. Give it a moment." } satisfies ReviseItineraryErrorBody,
+      { status: 409 }
+    );
+  }
+
   try {
     const supabase = await createSupabaseServerClient();
 
@@ -176,8 +186,8 @@ export async function POST(
     }
 
     // --- 3. Load the booking (optional) + prior revision preferences ---
-    const [booking, standingPreferences] = await Promise.all([
-      getBookingForTrip(supabase, tripId),
+    const [logistics, standingPreferences] = await Promise.all([
+      loadTripLogistics(supabase, tripId),
       getRevisionInstructions(supabase, tripId),
     ]);
 
@@ -190,7 +200,10 @@ export async function POST(
       standingPreferences,
       mustInclude,
       mustExclude,
-      booking,
+      booking: logistics.booking,
+      legs: logistics.legs,
+      flights: logistics.flights,
+      accommodations: logistics.accommodations,
     });
 
     // --- 5. Persist as a new version and return the hydrated itinerary ---
@@ -246,5 +259,7 @@ export async function POST(
       { error: message } satisfies ReviseItineraryErrorBody,
       { status: 500 }
     );
+  } finally {
+    release();
   }
 }
