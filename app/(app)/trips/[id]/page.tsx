@@ -182,7 +182,13 @@ export default async function TripDetailPage({
     <div>
       <TripHeader trip={trip} itinerary={itinerary} />
 
-      <div className="flex flex-col gap-4">
+      <div
+        className={
+          hasItinerary
+            ? "flex flex-col gap-6"
+            : "mx-auto flex w-full max-w-3xl flex-col gap-4"
+        }
+      >
         {/*
          * Three-state feature area routing:
          *
@@ -245,10 +251,12 @@ export default async function TripDetailPage({
              * data is already loaded on this page (getBookingForTrip runs
              * in the parallel Promise.all above), so no extra fetch is needed.
              */}
-            <PostItineraryBookingPanel
-              tripId={trip.trip_id}
-              initialBooking={booking}
-            />
+            <div className="lg:mr-[23rem]">
+              <PostItineraryBookingPanel
+                tripId={trip.trip_id}
+                initialBooking={booking}
+              />
+            </div>
           </>
         )}
       </div>

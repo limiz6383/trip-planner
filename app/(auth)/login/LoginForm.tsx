@@ -48,12 +48,12 @@ export function LoginForm() {
       : null;
 
   return (
-    <div className="w-full max-w-sm">
-      <div className="mb-8 text-center">
-        <h1 className="text-2xl font-bold tracking-tight text-zinc-900">
+    <div className="w-full">
+      <div className="mb-6 text-center">
+        <h1 className="text-3xl font-bold text-ink">
           Sign in to Trip Planner
         </h1>
-        <p className="mt-1 text-sm text-zinc-500">Plan your next adventure.</p>
+        <p className="mt-1.5 text-sm text-zinc-600">Plan your next adventure.</p>
       </div>
 
       {bannerMessage ? (
@@ -69,15 +69,15 @@ export function LoginForm() {
       ) : null}
 
       {/* Mode toggle */}
-      <div className="mb-6 flex rounded-lg border border-zinc-200 bg-zinc-100 p-1">
+      <div className="mb-6 flex rounded-full border border-line bg-paper-2 p-1">
         <button
           type="button"
           onClick={() => setMode("password")}
           className={[
-            "flex-1 rounded-md py-1.5 text-sm font-medium transition-colors",
+            "min-h-10 flex-1 rounded-full text-sm font-medium transition-colors",
             mode === "password"
-              ? "bg-white text-zinc-900 shadow-sm"
-              : "text-zinc-500 hover:text-zinc-700",
+              ? "bg-surface text-ink shadow-card"
+              : "text-zinc-600 hover:text-zinc-900",
           ].join(" ")}
         >
           Password
@@ -86,10 +86,10 @@ export function LoginForm() {
           type="button"
           onClick={() => setMode("magic_link")}
           className={[
-            "flex-1 rounded-md py-1.5 text-sm font-medium transition-colors",
+            "min-h-10 flex-1 rounded-full text-sm font-medium transition-colors",
             mode === "magic_link"
-              ? "bg-white text-zinc-900 shadow-sm"
-              : "text-zinc-500 hover:text-zinc-700",
+              ? "bg-surface text-ink shadow-card"
+              : "text-zinc-600 hover:text-zinc-900",
           ].join(" ")}
         >
           Magic link
@@ -146,11 +146,11 @@ export function LoginForm() {
         </form>
       )}
 
-      <p className="mt-6 text-center text-sm text-zinc-500">
+      <p className="mt-6 text-center text-sm text-zinc-600">
         Don&apos;t have an account?{" "}
         <Link
           href="/signup"
-          className="font-medium text-indigo-600 hover:text-indigo-500"
+          className="font-semibold text-brand-700 hover:text-brand-900"
         >
           Sign up
         </Link>

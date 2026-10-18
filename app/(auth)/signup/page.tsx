@@ -8,6 +8,7 @@ import {
 } from "@/app/actions/auth";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { AuthShell } from "@/components/AuthShell";
 
 const initialState: AuthActionState = undefined;
 
@@ -18,13 +19,13 @@ export default function SignupPage() {
   );
 
   return (
-    <main className="flex min-h-svh flex-col items-center justify-center bg-zinc-50 px-4">
-      <div className="w-full max-w-sm">
-        <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-900">
+    <AuthShell>
+      <div className="w-full">
+        <div className="mb-6 text-center">
+          <h1 className="text-3xl font-bold text-ink">
             Create an account
           </h1>
-          <p className="mt-1 text-sm text-zinc-500">
+          <p className="mt-1 text-sm text-zinc-600">
             Start planning trips with AI.
           </p>
         </div>
@@ -57,16 +58,16 @@ export default function SignupPage() {
           </Button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-zinc-500">
+        <p className="mt-6 text-center text-sm text-zinc-600">
           Already have an account?{" "}
           <Link
             href="/login"
-            className="font-medium text-indigo-600 hover:text-indigo-500"
+            className="font-semibold text-brand-700 hover:text-brand-900"
           >
             Sign in
           </Link>
         </p>
       </div>
-    </main>
+    </AuthShell>
   );
 }
