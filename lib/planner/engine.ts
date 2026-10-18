@@ -41,6 +41,8 @@ import type { ContentSource } from "@/lib/retrieval/source";
 import type { LLMProvider } from "@/lib/llm/provider";
 import { rankPosts } from "@/lib/retrieval/ranking";
 import { PostgresContentSource } from "@/lib/retrieval/source";
+import { CompositeContentSource, OsmContentSource } from "@/lib/places/source";
+import { IS_MOCK } from "@/lib/mock/flag";
 import { defaultProvider } from "@/lib/llm/provider";
 import {
   deriveLockedConstraint,
@@ -238,7 +240,10 @@ export class PlannerEngine {
       const perCity = await Promise.all(
         legs!.map((leg) =>
           this.source
-            .fetchForDestination(leg.city, { limit: 120 })
+            .fetchForDestination(leg.city, {
+              limit: 120,
+              localTouristyDial: brief.local_touristy_dial,
+            })
             .then((p) => rankPosts(p, brief.local_touristy_dial).slice(0, 18))
         )
       );
@@ -246,6 +251,7 @@ export class PlannerEngine {
     } else {
       const posts = await this.source.fetchForDestination(brief.destination, {
         limit: 200,
+        localTouristyDial: brief.local_touristy_dial,
       });
       ranked = rankPosts(posts, brief.local_touristy_dial);
     }
@@ -294,6 +300,7 @@ export class PlannerEngine {
 
     const posts = await this.source.fetchForDestination(brief.destination, {
       limit: 200,
+      localTouristyDial: brief.local_touristy_dial,
     });
     const ranked = rankPosts(posts, brief.local_touristy_dial);
 
@@ -329,6 +336,7 @@ export class PlannerEngine {
 
     const posts = await this.source.fetchForDestination(brief.destination, {
       limit: 200,
+      localTouristyDial: brief.local_touristy_dial,
     });
     const ranked = rankPosts(posts, brief.local_touristy_dial);
 
@@ -350,6 +358,7 @@ export class PlannerEngine {
 
     const posts = await this.source.fetchForDestination(brief.destination, {
       limit: 200,
+      localTouristyDial: brief.local_touristy_dial,
     });
     const ranked = rankPosts(posts, brief.local_touristy_dial);
 
@@ -404,7 +413,19 @@ export class PlannerEngine {
  *
  * @param supabaseClient A server-side Supabase client with auth session attached.
  */
+// One shared instance so the in-memory cache survives across requests.
+let osmSource: OsmContentSource | null = null;
+function getOsmSource(): OsmContentSource {
+  return (osmSource ??= new OsmContentSource());
+}
+
 export function createPlannerEngine(supabaseClient: SupabaseClient): PlannerEngine {
-  const source = new PostgresContentSource(supabaseClient);
+  const curated = new PostgresContentSource(supabaseClient);
+  // Real, named venues from OpenStreetMap on top of the curated posts. Demo mode
+  // stays fully offline, and PLACES_SOURCE=off disables the lookup.
+  const useMap = !IS_MOCK && process.env.PLACES_SOURCE !== "off";
+  const source = useMap
+    ? new CompositeContentSource(curated, getOsmSource())
+    : curated;
   return new PlannerEngine(source, defaultProvider);
 }

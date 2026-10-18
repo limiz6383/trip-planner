@@ -26,6 +26,9 @@ import type { CommunityPost, AuthorType } from "@/lib/types";
 const AUTHOR_WEIGHTS: Record<AuthorType, number> = {
   local: 1.0,
   blogger: 0.7,
+  // OpenStreetMap venues: real, named places with no personal endorsement.
+  // Below a blogger's pick, above a tourist's; the locality axis does the rest.
+  map: 0.6,
   tourist: 0.4,
   unknown: 0.3,
 };

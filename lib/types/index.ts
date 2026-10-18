@@ -232,7 +232,11 @@ export interface Activity {
 
 // ----- Community Posts -----
 
-export type AuthorType = "local" | "tourist" | "blogger" | "unknown";
+/**
+ * Who a community post is attributed to. "map" marks venues derived from
+ * OpenStreetMap data (no individual author, no reviews).
+ */
+export type AuthorType = "local" | "tourist" | "blogger" | "map" | "unknown";
 
 export interface CommunityPost {
   post_id: string;
