@@ -25,6 +25,7 @@ import { getUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/db/server";
 import {
   getActivityById,
+  getActivitiesForDay,
   getDayById,
   getTripBrief,
   updateActivityFromLLMOutput,
@@ -57,6 +58,7 @@ function activitySnapshot(a: Activity): Record<string, unknown> {
   return {
     name: a.name,
     description: a.description,
+    start_time: a.start_time,
     estimated_time_hours: a.estimated_time_hours,
     estimated_cost_usd: a.estimated_cost_usd,
     place_name: a.place_name,
@@ -145,8 +147,10 @@ export async function POST(
     // --- 4. Generate the replacement via the planner pipeline ---
     const engine = createPlannerEngine(supabase);
     const legs = await getLegsForTrip(supabase, tripId).catch(() => []);
+    const dayActivities = await getActivitiesForDay(supabase, activity.day_id).catch(() => []);
     const llmActivity = await engine.reviseActivity({
       legs,
+      dayActivities,
       brief,
       activity,
       dayDate,

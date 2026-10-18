@@ -10,6 +10,7 @@
  * which makes the demo reproducible.
  */
 
+import { requestedStartTime } from "@/lib/planner/activity-edit";
 import { travellerCount } from "@/lib/planner/costs";
 import type {
   LLMProvider,
@@ -965,11 +966,12 @@ export class MockProvider implements LLMProvider {
         ? [...LUNCH, ...DINNER]
         : [...MORNING, ...AFTERNOON];
     const replacement = pick(pool, params.instruction + current.activity_id);
+    const typedTime = requestedStartTime(params.instruction);
 
     return {
       name: replacement.label,
       description: `${replacement.blurb} Swapped in for "${params.instruction}".`,
-      start_time: current.start_time ?? replacement.time,
+      start_time: typedTime ?? current.start_time ?? replacement.time,
       estimated_time_hours:
         current.estimated_time_hours ?? replacement.hours,
       estimated_cost_usd: cheaper

@@ -109,3 +109,25 @@ test("day revision keeps locked activities and surfaces the model's ripple flag"
   assert.equal(out.ripple?.reason, "Earlier departure.");
   assert.ok(out.activities.some((a) => a.name === "Booked tour" && a.locked));
 });
+
+test("reviseActivity enforces a time the traveller typed and passes the day's context", async () => {
+  let seen: any = null;
+  const engine = new PlannerEngine(
+    source,
+    stubProvider({
+      reviseActivity: async (p: any) => {
+        seen = p;
+        // model ignores the time and returns the wrong one
+        return { ...act("Breakfast at Aktaion", "10:00", "Aktaion", "food"), lat: 37.97, lon: 23.72 };
+      },
+    })
+  );
+  const current: any = { activity_id: "a1", day_id: "d1", name: "Museum", start_time: "09:00" };
+  const out = await engine.reviseActivity({
+    brief, activity: current, dayDate: "2026-08-28",
+    instruction: "breakfast at 8am", dayActivities: [current],
+  } as any);
+  assert.equal(out.start_time, "08:00");
+  assert.equal(out.name, "Breakfast at Aktaion");
+  assert.equal(seen.dayActivities.length, 1);
+});

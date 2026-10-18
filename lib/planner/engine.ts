@@ -21,6 +21,7 @@
  * TODO (M2): Integrate preference_profiles to personalise the ranking dial.
  */
 
+import { resolveStartTime } from "./activity-edit";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   TripBrief,
@@ -148,6 +149,8 @@ export interface ReviseActivityInput {
   /** Free-text revision instruction from the user. */
   instruction: string;
   legs?: TripLeg[];
+  /** The rest of the day, for timing + location context. */
+  dayActivities?: Activity[];
 }
 
 export interface ReviseDayInput {
@@ -453,13 +456,21 @@ export class PlannerEngine {
 
     const ranked = await this.rankedFor(brief, input.legs, dayDate);
 
-    return this.llm.reviseActivity({
+    const revised = await this.llm.reviseActivity({
       activity,
       instruction,
       brief,
       rankedPosts: ranked,
       dayDateContext: dayDate,
+      dayActivities: input.dayActivities,
     });
+    // A time the traveller typed is a fact: enforce it, don't hope the model did.
+    return {
+      ...revised,
+      name: revised.name?.trim() || activity.name,
+      start_time:
+        resolveStartTime(instruction, revised.start_time, activity.start_time) ?? "",
+    };
   }
 
   /**
