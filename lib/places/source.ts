@@ -38,7 +38,7 @@ const OVERPASS_ENDPOINTS = [
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // map data barely changes day to day
 // One budget for the whole lookup (geocode + Overpass). Generation waits on this,
 // so a slow public service must cost seconds, not a failed itinerary.
-const LOOKUP_BUDGET_MS = 20000;
+const LOOKUP_BUDGET_MS = 12000;
 // Public Overpass servers are often slow. Rather than waiting for one to time out,
 // start the next mirror a few seconds later and take whichever answers first.
 const HEDGE_DELAY_MS = 4000;
@@ -145,6 +145,64 @@ async function queryOverpass(query: string, signal: AbortSignal): Promise<Overpa
 }
 
 // ---------------------------------------------------------------------------
+// Fallback: Photon search (used only when every Overpass server fails)
+// ---------------------------------------------------------------------------
+
+interface PhotonVenue {
+  geometry: { coordinates: [number, number] };
+  properties: { osm_id: number; osm_type: string; osm_key?: string; osm_value?: string; name?: string };
+}
+
+// Photon is a text search, not a "what is nearby" query, so a handful of short
+// name fragments inside the city's bounding box gives a partial sample of venues.
+const PHOTON_QUERIES: [string, string][] = [
+  ["taverna", "amenity:restaurant"], ["restaurant", "amenity:restaurant"],
+  ["a", "amenity:restaurant"], ["e", "amenity:restaurant"], ["o", "amenity:restaurant"],
+  ["a", "amenity:cafe"], ["e", "amenity:cafe"],
+  ["a", "amenity:bar"], ["a", "shop:bakery"], ["a", "amenity:pub"],
+];
+
+async function photonVenues(place: GeocodedCity, signal: AbortSignal): Promise<OverpassElement[]> {
+  const dLat = place.radiusMeters / 111_000;
+  const dLon = dLat / Math.max(0.2, Math.cos((place.center.lat * Math.PI) / 180));
+  const bbox = [place.center.lon - dLon, place.center.lat - dLat, place.center.lon + dLon, place.center.lat + dLat]
+    .map((n) => n.toFixed(4))
+    .join(",");
+  const results = await Promise.all(
+    PHOTON_QUERIES.map(async ([q, tag]) => {
+      try {
+        const res = await fetch(
+          `https://photon.komoot.io/api?q=${encodeURIComponent(q)}&bbox=${bbox}&osm_tag=${tag}&limit=40&lang=en`,
+          { headers: { "User-Agent": USER_AGENT }, cache: "no-store", signal }
+        );
+        if (!res.ok) return [];
+        return ((await res.json()) as { features?: PhotonVenue[] }).features ?? [];
+      } catch {
+        return [];
+      }
+    })
+  );
+  const seen = new Set<string>();
+  const out: OverpassElement[] = [];
+  for (const f of results.flat()) {
+    const { osm_id, osm_type, osm_key, osm_value, name } = f.properties;
+    if (!name || !osm_key || !osm_value) continue;
+    const type = osm_type === "N" ? "node" : osm_type === "W" ? "way" : "relation";
+    const id = `${type}-${osm_id}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push({
+      type,
+      id: osm_id,
+      lon: f.geometry.coordinates[0],
+      lat: f.geometry.coordinates[1],
+      tags: { name, [osm_key]: osm_value },
+    });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // Source
 // ---------------------------------------------------------------------------
 
@@ -173,11 +231,19 @@ export class OsmContentSource implements ContentSource {
     try {
       const place = await geocodeCity(destination, signal);
       if (!place) return [];
-      const elements = await queryOverpass(
-        buildOverpassQuery(place.center, place.radiusMeters),
-        signal
-      );
-      const posts = elementsToPosts(elements, destination);
+      let posts: CommunityPost[];
+      try {
+        const elements = await queryOverpass(
+          buildOverpassQuery(place.center, place.radiusMeters),
+          signal
+        );
+        posts = elementsToPosts(elements, destination);
+      } catch (err) {
+        console.warn(`[places] Overpass failed for "${destination}", using Photon fallback:`, err);
+        // Fresh budget: the Overpass attempt may have used all of the first one.
+        const fb = AbortSignal.timeout(8000);
+        posts = elementsToPosts(await photonVenues(place, fb), destination, new Date(), false);
+      }
       if (posts.length > 0) {
         if (this.cache.size >= 200) this.cache.clear(); // keep memory bounded
         this.cache.set(key, { at: Date.now(), posts });
