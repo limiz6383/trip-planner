@@ -134,10 +134,13 @@ h2,
   letter-spacing: -0.01em;
 }
 
-/* Visible focus for everything that is not already styled */
-:focus-visible {
-  outline: 2px solid var(--color-brand-500);
-  outline-offset: 2px;
+/* Visible focus for everything that is not already styled. Kept in the base
+   layer so component-level `focus-visible:outline-none` + ring still win. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+  }
 }
 
 /* Subtle paper grain, pure CSS */
@@ -174,8 +177,7 @@ h2,
 }
 
 @media print {
-  nav,
-  header {
+  nav {
     display: none !important;
   }
 }

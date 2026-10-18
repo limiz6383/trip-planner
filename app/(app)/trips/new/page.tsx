@@ -61,20 +61,21 @@ export default function NewTripPage() {
     legs.every((l) => l.city.trim() && l.arrival && l.departure && l.departure >= l.arrival);
 
   return (
-    <div>
-      <div className="mb-6">
+    <div className="mx-auto max-w-5xl">
+      <div className="mb-6 sm:mb-8">
         <Link
           href="/dashboard"
-          className="text-sm text-zinc-500 hover:text-zinc-700 transition-colors"
+          className="-ml-2 inline-flex min-h-11 items-center rounded-full px-3 text-sm font-medium text-zinc-600 transition-colors hover:bg-paper-2 hover:text-zinc-900"
         >
-          &larr; Back to trips
+          <span aria-hidden="true" className="mr-1.5">&larr;</span> Back to trips
         </Link>
-        <h1 className="mt-2 text-xl font-bold text-zinc-900">Plan a new trip</h1>
-        <p className="mt-1 text-sm text-zinc-500">
+        <h1 className="mt-1 text-3xl font-bold text-ink sm:text-4xl">Plan a new trip</h1>
+        <p className="mt-1.5 max-w-xl text-sm text-zinc-600 sm:text-base">
           Add one city, or several to plan a multi-city trip — each with its own dates.
         </p>
       </div>
 
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-start lg:gap-8">
       <Card>
         <form action={action} className="flex flex-col gap-5">
           <Input
@@ -86,18 +87,18 @@ export default function NewTripPage() {
           />
 
           <div className="flex flex-col gap-3">
-            <span className="text-sm font-medium text-zinc-700">
+            <span className="text-sm font-semibold text-zinc-800">
               {multi ? "Cities" : "Destination"}
             </span>
 
             {legs.map((leg, i) => (
               <div
                 key={i}
-                className="flex flex-col gap-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3"
+                className="flex flex-col gap-3 rounded-xl border border-line bg-paper p-3 sm:p-4"
               >
                 <div className="flex items-center gap-2">
                   {multi && (
-                    <span className="flex h-5 w-5 flex-none items-center justify-center rounded-full bg-indigo-600 text-[11px] font-bold text-white">
+                    <span className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-brand-700 text-xs font-bold text-white">
                       {i + 1}
                     </span>
                   )}
@@ -115,7 +116,7 @@ export default function NewTripPage() {
                         type="button"
                         onClick={() => moveLeg(i, -1)}
                         disabled={i === 0}
-                        className="rounded p-1 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700 disabled:opacity-30"
+                        className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-zinc-500 hover:bg-paper-2 hover:text-zinc-900 disabled:opacity-30 sm:h-9 sm:w-9"
                         aria-label="Move city up"
                       >
                         ↑
@@ -124,7 +125,7 @@ export default function NewTripPage() {
                         type="button"
                         onClick={() => moveLeg(i, 1)}
                         disabled={i === legs.length - 1}
-                        className="rounded p-1 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700 disabled:opacity-30"
+                        className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-zinc-500 hover:bg-paper-2 hover:text-zinc-900 disabled:opacity-30 sm:h-9 sm:w-9"
                         aria-label="Move city down"
                       >
                         ↓
@@ -132,7 +133,7 @@ export default function NewTripPage() {
                       <button
                         type="button"
                         onClick={() => removeLeg(i)}
-                        className="rounded p-1 text-zinc-400 hover:bg-red-100 hover:text-red-600"
+                        className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-zinc-500 hover:bg-red-50 hover:text-red-700 disabled:opacity-30 sm:h-9 sm:w-9"
                         aria-label="Remove city"
                       >
                         ✕
@@ -168,7 +169,7 @@ export default function NewTripPage() {
             <button
               type="button"
               onClick={addLeg}
-              className="self-start rounded-lg border border-dashed border-indigo-300 px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-indigo-50"
+              className="inline-flex min-h-11 items-center self-start rounded-xl border border-dashed border-brand-400 px-4 text-sm font-semibold text-brand-700 transition-colors hover:bg-brand-50"
             >
               + Add another city
             </button>
@@ -178,7 +179,7 @@ export default function NewTripPage() {
           <input type="hidden" name="legs" value={JSON.stringify(legs)} />
 
           {state?.error ? (
-            <p className="text-sm text-red-600" role="alert">
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">
               {state.error}
             </p>
           ) : null}
@@ -195,6 +196,28 @@ export default function NewTripPage() {
           </div>
         </form>
       </Card>
+
+        <aside aria-label="How planning works" className="rounded-2xl border border-line bg-paper-2/60 p-5 lg:sticky lg:top-20">
+          <h2 className="font-display text-lg font-semibold text-ink">What happens next</h2>
+          <ol className="mt-4 flex flex-col gap-4">
+            {[
+              ["Create the trip", "Name it and pick your cities and dates."],
+              ["Tell us your style", "Optionally add flights and a stay, then a short chat about what you enjoy."],
+              ["Shape your plan", "Get a day-by-day itinerary, then revise, lock or reorder anything."],
+            ].map(([t, d], i) => (
+              <li key={t} className="flex gap-3">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-700 font-display text-sm font-bold text-white" aria-hidden="true">
+                  {i + 1}
+                </span>
+                <span>
+                  <span className="block text-sm font-semibold text-ink">{t}</span>
+                  <span className="block text-sm leading-snug text-zinc-600">{d}</span>
+                </span>
+              </li>
+            ))}
+          </ol>
+        </aside>
+      </div>
     </div>
   );
 }
