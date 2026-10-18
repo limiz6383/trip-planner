@@ -25,9 +25,13 @@ import {
 const USER_AGENT =
   "trip-planner/1.0 (+https://github.com/limiz6383/trip-planner)";
 
+// Public, free servers run by the Overpass maintainers. They are best-effort and
+// are frequently at capacity, which is why requests are hedged across them.
+// (overpass.openstreetmap.fr is allow-list only and returns 403 to everyone else.)
 const OVERPASS_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
-  "https://overpass.openstreetmap.fr/api/interpreter",
+  "https://lz4.overpass-api.de/api/interpreter",
+  "https://z.overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
 ];
 
