@@ -31,6 +31,9 @@ const OVERPASS_ENDPOINTS = [
 ];
 
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // map data barely changes day to day
+// One budget for the whole lookup (geocode + Overpass). Generation waits on this,
+// so a slow public service must cost seconds, not a failed itinerary.
+const LOOKUP_BUDGET_MS = 12000;
 const MIN_RADIUS_M = 2500;
 const MAX_RADIUS_M = 8000;
 const DEFAULT_RADIUS_M = 5000;
@@ -49,12 +52,12 @@ interface PhotonFeature {
   properties: { extent?: [number, number, number, number] };
 }
 
-async function geocodeCity(city: string): Promise<GeocodedCity | null> {
+async function geocodeCity(city: string, signal: AbortSignal): Promise<GeocodedCity | null> {
   const url = `https://photon.komoot.io/api?q=${encodeURIComponent(city)}&limit=1&lang=en`;
   const res = await fetch(url, {
     headers: { "User-Agent": USER_AGENT },
     cache: "no-store",
-    signal: AbortSignal.timeout(8000),
+    signal,
   });
   if (!res.ok) return null;
   const body = (await res.json()) as { features?: PhotonFeature[] };
@@ -79,7 +82,7 @@ async function geocodeCity(city: string): Promise<GeocodedCity | null> {
 // Overpass
 // ---------------------------------------------------------------------------
 
-async function queryOverpass(query: string): Promise<OverpassElement[]> {
+async function queryOverpass(query: string, signal: AbortSignal): Promise<OverpassElement[]> {
   let lastError: unknown;
   for (const endpoint of OVERPASS_ENDPOINTS) {
     try {
@@ -91,13 +94,18 @@ async function queryOverpass(query: string): Promise<OverpassElement[]> {
         },
         body: `data=${encodeURIComponent(query)}`,
         cache: "no-store",
-        signal: AbortSignal.timeout(25000),
+        signal,
       });
       if (!res.ok) throw new Error(`Overpass ${res.status}`);
-      const json = (await res.json()) as { elements?: OverpassElement[] };
+      const json = (await res.json()) as { elements?: OverpassElement[]; remark?: string };
+      // Overpass reports a server-side timeout / out-of-memory as HTTP 200 with a
+      // `remark` and a partial result. Treat that as a failure so a truncated
+      // answer is neither used nor cached for hours.
+      if (json.remark) throw new Error(`Overpass remark: ${json.remark}`);
       return json.elements ?? [];
     } catch (err) {
       lastError = err;
+      if (signal.aborted) break; // out of time: don't start the next endpoint
     }
   }
   throw lastError ?? new Error("Overpass unavailable");
@@ -109,20 +117,38 @@ async function queryOverpass(query: string): Promise<OverpassElement[]> {
 
 export class OsmContentSource implements ContentSource {
   private readonly cache = new Map<string, { at: number; posts: CommunityPost[] }>();
+  /** Concurrent callers asking for the same city share one upstream request. */
+  private readonly inflight = new Map<string, Promise<CommunityPost[]>>();
 
   async fetchForDestination(destination: string): Promise<CommunityPost[]> {
     const key = destination.trim().toLowerCase();
     const hit = this.cache.get(key);
     if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.posts;
 
+    const pending = this.inflight.get(key);
+    if (pending) return pending;
+
+    const lookup = this.lookup(destination, key).finally(() =>
+      this.inflight.delete(key)
+    );
+    this.inflight.set(key, lookup);
+    return lookup;
+  }
+
+  private async lookup(destination: string, key: string): Promise<CommunityPost[]> {
+    const signal = AbortSignal.timeout(LOOKUP_BUDGET_MS);
     try {
-      const place = await geocodeCity(destination);
+      const place = await geocodeCity(destination, signal);
       if (!place) return [];
       const elements = await queryOverpass(
-        buildOverpassQuery(place.center, place.radiusMeters)
+        buildOverpassQuery(place.center, place.radiusMeters),
+        signal
       );
       const posts = elementsToPosts(elements, destination);
-      if (posts.length > 0) this.cache.set(key, { at: Date.now(), posts });
+      if (posts.length > 0) {
+        if (this.cache.size >= 200) this.cache.clear(); // keep memory bounded
+        this.cache.set(key, { at: Date.now(), posts });
+      }
       return posts;
     } catch (err) {
       console.warn(`[places] OpenStreetMap lookup failed for "${destination}":`, err);
@@ -144,20 +170,37 @@ export class CompositeContentSource implements ContentSource {
   constructor(
     private readonly curated: ContentSource,
     private readonly venues: ContentSource,
-    private readonly maxVenues = 40
+    /** Venues kept in total for a single city; shared out across several. */
+    private readonly maxVenues = 24
   ) {}
 
   async fetchForDestination(
     destination: string,
     options: FetchOptions = {}
   ): Promise<CommunityPost[]> {
-    const [posts, venues] = await Promise.all([
+    // Multi-city trips store their destination as "Athens → Paros → Naxos"
+    // (revise flows pass that string). Look each city up on its own.
+    const cities = destination
+      .split(/\s*(?:→|->)\s*/)
+      .map((c) => c.trim())
+      .filter(Boolean)
+      .slice(0, 5);
+    const lookups = cities.length > 0 ? cities : [destination];
+    const perCity = Math.max(6, Math.floor(this.maxVenues / lookups.length));
+    const dial = options.localTouristyDial ?? 0.2; // default: lean local
+
+    const [posts, venueSets] = await Promise.all([
       this.curated.fetchForDestination(destination, options),
-      this.venues.fetchForDestination(destination, options).catch(() => []),
+      Promise.all(
+        lookups.map((city) =>
+          this.venues.fetchForDestination(city, options).catch(() => [])
+        )
+      ),
     ]);
 
-    const dial = options.localTouristyDial ?? 0.2; // default: lean local
-    const topVenues = rankPosts(venues, dial).slice(0, this.maxVenues);
-    return [...posts, ...topVenues];
+    const venues = venueSets.flatMap((set) =>
+      rankPosts(set, dial).slice(0, perCity)
+    );
+    return [...posts, ...venues];
   }
 }
