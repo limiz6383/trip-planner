@@ -107,7 +107,7 @@ export function TripCover({
           opacity="0.6"
         />
         {!compact && (
-          <>
+          <g className="max-sm:hidden">
             {/* dotted route with pins */}
             <path d={path} fill="none" stroke="#fff" strokeOpacity="0.7" strokeWidth="2.5" strokeDasharray="2 8" strokeLinecap="round" />
             {pins.map((pt, i) => (
@@ -116,7 +116,7 @@ export function TripCover({
                 <circle cx={pt.x} cy={pt.y} r="5.5" fill="#fff" />
               </g>
             ))}
-          </>
+          </g>
         )}
         {compact &&
           pins.slice(0, 2).map((pt, i) => (
