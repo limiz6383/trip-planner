@@ -70,8 +70,8 @@ export function TripCover({
   // Pins along a gentle arc across the upper half of the artwork.
   const pins = Array.from({ length: n }, (_, i) => {
     const t = n === 1 ? 0.5 : i / (n - 1);
-    const x = 470 + t * 270;
-    const y = 120 - Math.sin(t * Math.PI) * 52 + (i % 2) * 6;
+    const x = 520 + t * 220;
+    const y = 168 - Math.sin(t * Math.PI) * 46 + (i % 2) * 6;
     return { x, y };
   });
   const path = pins
@@ -88,7 +88,7 @@ export function TripCover({
     >
       <svg
         viewBox="0 0 800 320"
-        preserveAspectRatio="xMidYMax slice"
+        preserveAspectRatio="xMaxYMax slice"
         className="absolute inset-0 h-full w-full"
       >
         {/* sun + glow */}

@@ -15,73 +15,109 @@ import { ItineraryView } from "@/components/itinerary/ItineraryView";
 import { GenerateItineraryButton } from "@/components/itinerary/GenerateItineraryButton";
 import { PrePlanFlow } from "@/components/booking/PrePlanFlow";
 import { PostItineraryBookingPanel } from "@/components/booking/PostItineraryBookingPanel";
+import { TripCover, RouteChips, splitStops, formatDateRangeShort, tripDays } from "@/components/TripCover";
 import type { Trip, TripBrief, Booking, Itinerary, ItineraryDay, Activity } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function formatDateRange(start: string, end: string): string {
-  const fmt = (d: string) =>
-    new Date(d).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      // Date-only value: format in UTC to avoid an off-by-one in timezones west of UTC.
-      timeZone: "UTC",
-    });
-  return `${fmt(start)} — ${fmt(end)}`;
+const STATUS_STYLES: Record<string, string> = {
+  planned: "bg-white/90 text-brand-800",
+  in_progress: "bg-green-100 text-green-900",
+  completed: "bg-zinc-200 text-zinc-800",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  planned: "Upcoming",
+  in_progress: "On trip",
+  completed: "Completed",
+};
+
+function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div className="rounded-2xl bg-black/20 px-3.5 py-3 ring-1 ring-white/15 backdrop-blur-sm">
+      <dt className="text-[11px] font-semibold uppercase tracking-wider text-white/75">{label}</dt>
+      <dd className="mt-0.5 font-display text-2xl font-semibold leading-none text-white">
+        {value}
+        {hint ? <span className="ml-1 font-sans text-xs font-medium text-white/75">{hint}</span> : null}
+      </dd>
+    </div>
+  );
 }
 
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
-
-function TripHeader({ trip }: { trip: Trip }) {
-  const statusColors: Record<string, string> = {
-    planned: "bg-blue-100 text-blue-700",
-    in_progress: "bg-green-100 text-green-700",
-    completed: "bg-zinc-100 text-zinc-600",
-  };
-
-  const statusLabels: Record<string, string> = {
-    planned: "Upcoming",
-    in_progress: "On trip",
-    completed: "Completed",
-  };
-
+/**
+ * Trip cover header: destination-themed art, title, route, dates and an
+ * at-a-glance stat strip. Stats come straight from the saved itinerary; when
+ * there is no itinerary yet only the facts we already know are shown.
+ */
+function TripHeader({
+  trip,
+  itinerary,
+}: {
+  trip: Trip;
+  itinerary: (Itinerary & { days: (ItineraryDay & { activities: Activity[] })[] }) | null;
+}) {
+  const stops = splitStops(trip.destination);
+  const days = tripDays(trip.start_date, trip.end_date);
   const statusLabel =
-    statusLabels[trip.status] ??
-    trip.status
-      .replace(/_/g, " ")
-      .replace(/\b\w/g, (c) => c.toUpperCase());
+    STATUS_LABELS[trip.status] ??
+    trip.status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+  const planDays = itinerary?.days ?? [];
+  const activityCount = planDays.reduce((n, d) => n + (d.activities?.length ?? 0), 0);
+  const total =
+    itinerary?.total_cost_estimate ??
+    (planDays.length > 0 ? planDays.reduce((sum, d) => sum + (d.daily_cost ?? 0), 0) : null);
 
   return (
-    <div className="mb-6">
-      <Link
-        href="/dashboard"
-        className="text-sm text-zinc-500 hover:text-zinc-700 transition-colors"
-      >
-        &larr; My Trips
-      </Link>
-      <div className="mt-2 flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h1 className="text-xl font-bold text-zinc-900 truncate">{trip.title}</h1>
-          <p className="mt-0.5 text-sm text-zinc-500">{trip.destination}</p>
-          <p className="mt-0.5 text-xs text-zinc-400">
-            {formatDateRange(trip.start_date, trip.end_date)}
-          </p>
+    <header className="relative mb-6 overflow-hidden rounded-3xl text-white shadow-lift sm:mb-8">
+      <TripCover seed={trip.destination} stops={stops.length} />
+      {/* Scrim keeps text legible on any palette */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-black/10 to-black/0" aria-hidden="true" />
+
+      <div className="relative flex min-h-[17rem] flex-col justify-between gap-8 p-5 sm:min-h-[20rem] sm:p-8">
+        <div className="flex items-start justify-between gap-3">
+          <Link
+            href="/dashboard"
+            className="-ml-2 inline-flex min-h-11 items-center rounded-full px-3 text-sm font-medium text-white/90 transition-colors hover:bg-white/15 hover:text-white"
+          >
+            <span aria-hidden="true" className="mr-1.5">&larr;</span> My Trips
+          </Link>
+          <span
+            className={[
+              "shrink-0 rounded-full px-3 py-1 text-xs font-semibold shadow-sm",
+              STATUS_STYLES[trip.status] ?? "bg-zinc-200 text-zinc-800",
+            ].join(" ")}
+          >
+            {statusLabel}
+          </span>
         </div>
-        <span
-          className={[
-            "shrink-0 rounded-full px-2 py-0.5 text-xs font-medium capitalize",
-            statusColors[trip.status] ?? "bg-zinc-100 text-zinc-600",
-          ].join(" ")}
-        >
-          {statusLabel}
-        </span>
+
+        <div>
+          <h1 className="max-w-3xl text-4xl font-bold leading-[1.05] tracking-tight text-white drop-shadow-sm sm:text-6xl">
+            {trip.title}
+          </h1>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
+            <RouteChips stops={stops} />
+            <p className="text-sm font-medium text-white/90">
+              {formatDateRangeShort(trip.start_date, trip.end_date)}
+              <span className="mx-2 text-white/50" aria-hidden="true">/</span>
+              {days} days, {Math.max(days - 1, 0)} nights
+            </p>
+          </div>
+        </div>
+
+        {itinerary && (
+          <dl className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3">
+            <Stat label="Days" value={String(planDays.length || days)} />
+            <Stat label="Stops" value={String(stops.length)} hint={stops.length === 1 ? "city" : "cities"} />
+            <Stat label="Activities" value={String(activityCount)} />
+            <Stat label="Estimate" value={total != null ? `$${Math.round(total).toLocaleString("en-US")}` : "n/a"} hint={total != null ? "total" : undefined} />
+          </dl>
+        )}
       </div>
-    </div>
+    </header>
   );
 }
 
@@ -144,7 +180,7 @@ export default async function TripDetailPage({
 
   return (
     <div>
-      <TripHeader trip={trip} />
+      <TripHeader trip={trip} itinerary={itinerary} />
 
       <div className="flex flex-col gap-4">
         {/*
@@ -177,11 +213,11 @@ export default async function TripDetailPage({
 
         {/* State 2: brief done, no itinerary — generate (logistics already collected) */}
         {hasBrief && !hasItinerary && (
-          <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-6">
-            <div className="mb-1 text-sm font-semibold text-indigo-900">
+          <div className="rounded-2xl border border-brand-200 bg-brand-50 p-6">
+            <div className="mb-1 font-display text-lg font-semibold text-brand-900">
               Trip brief complete
             </div>
-            <p className="mb-4 text-sm text-indigo-700">
+            <p className="mb-4 text-sm text-brand-800">
               Your trip preferences have been saved. Generate your itinerary
               whenever you&apos;re ready.
             </p>
