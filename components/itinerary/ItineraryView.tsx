@@ -14,7 +14,7 @@
  *   onItineraryUpdated?: () => void   fired after any successful mutation
  */
 
-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { useState, useCallback, useEffect, useId, useMemo, useRef } from "react";
 import type { DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
@@ -566,6 +566,7 @@ function ReviseActivityForm({
   onRevised,
   onCancel,
 }: ReviseActivityFormProps) {
+  const fieldId = useId();
   const [instruction, setInstruction] = useState("");
   const [revising, setRevising] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -609,18 +610,19 @@ function ReviseActivityForm({
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-violet-200 bg-violet-50 p-3">
       <div className="flex flex-col gap-1">
-        <label className="flex items-center gap-1.5 text-sm font-medium text-violet-800">
+        <label htmlFor={fieldId} className="flex items-center gap-1.5 text-sm font-medium text-violet-800">
           <SparkleIcon />
           Revise &ldquo;{activity.name}&rdquo;
         </label>
         <textarea
+          id={fieldId}
           value={instruction}
           onChange={(e) => setInstruction(e.target.value)}
           disabled={revising}
-          rows={2}
+          rows={3}
           autoFocus
-          className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-500"
-          placeholder="e.g. swap for something cheaper, find a more local option, different cuisine"
+          className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-base text-zinc-900 placeholder:text-zinc-500 sm:text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-500"
+          placeholder="e.g. Something cheaper, or a more local option"
         />
       </div>
 
@@ -632,7 +634,7 @@ function ReviseActivityForm({
 
       <div className="flex gap-2">
         <Button
-          variant="primary"
+          variant="ai"
           size="sm"
           onClick={handleRevise}
           loading={revising}
@@ -701,6 +703,7 @@ function ActivityEditForm({
   const [startTime, setStartTime] = useState(
     activity.start_time ? activity.start_time.slice(0, 5) : ""
   );
+  const fieldId = useId();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -759,19 +762,20 @@ function ActivityEditForm({
           autoFocus
         />
         <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-zinc-700">
+          <label htmlFor={`${fieldId}-desc`} className="text-sm font-medium text-zinc-700">
             Description
           </label>
           <textarea
+            id={`${fieldId}-desc`}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             disabled={saving}
             rows={2}
-            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-500"
+            className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-base text-zinc-900 placeholder:text-zinc-500 sm:text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-500"
             placeholder="Optional description"
           />
         </div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2 min-[460px]:grid-cols-2">
           <Input
             label="Start time"
             type="time"
@@ -804,12 +808,13 @@ function ActivityEditForm({
           Changing the start time or duration shifts the rest of the day.
         </p>
         <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-zinc-700">Type</label>
+          <label htmlFor={`${fieldId}-type`} className="text-sm font-medium text-zinc-700">Type</label>
           <select
+            id={`${fieldId}-type`}
             value={activityType}
             onChange={(e) => setActivityType(e.target.value as ActivityType | "")}
             disabled={saving}
-            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-zinc-50"
+            className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-base text-zinc-900 sm:text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-zinc-50"
           >
             <option value="">Select type</option>
             {ACTIVITY_TYPES.map((t) => (
@@ -1320,9 +1325,9 @@ function ReviseDayForm({ dayId, dayNumber, dayCount, tripId, onRevised, onCancel
         value={instruction}
         onChange={(e) => setInstruction(e.target.value)}
         disabled={revising}
-        rows={2}
+        rows={3}
         autoFocus
-        className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:cursor-not-allowed disabled:bg-zinc-50"
+        className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-base text-zinc-900 placeholder:text-zinc-500 sm:text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:cursor-not-allowed disabled:bg-zinc-50"
         placeholder="e.g. more outdoorsy, make the morning cheaper, add a museum"
       />
       {tripWide && (
@@ -1797,9 +1802,12 @@ function ChangelogDrawer({ tripId, onClose }: ChangelogDrawerProps) {
           )}
 
           {!loading && !error && entries !== null && entries.length === 0 && (
-            <p className="py-8 text-center text-sm text-zinc-400">
-              No changes recorded yet.
-            </p>
+            <div className="py-10 text-center">
+              <p className="text-sm font-medium text-zinc-700">No changes yet</p>
+              <p className="mx-auto mt-1 max-w-[16rem] text-sm text-zinc-600">
+                Edits, revisions and locks will be listed here.
+              </p>
+            </div>
           )}
 
           {!loading && !error && entries && entries.length > 0 && (
@@ -2085,9 +2093,9 @@ function DestinationGuideCard({
 
           {spots.length > 0 && (
             <div className="flex flex-col gap-2.5">
-              <h4 className="text-sm font-semibold text-zinc-700">
+              <h3 className="text-sm font-semibold text-zinc-700">
                 Top spots <span className="font-normal text-zinc-600">· your plan covers {spotsHit} of {spots.length}</span>
-              </h4>
+              </h3>
               <ul className="grid gap-2 sm:grid-cols-2">
                 {spots.map((i) => (
                   <PickRow
@@ -2103,9 +2111,9 @@ function DestinationGuideCard({
 
           {foods.length > 0 && (
             <div className="flex flex-col gap-2.5">
-              <h4 className="text-sm font-semibold text-zinc-700">
+              <h3 className="text-sm font-semibold text-zinc-700">
                 Must-try food <span className="font-normal text-zinc-600">· {foodsHit} on your plan</span>
-              </h4>
+              </h3>
               <ul className="grid gap-2 sm:grid-cols-2">
                 {foods.map((i) => (
                   <PickRow
@@ -3009,8 +3017,8 @@ export function ItineraryView({
               {chatMessages.length === 0 ? (
                 <div className="flex flex-col gap-2.5">
                   <p className="text-sm leading-snug text-violet-950/80">
-                    Bounce ideas about your trip, e.g. &ldquo;add svíčková for a
-                    dinner&rdquo; or &ldquo;what&apos;s a good rainy-day swap for
+                    Bounce ideas about your trip, e.g. &ldquo;add a sunset dinner on
+                    day 3&rdquo; or &ldquo;what&apos;s a good rainy-day swap for
                     day 2?&rdquo;
                   </p>
                   <ul className="flex flex-wrap gap-2" aria-label="Suggested prompts">

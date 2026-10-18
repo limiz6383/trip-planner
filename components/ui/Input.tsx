@@ -27,7 +27,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           id={inputId}
           {...props}
           className={[
-            "min-h-11 w-full rounded-xl border px-3.5 py-2.5 text-base text-zinc-900 placeholder:text-zinc-400 sm:text-sm",
+            "min-h-11 w-full rounded-xl border px-3.5 py-2.5 text-base text-zinc-900 placeholder:text-zinc-500 sm:text-sm",
             "focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent",
             "disabled:bg-zinc-50 disabled:text-zinc-500 disabled:cursor-not-allowed",
             error
