@@ -1626,26 +1626,26 @@ function ChangelogDrawer({ tripId, onClose }: ChangelogDrawerProps) {
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-40 bg-black/30"
+        className="fixed inset-0 z-40 bg-ink/40 backdrop-blur-[2px]"
         onClick={onClose}
         aria-hidden="true"
       />
 
       {/* Drawer panel */}
       <div
-        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-sm flex-col bg-white shadow-xl"
+        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-sm flex-col rounded-l-2xl bg-surface shadow-lift"
         role="dialog"
         aria-modal="true"
         aria-label="Change log"
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
-          <h2 className="text-base font-semibold text-zinc-900">
+        <div className="flex items-center justify-between border-b border-line px-5 py-3">
+          <h2 className="font-display text-xl font-semibold text-ink">
             Change history
           </h2>
           <button
             onClick={onClose}
-            className="rounded p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+            className={ICON_BTN}
             aria-label="Close change history"
           >
             <svg
@@ -1665,7 +1665,7 @@ function ChangelogDrawer({ tripId, onClose }: ChangelogDrawerProps) {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto px-4 py-3">
+        <div className="flex-1 overflow-y-auto px-5 py-4">
           {loading && (
             <div className="flex items-center justify-center py-12">
               <span className="h-6 w-6 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
@@ -1690,7 +1690,7 @@ function ChangelogDrawer({ tripId, onClose }: ChangelogDrawerProps) {
                 <li key={entry.log_id} className="flex gap-3">
                   {/* Timeline dot */}
                   <div className="mt-1 flex-none">
-                    <span className="block h-2 w-2 rounded-full bg-indigo-400" />
+                    <span className="block h-2.5 w-2.5 rounded-full bg-brand-500 ring-4 ring-brand-100" />
                   </div>
 
                   <div className="flex min-w-0 flex-col gap-1">
