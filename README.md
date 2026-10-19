@@ -82,11 +82,15 @@ nothing fits it says so generically instead.
 will misjudge some places (a genuinely local café on a tourist street, a chain the
 map doesn't tag). OpenStreetMap coverage varies by region and carries no ratings,
 prices or reviews. Some venues are only named in the local script (for example Greek), so
-those names appear untransliterated. The public Overpass service is rate-limited, so
-results are cached in memory, each lookup has a 12-second budget (plus a short fallback to a plain place search, which finds fewer venues and cannot tell how close they are to sights), and a failed lookup
-falls back to generic suggestions rather than failing the plan. The hosted demo does not use any of this: its itinerary is a saved
-sample generated before this feature existed, and its curated posts (Tokyo and
-Berlin) are seeded sample data.
+those names appear untransliterated. The public Overpass service is rate-limited and often at capacity, so results are cached
+in memory and each lookup has a 12-second budget. When every Overpass server fails, the app
+falls back to a plain place search: it finds fewer venues and cannot tell how close they are
+to the major sights, so every venue gets the same locality score and the local/touristy dial
+cannot separate them (the venues are still real, named places). If both fail, the plan falls
+back to generic suggestions rather than failing. A production setup would self-host Overpass
+or use a paid provider. The hosted demo does not use any of this: its itinerary is a saved
+sample generated before this feature existed, and its curated posts (Tokyo and Berlin) are
+seeded sample data.
 
 Place data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright)
 (ODbL). Set `PLACES_SOURCE=off` to disable the lookup.
