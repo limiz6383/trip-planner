@@ -196,6 +196,11 @@ export async function POST(
         currentItinerary: hydrated,
         instruction: composed,
         standingPreferences,
+        // A change to one day only reaches it and its neighbours; leave every
+        // other day (and the traveller's edits on it) exactly as it was.
+        onlyChangeDates: days
+          .slice(Math.max(0, dayIndex - 1), dayIndex + 2)
+          .map((d) => d.date),
         booking: logistics.booking,
         legs: logistics.legs,
         flights: logistics.flights,

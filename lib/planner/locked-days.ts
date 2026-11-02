@@ -12,6 +12,7 @@
  *   3. Validating that an LLM-generated itinerary honoured the locked constraints.
  */
 
+import { MAX_ACTIVITIES_PER_REVISED_DAY } from "./limits";
 import type {
   Itinerary,
   ItineraryDay,
@@ -151,8 +152,8 @@ export function mergeLockedDays(
 // Lock-preserving merge for AI revision
 // ---------------------------------------------------------------------------
 
-/** Max activities per day kept after a revision (safety ceiling; matches generation). */
-const MAX_ACTIVITIES_PER_DAY = 8;
+/** Max activities per day kept after a revision (safety ceiling, with headroom for explicit adds). */
+const MAX_ACTIVITIES_PER_DAY = MAX_ACTIVITIES_PER_REVISED_DAY;
 
 /**
  * Merges an AI-revised itinerary with the locks on the existing itinerary,
@@ -338,4 +339,32 @@ export function validateLockedConstraints(
   }
 
   return violations;
+}
+
+// ---------------------------------------------------------------------------
+// Keep days a change cannot reach exactly as they were
+// ---------------------------------------------------------------------------
+
+/**
+ * A logistics change to one day (an earlier departure, a moved train) can only
+ * reach that day and its neighbours. The model sometimes rewrites other days
+ * anyway, undoing the traveller's own edits there, so this puts every day
+ * outside `affectedDates` back exactly as `original` had it.
+ */
+export function restoreUntouchedDays(
+  revised: LLMItinerary,
+  original: LLMItinerary,
+  affectedDates: string[]
+): LLMItinerary {
+  const affected = new Set(affectedDates);
+  const originalByDate = new Map(original.days.map((d) => [d.date, d]));
+  const days = revised.days.map((d) => {
+    const before = originalByDate.get(d.date);
+    return !affected.has(d.date) && before ? before : d;
+  });
+  return {
+    ...revised,
+    days,
+    total_cost_estimate: days.reduce((sum, d) => sum + (d.daily_cost ?? 0), 0),
+  };
 }

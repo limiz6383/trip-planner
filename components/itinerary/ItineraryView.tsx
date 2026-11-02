@@ -2572,7 +2572,11 @@ export function ItineraryView({
       });
       if (!res.ok) {
         const errBody = (await res.json()) as ReviseItineraryErrorBody;
-        setChatError(errBody.error ?? "Failed to apply changes.");
+        setChatError(
+          res.status === 409
+            ? "An earlier change is still being applied to your trip, which can take a minute or two. Your chat is kept: wait for it to finish, then press Apply changes again."
+            : errBody.error ?? "Failed to apply changes."
+        );
         return;
       }
       // New version persisted — refresh so the server re-renders it. The

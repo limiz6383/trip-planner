@@ -12,6 +12,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { IS_MOCK } from "@/lib/mock/flag";
 import { MockProvider } from "./mock-provider";
+import { MAX_ACTIVITIES_PER_REVISED_DAY } from "@/lib/planner/limits";
 import type { LLMItinerary, LLMActivity, LLMTripBrief, TripBrief, Booking, CommunityPost, Activity, DestinationGuide, GuidePick, PreferenceProfile, TripFlight, TripAccommodation } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -386,7 +387,7 @@ FIXED PLANS: the brief's "fixed_plans" (when present) are plans the traveller al
 2. STANDING PREFERENCES ARE STICKY. Everything in standing_preferences was explicitly requested earlier and must still hold in your result. Do NOT undo or compromise an earlier request while satisfying the new one — only drop a standing preference if the current instruction directly contradicts it. (e.g. if they earlier asked to add a specific restaurant, keep it when they later say "make it cheaper".)
 3. Keep what the user did NOT ask to change where reasonable; preserve good activities that are unaffected by the instruction.
 3. LOCKED ITEMS ARE NON-NEGOTIABLE. Any day or activity marked "locked": true in the current itinerary represents a committed plan (e.g. a booking the user cannot move). Reproduce it EXACTLY — do not change, reword, reprice, reorder, or remove it — and plan the rest of the trip around it.
-4. Size each day to the traveller's PACE from the brief: relaxed ≈ 3-4, moderate ≈ 4-5, fast ≈ 6-7 activities (default ~4; meals included in the count; never exceed 8) — same policy as the original generation.
+4. Size each day to the traveller's PACE from the brief: relaxed ≈ 3-4, moderate ≈ 4-5, fast ≈ 6-7 activities (default ~4; meals included in the count; stay at or under 8 unless the traveller explicitly asks you to ADD something to a full day — then include it, up to 12).
 5. MEALS: keep breakfast, lunch, and dinner present on every full day (activity_type "food") at realistic times, unless the instruction explicitly changes meals. Arrival/departure days include only meals that fit around the flight. ${NAME_THE_PLACE}
 6. Keep each "description" to ONE short sentence.
 7. Maintain the same date range and day count as the original itinerary.
@@ -487,7 +488,7 @@ FIXED PLANS: any of the brief's "fixed_plans" whose date is THIS day must stay i
 1. Apply the instruction to THIS day only; keep unaffected activities where reasonable.
 2. STANDING PREFERENCES ARE STICKY. Everything in standing_preferences was explicitly requested earlier and must still hold. Do NOT undo or compromise an earlier request while satisfying the new one — only drop one if the current instruction directly contradicts it.
 2. LOCKED ITEMS ARE NON-NEGOTIABLE. Any activity with "locked": true must be reproduced EXACTLY (do not change, reorder, reprice, or remove it) and the rest of the day planned around it.
-3. Size the day to the traveller's PACE: relaxed ≈ 3-4, moderate ≈ 4-5, fast ≈ 6-7 activities (default ~4; meals count; never exceed 8).
+3. Size the day to the traveller's PACE: relaxed ≈ 3-4, moderate ≈ 4-5, fast ≈ 6-7 activities (default ~4; meals count; stay at or under 8 unless the traveller explicitly asks you to ADD something to a full day — then include it, up to 12 — and never drop what they asked for to stay under 8).
 4. Keep breakfast, lunch, and dinner present (activity_type "food") at realistic times unless the instruction explicitly changes meals. ${NAME_THE_PLACE}
 5. Give every activity a "start_time" in 24-hour "HH:MM" format — chronological, consistent with each activity's estimated_time_hours and realistic venue/meal hours.
 6. Keep each "description" to ONE short sentence.
@@ -930,7 +931,7 @@ export class AnthropicProvider implements LLMProvider {
       );
     }
 
-    const MAX_ACTIVITIES_PER_DAY = 8;
+    const MAX_ACTIVITIES_PER_DAY = MAX_ACTIVITIES_PER_REVISED_DAY;
     if (Array.isArray(itinerary.days)) {
       for (const day of itinerary.days) {
         if (
@@ -1067,8 +1068,8 @@ export class AnthropicProvider implements LLMProvider {
 
     const activities = Array.isArray(parsed.activities) ? parsed.activities : [];
     return {
-      // safety ceiling; pace drives the real count
-      activities: activities.slice(0, 8),
+      // safety ceiling with headroom for explicit adds; pace drives the real count
+      activities: activities.slice(0, MAX_ACTIVITIES_PER_REVISED_DAY),
       ripple:
         parsed.affects_other_days === true
           ? {
