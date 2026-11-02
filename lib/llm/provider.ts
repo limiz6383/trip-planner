@@ -1110,31 +1110,43 @@ export class AnthropicProvider implements LLMProvider {
   async generateDestinationGuide(destination: string): Promise<DestinationGuide> {
     const client = this.getClient();
 
-    const response = await client.messages.create({
-      model: ITINERARY_MODEL,
-      max_tokens: 1500,
-      system: DESTINATION_GUIDE_SYSTEM_PROMPT,
-      messages: [
-        { role: "user", content: `Destination: ${destination}` },
-        { role: "assistant", content: "{" },
-      ],
-    });
-
-    const raw =
-      "{" +
-      (response.content
-        .filter((block): block is Anthropic.TextBlock => block.type === "text")
-        .map((block) => block.text)
-        .join("") ?? "");
-
-    let jsonStr = raw.trim();
-    const fence = jsonStr.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-    if (fence) jsonStr = fence[1].trim();
-    if (!jsonStr.startsWith("{")) {
-      const s = jsonStr.indexOf("{");
-      const e = jsonStr.lastIndexOf("}");
-      if (s !== -1 && e !== -1 && e > s) jsonStr = jsonStr.slice(s, e + 1);
+    const userContent = `Destination: ${destination}`;
+    let raw: string;
+    const plain = async (): Promise<string> => {
+      const response = await client.messages.create({
+        model: ITINERARY_MODEL,
+        max_tokens: 1500,
+        system: DESTINATION_GUIDE_SYSTEM_PROMPT,
+        messages: [
+          { role: "user", content: userContent },
+          { role: "assistant", content: "{" },
+        ],
+      });
+      return (
+        "{" +
+        response.content
+          .filter((block): block is Anthropic.TextBlock => block.type === "text")
+          .map((block) => block.text)
+          .join("")
+      );
+    };
+    if (webSearchEnabled()) {
+      try {
+        raw = await runWithWebSearch(client, {
+          model: ITINERARY_MODEL,
+          system: DESTINATION_GUIDE_SYSTEM_PROMPT,
+          userContent,
+          maxTokens: 2500,
+        });
+      } catch (err) {
+        console.error("Web search destination guide failed, falling back:", err);
+        raw = await plain();
+      }
+    } else {
+      raw = await plain();
     }
+
+    const jsonStr = extractJsonObject(raw);
 
     let guide: DestinationGuide;
     try {
