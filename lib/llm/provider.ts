@@ -12,6 +12,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { IS_MOCK } from "@/lib/mock/flag";
 import { MockProvider } from "./mock-provider";
+import { runWithWebSearch, webSearchEnabled, extractJsonObject } from "./web-search";
 import { MAX_ACTIVITIES_PER_REVISED_DAY } from "@/lib/planner/limits";
 import type { LLMItinerary, LLMActivity, LLMTripBrief, TripBrief, Booking, CommunityPost, Activity, DestinationGuide, GuidePick, PreferenceProfile, TripFlight, TripAccommodation } from "@/lib/types";
 
@@ -798,6 +799,30 @@ export class AnthropicProvider implements LLMProvider {
     return { assistantMessage, updatedBrief, briefComplete };
   }
 
+  /** Original no-tools path: prefill "{" so the reply is raw JSON. */
+  private async plainItineraryCall(
+    client: Anthropic,
+    system: string,
+    userContent: string
+  ): Promise<string> {
+    const response = await client.messages.create({
+      model: ITINERARY_MODEL,
+      max_tokens: 8192,
+      system,
+      messages: [
+        { role: "user", content: userContent },
+        { role: "assistant", content: "{" },
+      ],
+    });
+    return (
+      "{" +
+      response.content
+        .filter((b): b is Anthropic.TextBlock => b.type === "text")
+        .map((b) => b.text)
+        .join("")
+    );
+  }
+
   async generateItinerary(
     params: GenerateItineraryParams
   ): Promise<LLMItinerary> {
@@ -829,35 +854,24 @@ export class AnthropicProvider implements LLMProvider {
         : {}),
     });
 
-    const response = await client.messages.create({
-      model: ITINERARY_MODEL,
-      max_tokens: 8192,
-      system: ITINERARY_SYSTEM_PROMPT,
-      // Prefill the assistant turn with "{" so Claude returns raw JSON without a
-      // markdown code fence or any preamble.
-      messages: [
-        { role: "user", content: userContent },
-        { role: "assistant", content: "{" },
-      ],
-    });
-
-    const raw =
-      "{" +
-      (response.content
-        .filter((block): block is Anthropic.TextBlock => block.type === "text")
-        .map((block) => block.text)
-        .join("") ?? "");
-
-    // Robustly extract the JSON object: strip any markdown fences, then fall
-    // back to slicing between the first "{" and the last "}".
-    let jsonStr = raw.trim();
-    const fence = jsonStr.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-    if (fence) jsonStr = fence[1].trim();
-    if (!jsonStr.startsWith("{")) {
-      const s = jsonStr.indexOf("{");
-      const e = jsonStr.lastIndexOf("}");
-      if (s !== -1 && e !== -1 && e > s) jsonStr = jsonStr.slice(s, e + 1);
+    let raw: string;
+    if (webSearchEnabled()) {
+      try {
+        raw = await runWithWebSearch(client, {
+          model: ITINERARY_MODEL,
+          system: ITINERARY_SYSTEM_PROMPT,
+          userContent,
+          maxTokens: 8192,
+        });
+      } catch (err) {
+        console.error("Web search planning failed, falling back:", err);
+        raw = await this.plainItineraryCall(client, ITINERARY_SYSTEM_PROMPT, userContent);
+      }
+    } else {
+      raw = await this.plainItineraryCall(client, ITINERARY_SYSTEM_PROMPT, userContent);
     }
+
+    const jsonStr = extractJsonObject(raw);
 
     let itinerary: LLMItinerary;
     try {
@@ -914,31 +928,24 @@ export class AnthropicProvider implements LLMProvider {
         : {}),
     });
 
-    const response = await client.messages.create({
-      model: ITINERARY_MODEL,
-      max_tokens: 8192,
-      system: ITINERARY_REVISION_SYSTEM_PROMPT,
-      messages: [
-        { role: "user", content: userContent },
-        { role: "assistant", content: "{" },
-      ],
-    });
-
-    const raw =
-      "{" +
-      (response.content
-        .filter((block): block is Anthropic.TextBlock => block.type === "text")
-        .map((block) => block.text)
-        .join("") ?? "");
-
-    let jsonStr = raw.trim();
-    const fence = jsonStr.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-    if (fence) jsonStr = fence[1].trim();
-    if (!jsonStr.startsWith("{")) {
-      const s = jsonStr.indexOf("{");
-      const e = jsonStr.lastIndexOf("}");
-      if (s !== -1 && e !== -1 && e > s) jsonStr = jsonStr.slice(s, e + 1);
+    let raw: string;
+    if (webSearchEnabled()) {
+      try {
+        raw = await runWithWebSearch(client, {
+          model: ITINERARY_MODEL,
+          system: ITINERARY_REVISION_SYSTEM_PROMPT,
+          userContent,
+          maxTokens: 8192,
+        });
+      } catch (err) {
+        console.error("Web search planning failed, falling back:", err);
+        raw = await this.plainItineraryCall(client, ITINERARY_REVISION_SYSTEM_PROMPT, userContent);
+      }
+    } else {
+      raw = await this.plainItineraryCall(client, ITINERARY_REVISION_SYSTEM_PROMPT, userContent);
     }
+
+    const jsonStr = extractJsonObject(raw);
 
     let itinerary: LLMItinerary;
     try {
