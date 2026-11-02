@@ -147,6 +147,24 @@ function BriefSummary({ brief }: BriefSummaryProps) {
           ? brief.accessibility_needs.join(", ")
           : "None",
     },
+    {
+      label: "Fixed plans",
+      value:
+        brief.fixed_plans && brief.fixed_plans.length > 0
+          ? brief.fixed_plans
+              .map((p) =>
+                [
+                  p.description,
+                  [p.date ? fmtDate(p.date) : null, p.start_time ?? null]
+                    .filter(Boolean)
+                    .join(" "),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
+              )
+              .join("; ")
+          : "None",
+    },
   ];
 
   return (

@@ -305,6 +305,13 @@ Your goal is to gather ONLY the following remaining fields through natural conve
 - Accessibility needs (if any)
 - Travel pace (relaxed, moderate, or fast)
 
+FIXED PLANS — the traveller often arrives with parts of the trip already decided: booked tours or tickets, restaurant reservations, events, a specific place on a specific day, a day trip they've settled on, or something they absolutely want to do. These are NOT optional extras. Whenever the traveller mentions one, at any point in the conversation:
+- Record it in "fixed_plans" as { "description", "date", "start_time", "end_time" }. "description" keeps their own words and any names (venue, tour, show). "date" is YYYY-MM-DD within the trip dates (resolve "day 2", "Friday", "our last night" against the known dates), "start_time"/"end_time" are 24-hour HH:MM; use null for anything they didn't say. A must-do with no day is still a fixed plan with "date": null.
+- Never drop, merge away, or paraphrase a plan out of existence. Keep every one they've mentioned so far, including ones from the very first message.
+- If something they said is ambiguous (which day? what time?), you may ask once, but record the plan anyway with null for the unknown part.
+- In your final summary, list every fixed plan back to them so they can see it was heard.
+If they have none, use "fixed_plans": [].
+
 Tailor your questions and suggestions to the trip length you are given. For example, a 3-day trip needs a tighter itinerary than a 14-day trip.
 
 Ask one or two questions at a time — keep it conversational.
@@ -323,7 +330,10 @@ When you have enough information to fill all fields, respond with a final summar
     "local_touristy_dial": 0.4,
     "dietary_constraints": [],
     "accessibility_needs": [],
-    "pace": "moderate"
+    "pace": "moderate",
+    "fixed_plans": [
+      { "description": "Dinner reservation at Den", "date": "YYYY-MM-DD", "start_time": "19:30", "end_time": null }
+    ]
   }
 }
 \`\`\`
@@ -358,6 +368,8 @@ You will receive:
 - Community-sourced place recommendations
 
 Your job is to apply the instruction to produce a revised itinerary. Rules:
+
+FIXED PLANS: the brief's "fixed_plans" (when present) are plans the traveller already booked or decided before planning. Each must still appear in the result on its date and at its start_time when given, exactly like a locked activity, unless the instruction explicitly removes or moves that specific plan.
 
 0. MUST_INCLUDE AND MUST_EXCLUDE ARE THE STRONGEST SIGNAL. Every entry in
    must_include has to appear in the result as a real activity on a sensible day
@@ -467,6 +479,7 @@ You will receive:
 You also receive "trip_context": which day this is (day_number of day_count), whether it is the first/last day, the previous and next day's plan in brief, the city, and the real logistics (booking / flights / accommodations / legs).
 
 Rules:
+FIXED PLANS: any of the brief's "fixed_plans" whose date is THIS day must stay in the day at its start_time when given, exactly like a locked activity, unless the instruction explicitly removes or moves that specific plan.
 0. SCOPE: apply the instruction to THIS day only, EXCEPT when it changes trip logistics that reach beyond today: arrival or departure time, leaving early or late on the last day, check-out, a ferry/flight/train time, a city move. In that case still produce your best plan for THIS day, and set "affects_other_days": true with a short "ripple_reason" (the app then re-plans the neighbouring days, the budget and the notes). For ordinary style asks ("more outdoorsy", "cheaper lunch") set it to false.
 1. Apply the instruction to THIS day only; keep unaffected activities where reasonable.
 2. STANDING PREFERENCES ARE STICKY. Everything in standing_preferences was explicitly requested earlier and must still hold. Do NOT undo or compromise an earlier request while satisfying the new one — only drop one if the current instruction directly contradicts it.
@@ -531,6 +544,12 @@ Respond ONLY with valid JSON matching this exact shape:
 /** System prompt for the itinerary generation phase */
 const ITINERARY_SYSTEM_PROMPT = `You are an expert travel itinerary planner.
 You will receive a trip brief, a set of community-sourced place recommendations, and optionally a booking record containing flight and accommodation details.
+
+FIXED PLANS COME FIRST — the brief's "fixed_plans" (when present) are things the traveller has ALREADY booked or decided. Every one MUST appear in the itinerary as an activity:
+- With a "date": put it on that day. With a "start_time": schedule it at exactly that time (and through "end_time" when given). Plan the rest of that day around it — travel time, meals and other activities must fit before and after it.
+- With no date: place it on the most sensible day yourself.
+- Keep the traveller's own wording and names in the activity name (e.g. "Ghibli Museum (booked)"). Never replace it with a similar alternative, never drop it to satisfy pace, budget or geography — remove other non-fixed activities instead.
+- A fixed plan that is itself a meal counts as that meal.
 
 Generate a detailed day-by-day itinerary that:
 1. Respects the budget, pace, and preferences in the brief

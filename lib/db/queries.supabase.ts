@@ -451,6 +451,7 @@ export async function upsertTripBrief(
         dietary_constraints: input.dietary_constraints,
         accessibility_needs: input.accessibility_needs,
         pace: input.pace,
+        fixed_plans: input.fixed_plans ?? [],
       },
       {
         onConflict: "trip_id",
