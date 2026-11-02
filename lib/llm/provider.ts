@@ -367,7 +367,7 @@ You will receive:
 - A revision instruction from the user (e.g. "make it cheaper", "more outdoorsy", "less walking on day 2")
 - standing_preferences: things the traveller asked for in EARLIER revisions
 - planning_conversation (sometimes): the "Plan with AI" chat the traveller is applying, both what they typed (role "user") and what the assistant said (role "assistant"). The revision instruction only lists the traveller's own lines, so a short reply like "yes", "do that" or "the second one" must be resolved against the assistant message before it. Apply what the traveller settled on by the END of the conversation: when they changed their mind, the later message wins; an assistant suggestion the traveller did not accept is NOT an ask.
-- must_include: named spots/dishes the traveller explicitly ticked in the destination guide
+- must_include: named spots/dishes the traveller explicitly ticked in the destination guide (dishes are eaten AT venues, they are not stops themselves — see rule 0)
 - must_exclude: named spots/dishes the traveller explicitly un-ticked
 - Community-sourced place recommendations
 
@@ -376,13 +376,31 @@ Your job is to apply the instruction to produce a revised itinerary. Rules:
 FIXED PLANS: the brief's "fixed_plans" (when present) are plans the traveller already booked or decided before planning. Each must still appear in the result on its date and at its start_time when given, exactly like a locked activity, unless the instruction explicitly removes or moves that specific plan.
 
 0. MUST_INCLUDE AND MUST_EXCLUDE ARE THE STRONGEST SIGNAL. Every entry in
-   must_include has to appear in the result as a real activity on a sensible day
-   — a dish becomes a meal (activity_type "food") at the right time of day, a
-   spot becomes a visit in a morning or afternoon slot. Name it so it is
-   recognisable (e.g. "Dinner at Lokál — svíčková"). If a day is already full,
-   replace a lower-priority non-locked activity rather than dropping the ask.
-   Nothing in must_exclude may appear anywhere in the result unless it is locked.
-   Where these conflict with the free-text instruction, these win.
+   must_include has to appear in the result, and nothing in must_exclude may
+   appear anywhere unless it is locked. Where these conflict with the
+   free-text instruction, these win. How to place them depends on the kind:
+   - kind "spot": a real visit in a morning or afternoon slot on a sensible day.
+   - kind "food": a DISH OR DRINK IS NEVER A STOP OF ITS OWN. Do not add an
+     activity called just "Trdelník" or "Schnitzel". Instead, find a real
+     restaurant, cafe, bakery or bar in the right city where the traveller can
+     eat it, and use it as that day's breakfast, lunch, dinner, coffee or
+     drinks slot (replace a generic meal rather than adding a new activity).
+     PREFER ONE VENUE THAT COVERS SEVERAL PICKS: group the food picks so that a
+     single traditional restaurant serves, say, the schnitzel AND the
+     Tafelspitz, and a single cafe serves the cake AND the coffee, then spread
+     those venues across the days and cities (a pick's "city", when present,
+     says where it belongs). Aim for the fewest venues that cover every pick.
+     Choose venues from community_posts when one fits (entries with source
+     "openstreetmap" are real mapped venues). If none fits, you may name a
+     well-known, long-established venue that you are certain exists in that
+     city and serves the dish; if you are not certain, describe the meal
+     generically ("Lunch at a traditional Beisl") rather than invent a name.
+     Name the activity so the venue and EVERY dish it covers are visible, e.g.
+     "Dinner at Figlmüller — Wiener Schnitzel & Tafelspitz", and repeat the dish
+     names in the description. Put a dish with no venue-able meal (a drink such
+     as absinthe) into a bar or cafe slot the same way. If a day is already
+     full, replace a lower-priority non-locked activity rather than dropping the
+     ask.
 1. Apply the instruction purposefully — change what the user asked to change. When the instruction asks to ADD specific places, dishes, or activities, you MUST include them in the result on suitable days — even if a day is already busy (you may exceed the usual per-day count or replace a lower-priority, non-locked activity). NEVER silently omit something the user explicitly asked to add.
 2. STANDING PREFERENCES ARE STICKY. Everything in standing_preferences was explicitly requested earlier and must still hold in your result. Do NOT undo or compromise an earlier request while satisfying the new one — only drop a standing preference if the current instruction directly contradicts it. (e.g. if they earlier asked to add a specific restaurant, keep it when they later say "make it cheaper".)
 3. Keep what the user did NOT ask to change where reasonable; preserve good activities that are unaffected by the instruction.
