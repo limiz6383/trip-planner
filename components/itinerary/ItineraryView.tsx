@@ -14,6 +14,7 @@
  *   onItineraryUpdated?: () => void   fired after any successful mutation
  */
 
+import { cascadeAfterEdit } from "@/lib/planner/cascade";
 import { useState, useCallback, useEffect, useId, useMemo, useRef } from "react";
 import type { DragEvent } from "react";
 import { useRouter } from "next/navigation";
@@ -2668,33 +2669,12 @@ export function ItineraryView({
         return;
       }
 
-      const acts = prev[dayIdx].activities ?? [];
-      const editedIdx = acts.findIndex(
-        (a) => a.activity_id === updated.activity_id
+      // Moving an activity moves only it (plus anything it now overlaps);
+      // a duration change shifts the rest of the day. See lib/planner/cascade.
+      const { activities: newActs, changed: downstream } = cascadeAfterEdit(
+        prev[dayIdx].activities ?? [],
+        updated
       );
-      const old = acts[editedIdx];
-
-      // How far the edited activity's END moved (start and/or duration change).
-      const newEnd = activityEndMinutes(updated);
-      const oldEnd = old ? activityEndMinutes(old) : null;
-      const delta = newEnd != null && oldEnd != null ? newEnd - oldEnd : 0;
-
-      // Replace the edited activity; shift everything after it by the delta.
-      const downstream: { activity_id: string; start_time: string | null }[] = [];
-      let newActs = acts.map((a, i) => {
-        if (a.activity_id === updated.activity_id) return updated;
-        if (delta === 0 || i <= editedIdx) return a;
-        // A locked activity is a fixed anchor — never shift its time via cascade.
-        if (a.locked) return a;
-        const s = parseClock(a.start_time);
-        if (s == null) return a;
-        const shifted = minutesToHHMM(s + delta);
-        downstream.push({ activity_id: a.activity_id, start_time: shifted });
-        return { ...a, start_time: shifted };
-      });
-
-      // Re-sort by clock time so a retimed activity lands in the right slot.
-      newActs = [...newActs].sort(byClock);
 
       const newDays = prev.map((d, i) =>
         i === dayIdx ? { ...d, activities: newActs } : d
