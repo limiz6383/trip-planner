@@ -2563,7 +2563,12 @@ export function ItineraryView({
       const res = await fetch(`/api/trips/${tripId}/itinerary/revise`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ instruction } satisfies ReviseItineraryRequestBody),
+        // Send the whole chat, not just the traveller's lines: a reply like
+        // "yes, do that" only means something next to what the assistant proposed.
+        body: JSON.stringify({
+          instruction,
+          conversation: chatMessages,
+        } satisfies ReviseItineraryRequestBody),
       });
       if (!res.ok) {
         const errBody = (await res.json()) as ReviseItineraryErrorBody;

@@ -123,6 +123,12 @@ export interface ReviseItineraryInput {
   instruction: string;
   /** Earlier revision asks to keep honoring. */
   standingPreferences?: string[];
+  /**
+   * The "Plan with AI" chat the traveller is applying, both sides. Lets the
+   * model resolve replies like "yes, do that" against what the assistant
+   * proposed.
+   */
+  conversation?: { role: "user" | "assistant"; content: string }[];
   /** Guide items the traveller ticked — each must appear in the result. */
   mustInclude?: GuidePick[];
   /** Guide items the traveller un-ticked — none may appear in the result. */
@@ -407,7 +413,7 @@ export class PlannerEngine {
    * (which creates a new version via createItineraryFromLLMOutput).
    */
   async reviseItinerary(input: ReviseItineraryInput): Promise<LLMItinerary> {
-    const { brief, currentItinerary, instruction, booking, currentDate, standingPreferences, mustInclude, mustExclude, legs, flights, accommodations } = input;
+    const { brief, currentItinerary, instruction, booking, currentDate, standingPreferences, conversation, mustInclude, mustExclude, legs, flights, accommodations } = input;
 
     // Multi-city trips: the denormalised brief.destination ("Paros → Athens")
     // matches no city's posts, so fetch per leg exactly like generation does.
@@ -427,6 +433,7 @@ export class PlannerEngine {
       currentItinerary: hydratedItineraryToLLM(brief, currentItinerary),
       instruction,
       standingPreferences,
+      conversation,
       mustInclude,
       mustExclude,
       legs: legs?.map((l) => ({

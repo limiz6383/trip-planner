@@ -138,6 +138,8 @@ export interface ReviseItineraryParams {
   instruction: string;
   /** Earlier revision asks to keep honoring unless the current one overrides. */
   standingPreferences?: string[];
+  /** The "Plan with AI" chat being applied (both sides), for resolving replies like "yes". */
+  conversation?: { role: "user" | "assistant"; content: string }[];
   /**
    * Named spots/dishes the traveller ticked in the destination guide. Each MUST
    * appear in the revised plan. Stronger than the free-text instruction: these
@@ -363,6 +365,7 @@ You will receive:
 - The current itinerary (day-by-day with activities)
 - A revision instruction from the user (e.g. "make it cheaper", "more outdoorsy", "less walking on day 2")
 - standing_preferences: things the traveller asked for in EARLIER revisions
+- planning_conversation (sometimes): the "Plan with AI" chat the traveller is applying, both what they typed (role "user") and what the assistant said (role "assistant"). The revision instruction only lists the traveller's own lines, so a short reply like "yes", "do that" or "the second one" must be resolved against the assistant message before it. Apply what the traveller settled on by the END of the conversation: when they changed their mind, the later message wins; an assistant suggestion the traveller did not accept is NOT an ask.
 - must_include: named spots/dishes the traveller explicitly ticked in the destination guide
 - must_exclude: named spots/dishes the traveller explicitly un-ticked
 - Community-sourced place recommendations
@@ -872,6 +875,9 @@ export class AnthropicProvider implements LLMProvider {
       current_itinerary: params.currentItinerary,
       revision_instruction: params.instruction,
       standing_preferences: params.standingPreferences ?? [],
+      ...(params.conversation && params.conversation.length > 0
+        ? { planning_conversation: params.conversation }
+        : {}),
       // Omit when empty so the prompt is unchanged for revisions that do not
       // come from the guide picker.
       ...(params.mustInclude && params.mustInclude.length > 0
