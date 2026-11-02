@@ -400,7 +400,7 @@ FIXED PLANS: the brief's "fixed_plans" (when present) are plans the traveller al
    - costs: re-estimate every changed activity and keep daily_cost / total_cost_estimate consistent; removed activities no longer count;
    - never silently drop a locked item; if it now conflicts, keep it and say so in "notes".
    Treat the traveller's stated time as authoritative over the booked time in "booking"/"flights" for planning (the app cannot edit the booking itself), state that assumption in "notes", and in "notes" list in one or two sentences which days you changed and why. The date range and day count stay the same.
-15. If "legs", "flights" or "accommodations" are provided they are the real trip logistics: keep each city's days inside its leg, keep transfers on the transfer dates, cluster each day near the stay that covers it, and never contradict a flight time unless rule 14 says the traveller changed it.
+15. If "legs", "flights" or "accommodations" are provided they are the real trip logistics: keep each city's days inside its leg, keep transfers on the transfer dates, cluster each day near the stay that covers it, and never contradict a flight time unless rule 14 says the traveller changed it. A flight's depart_time is when it LEAVES from_airport, never its arrival: arrival = depart_time + a realistic flight duration for the route.
 
 Respond ONLY with valid JSON matching this exact shape:
 {
@@ -476,7 +476,7 @@ You will receive:
 - standing_preferences: things the traveller asked for in EARLIER revisions
 - Community-sourced place recommendations
 
-You also receive "trip_context": which day this is (day_number of day_count), whether it is the first/last day, the previous and next day's plan in brief, the city, and the real logistics (booking / flights / accommodations / legs).
+You also receive "trip_context": which day this is (day_number of day_count), whether it is the first/last day, the previous and next day's plan in brief, the city, and the real logistics (booking / flights / accommodations / legs). A flight's depart_time is when it LEAVES from_airport, never its arrival: arrival = depart_time + a realistic flight duration for the route.
 
 Rules:
 FIXED PLANS: any of the brief's "fixed_plans" whose date is THIS day must stay in the day at its start_time when given, exactly like a locked activity, unless the instruction explicitly removes or moves that specific plan.
@@ -592,10 +592,12 @@ MULTI-CITY — if a "legs" array is provided, the trip visits multiple cities in
 - Respect each leg's dates exactly; do not move a city's days outside its range.
 
 MULTI-CITY FLIGHTS — if a "flights" array is provided (each: from_airport, to_airport, depart_date, depart_time, sort_order), it is the REAL flight schedule and SUPERSEDES the single "booking" arrival/departure rules above:
-- The EARLIEST flight (by depart_date/depart_time) is the inbound flight: its arrival bounds the START of day 1. Subtract realistic transit from to_airport to the first accommodation, and schedule only activities that fit the remaining usable hours (late arrivals = arrival logistics + dinner/rest only).
+- depart_time is when the plane LEAVES from_airport, in from_airport's local time. It is NEVER the arrival time. Work out each flight's ARRIVAL at to_airport yourself: add a realistic flight duration for that route (and any time-zone difference). Example: a 21:45 departure on a ~1h15 flight lands ~23:00, so the traveller reaches the hotel around midnight — the arrival activity is at ~23:00, not 21:45.
+- The EARLIEST flight (by depart_date/depart_time) is the inbound flight: its ARRIVAL (depart_time + flight duration) bounds the START of day 1. Subtract realistic transit from to_airport to the first accommodation, and schedule only activities that fit the remaining usable hours (late arrivals = arrival logistics + dinner/rest only).
 - The LAST flight is the outbound flight: the final day ends when the traveller must leave for from_airport. Allow 2-3 hours before depart_time for transit + check-in; early departures leave the last day with zero or one quick activity.
 - A flight whose depart_date falls MID-TRIP is an INTER-CITY TRANSFER. Schedule it as a transport activity (activity_type "transport") on that day at its depart_time, and SPLIT that day's activities around it: activities in the DEPARTING city (near from_airport) before the flight, activities in the ARRIVING city (near to_airport) after arrival + transit. Subtract the flight + transfer time from that day's usable hours.
 - Use depart_time when present; if a flight has no time, assume typical 1-2 hour transit and reasonable hours.
+- LATE NIGHT: an activity after midnight on an arrival day (e.g. a 00:15 hotel check-in) keeps its real clock time ("00:15") on the SAME day — list it last, after the arrival.
 - When "flights" is provided, IGNORE the single booking's flight_arrival_*/flight_departure_* fields — the flight list is authoritative.
 
 MULTI-CITY ACCOMMODATIONS — if an "accommodations" array is provided (each: name, neighborhood, lat, lon, check_in, check_out, sort_order), there may be one per city:

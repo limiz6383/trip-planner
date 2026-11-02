@@ -14,7 +14,7 @@
  *   onItineraryUpdated?: () => void   fired after any successful mutation
  */
 
-import { cascadeAfterEdit } from "@/lib/planner/cascade";
+import { cascadeAfterEdit, compareByClock } from "@/lib/planner/cascade";
 import { useState, useCallback, useEffect, useId, useMemo, useRef } from "react";
 import type { DragEvent } from "react";
 import { useRouter } from "next/navigation";
@@ -203,13 +203,7 @@ function activityEndMinutes(a: Activity): number | null {
 
 /** Sort comparator: by start_time (untimed last), tiebreak by sort_order. */
 function byClock(a: Activity, b: Activity): number {
-  const am = parseClock(a.start_time);
-  const bm = parseClock(b.start_time);
-  if (am == null && bm == null) return a.sort_order - b.sort_order;
-  if (am == null) return 1;
-  if (bm == null) return -1;
-  if (am !== bm) return am - bm;
-  return a.sort_order - b.sort_order;
+  return compareByClock(a, b);
 }
 
 /**

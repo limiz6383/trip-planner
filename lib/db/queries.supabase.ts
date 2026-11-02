@@ -15,6 +15,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { compareByClock } from "@/lib/planner/cascade";
 import type {
   Trip,
   TripCollaborator,
@@ -301,7 +302,8 @@ export async function getActivitiesForDay(
     .order("created_at");
 
   if (error) throw error;
-  return (data as Activity[]) ?? [];
+  // Re-sort so after-midnight items (a 00:15 check-in) land at the day's end.
+  return ((data as Activity[]) ?? []).sort(compareByClock);
 }
 
 // ---------------------------------------------------------------------------
@@ -645,7 +647,9 @@ export async function createItineraryFromLLMOutput(
         .order("sort_order");
 
       if (activityError) throw activityError;
-      hydratedActivities.push(...((activityRows as Activity[]) ?? []));
+      hydratedActivities.push(
+        ...((activityRows as Activity[]) ?? []).sort(compareByClock)
+      );
     }
 
     hydratedDays.push({ ...day, activities: hydratedActivities });

@@ -40,21 +40,38 @@ export function minutesToHHMM(mins: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
-function endMinutes(a: CascadeActivity): number | null {
-  const s = parseClock(a.start_time);
-  if (s == null) return null;
-  return s + (a.estimated_time_hours != null ? a.estimated_time_hours * 60 : 0);
+/**
+ * Where a start time sorts within a day. Times before 04:00 belong to the END
+ * of the day (a 00:15 hotel check-in after an 23:00 arrival), never the start.
+ */
+export const LATE_NIGHT_CUTOFF = 4 * 60;
+export function clockSortKey(t: string | null | undefined): number | null {
+  const m = parseClock(t);
+  if (m == null) return null;
+  return m < LATE_NIGHT_CUTOFF ? m + 24 * 60 : m;
 }
 
-function byClock(a: CascadeActivity, b: CascadeActivity): number {
-  const am = parseClock(a.start_time);
-  const bm = parseClock(b.start_time);
+/** Sort comparator for a day's activities: by clock (late-night last, untimed last), then sort_order. */
+export function compareByClock(
+  a: { start_time: string | null; sort_order: number },
+  b: { start_time: string | null; sort_order: number }
+): number {
+  const am = clockSortKey(a.start_time);
+  const bm = clockSortKey(b.start_time);
   if (am == null && bm == null) return a.sort_order - b.sort_order;
   if (am == null) return 1;
   if (bm == null) return -1;
   if (am !== bm) return am - bm;
   return a.sort_order - b.sort_order;
 }
+
+function endMinutes(a: CascadeActivity): number | null {
+  const s = parseClock(a.start_time);
+  if (s == null) return null;
+  return s + (a.estimated_time_hours != null ? a.estimated_time_hours * 60 : 0);
+}
+
+const byClock = compareByClock;
 
 const ARRIVAL_TYPES = new Set(["transport", "accommodation"]);
 

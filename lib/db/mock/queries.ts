@@ -11,6 +11,7 @@
  * click-through instead of looking like real product behaviour.
  */
 
+import { compareByClock } from "@/lib/planner/cascade";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   Trip,
@@ -47,7 +48,6 @@ import {
   nowIso,
   clone,
   cloneAll,
-  byDateThen,
 } from "./store";
 
 /** Marks a path a demo visitor is not expected to reach. */
@@ -271,11 +271,7 @@ export async function getActivitiesForDay(
   dayId: string
 ): Promise<Activity[]> {
   return cloneAll(
-    byDateThen(
-      db.activities.filter((a) => a.day_id === dayId),
-      (a) => a.start_time,
-      (a) => a.sort_order
-    )
+    db.activities.filter((a) => a.day_id === dayId).sort(compareByClock)
   );
 }
 

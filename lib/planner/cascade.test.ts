@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cascadeAfterEdit, type CascadeActivity } from "./cascade.ts";
+import { cascadeAfterEdit, compareByClock, type CascadeActivity } from "./cascade.ts";
 
 const act = (
   id: string,
@@ -81,5 +81,18 @@ test("a duration-only change still shifts the rest of the day", () => {
     "lunch@13:30",
     "museum@15:00",
     "dinner@19:00",
+  ]);
+});
+
+test("after-midnight items sort at the end of the day, after a late arrival", () => {
+  const late = [
+    { ...act("checkin", "00:00", 0.5, "accommodation"), sort_order: 2 },
+    { ...act("arrive", "23:00", 0.5, "transport"), sort_order: 0 },
+    { ...act("transfer", "23:30", 0.5, "transport"), sort_order: 1 },
+  ];
+  assert.deepEqual(times([...late].sort(compareByClock)), [
+    "arrive@23:00",
+    "transfer@23:30",
+    "checkin@00:00",
   ]);
 });
