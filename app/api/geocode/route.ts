@@ -65,31 +65,42 @@ export async function GET(request: NextRequest) {
     return Response.json(searchPlaces(q) satisfies GeocodeResult[]);
   }
 
+  const results = await searchPhoton(q);
+  // Photon is a free public service and sometimes refuses connections; fall
+  // back to Open-Meteo's city search (also keyless, and fine for autocomplete,
+  // unlike Nominatim whose usage policy forbids it).
+  return Response.json(
+    (results ?? (await searchOpenMeteo(q)) ?? []) satisfies GeocodeResult[]
+  );
+}
+
+const USER_AGENT =
+  "trip-planner-autocomplete/1.0 (+https://github.com/limiz6383/trip-planner)";
+
+/** Photon suggestions, or null when Photon is unreachable or errors. */
+async function searchPhoton(q: string): Promise<GeocodeResult[] | null> {
   const url =
     `https://photon.komoot.io/api?q=${encodeURIComponent(q)}&limit=5&lang=en`;
 
   let photon: PhotonResponse;
   try {
     const upstream = await fetch(url, {
-      headers: {
-        "User-Agent": "trip-planner-autocomplete/1.0 (+https://github.com/limiz6383/trip-planner)",
-      },
+      headers: { "User-Agent": USER_AGENT },
       // Don't let Next.js cache this at the framework layer — results should
       // always reflect the live query.
       cache: "no-store",
+      signal: AbortSignal.timeout(4000),
     });
 
-    if (!upstream.ok) {
-      return Response.json([] satisfies GeocodeResult[]);
-    }
+    if (!upstream.ok) return null;
 
     photon = (await upstream.json()) as PhotonResponse;
   } catch {
-    // Network error or JSON parse failure — degrade gracefully.
-    return Response.json([] satisfies GeocodeResult[]);
+    // Network error or JSON parse failure — let the caller fall back.
+    return null;
   }
 
-  const results: GeocodeResult[] = (photon.features ?? [])
+  return (photon.features ?? [])
     .map((feature) => {
       const props = feature.properties;
       const [lon, lat] = feature.geometry.coordinates;
@@ -104,6 +115,38 @@ export async function GET(request: NextRequest) {
     })
     // Drop entries where we couldn't build a meaningful label.
     .filter((r) => r.label.length > 0);
+}
 
-  return Response.json(results satisfies GeocodeResult[]);
+interface OpenMeteoPlace {
+  name: string;
+  latitude: number;
+  longitude: number;
+  admin1?: string;
+  country?: string;
+}
+
+/** Open-Meteo city suggestions, or null when it is unreachable or errors. */
+async function searchOpenMeteo(q: string): Promise<GeocodeResult[] | null> {
+  const url =
+    `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=5&language=en`;
+  try {
+    const upstream = await fetch(url, {
+      headers: { "User-Agent": USER_AGENT },
+      cache: "no-store",
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!upstream.ok) return null;
+    const body = (await upstream.json()) as { results?: OpenMeteoPlace[] };
+    return (body.results ?? []).map((p) => ({
+      // Skip admin1 when it repeats the name ("Prague, Prague, Czechia").
+      label: [p.name, p.admin1 !== p.name ? p.admin1 : undefined, p.country]
+        .filter(Boolean)
+        .join(", "),
+      name: p.name,
+      lat: p.latitude,
+      lon: p.longitude,
+    }));
+  } catch {
+    return null;
+  }
 }
