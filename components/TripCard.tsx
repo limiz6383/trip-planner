@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowRightIcon } from "@/components/ui/Icons";
-import { useState, useActionState } from "react";
+import { useState, useActionState, startTransition } from "react";
 import Link from "next/link";
 import { TripCover, RouteChips, splitStops, formatDateRangeShort, tripDays } from "@/components/TripCover";
 import { Button } from "@/components/ui/Button";
@@ -50,7 +50,7 @@ export function TripCard({ trip }: TripCardProps) {
     setDeleteOpen(false);
     const fd = new FormData();
     fd.set("trip_id", trip.trip_id);
-    deleteDispatch(fd);
+    startTransition(() => deleteDispatch(fd));
   }
 
   return (

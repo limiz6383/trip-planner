@@ -158,7 +158,7 @@ Required: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
 `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `NEXT_PUBLIC_SITE_URL`.
 
 For a fresh Supabase project, apply `supabase/migrations/` in order
-(`0001` … `0007`) plus the `supabase/fix_*.sql` constraints.
+(`0001` … `0008`) plus the `supabase/fix_*.sql` constraints.
 
 > Itinerary generation, revision, chat, and destination guides all bill your
 > Anthropic key. Set a spend limit before sharing a non-demo deployment.

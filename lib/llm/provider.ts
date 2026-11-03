@@ -12,6 +12,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { IS_MOCK } from "@/lib/mock/flag";
 import { MockProvider } from "./mock-provider";
+import { runWithWebSearch, webSearchEnabled, extractJsonObject } from "./web-search";
+import { MAX_ACTIVITIES_PER_REVISED_DAY } from "@/lib/planner/limits";
 import type { LLMItinerary, LLMActivity, LLMTripBrief, TripBrief, Booking, CommunityPost, Activity, DestinationGuide, GuidePick, PreferenceProfile, TripFlight, TripAccommodation } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -138,6 +140,8 @@ export interface ReviseItineraryParams {
   instruction: string;
   /** Earlier revision asks to keep honoring unless the current one overrides. */
   standingPreferences?: string[];
+  /** The "Plan with AI" chat being applied (both sides), for resolving replies like "yes". */
+  conversation?: { role: "user" | "assistant"; content: string }[];
   /**
    * Named spots/dishes the traveller ticked in the destination guide. Each MUST
    * appear in the revised plan. Stronger than the free-text instruction: these
@@ -305,6 +309,13 @@ Your goal is to gather ONLY the following remaining fields through natural conve
 - Accessibility needs (if any)
 - Travel pace (relaxed, moderate, or fast)
 
+FIXED PLANS — the traveller often arrives with parts of the trip already decided: booked tours or tickets, restaurant reservations, events, a specific place on a specific day, a day trip they've settled on, or something they absolutely want to do. These are NOT optional extras. Whenever the traveller mentions one, at any point in the conversation:
+- Record it in "fixed_plans" as { "description", "date", "start_time", "end_time" }. "description" keeps their own words and any names (venue, tour, show). "date" is YYYY-MM-DD within the trip dates (resolve "day 2", "Friday", "our last night" against the known dates), "start_time"/"end_time" are 24-hour HH:MM; use null for anything they didn't say. A must-do with no day is still a fixed plan with "date": null.
+- Never drop, merge away, or paraphrase a plan out of existence. Keep every one they've mentioned so far, including ones from the very first message.
+- If something they said is ambiguous (which day? what time?), you may ask once, but record the plan anyway with null for the unknown part.
+- In your final summary, list every fixed plan back to them so they can see it was heard.
+If they have none, use "fixed_plans": [].
+
 Tailor your questions and suggestions to the trip length you are given. For example, a 3-day trip needs a tighter itinerary than a 14-day trip.
 
 Ask one or two questions at a time — keep it conversational.
@@ -323,7 +334,10 @@ When you have enough information to fill all fields, respond with a final summar
     "local_touristy_dial": 0.4,
     "dietary_constraints": [],
     "accessibility_needs": [],
-    "pace": "moderate"
+    "pace": "moderate",
+    "fixed_plans": [
+      { "description": "Dinner reservation at Den", "date": "YYYY-MM-DD", "start_time": "19:30", "end_time": null }
+    ]
   }
 }
 \`\`\`
@@ -353,25 +367,46 @@ You will receive:
 - The current itinerary (day-by-day with activities)
 - A revision instruction from the user (e.g. "make it cheaper", "more outdoorsy", "less walking on day 2")
 - standing_preferences: things the traveller asked for in EARLIER revisions
-- must_include: named spots/dishes the traveller explicitly ticked in the destination guide
+- planning_conversation (sometimes): the "Plan with AI" chat the traveller is applying, both what they typed (role "user") and what the assistant said (role "assistant"). The revision instruction only lists the traveller's own lines, so a short reply like "yes", "do that" or "the second one" must be resolved against the assistant message before it. Apply what the traveller settled on by the END of the conversation: when they changed their mind, the later message wins; an assistant suggestion the traveller did not accept is NOT an ask.
+- must_include: named spots/dishes the traveller explicitly ticked in the destination guide (dishes are eaten AT venues, they are not stops themselves — see rule 0)
 - must_exclude: named spots/dishes the traveller explicitly un-ticked
 - Community-sourced place recommendations
 
 Your job is to apply the instruction to produce a revised itinerary. Rules:
 
+FIXED PLANS: the brief's "fixed_plans" (when present) are plans the traveller already booked or decided before planning. Each must still appear in the result on its date and at its start_time when given, exactly like a locked activity, unless the instruction explicitly removes or moves that specific plan.
+
 0. MUST_INCLUDE AND MUST_EXCLUDE ARE THE STRONGEST SIGNAL. Every entry in
-   must_include has to appear in the result as a real activity on a sensible day
-   — a dish becomes a meal (activity_type "food") at the right time of day, a
-   spot becomes a visit in a morning or afternoon slot. Name it so it is
-   recognisable (e.g. "Dinner at Lokál — svíčková"). If a day is already full,
-   replace a lower-priority non-locked activity rather than dropping the ask.
-   Nothing in must_exclude may appear anywhere in the result unless it is locked.
-   Where these conflict with the free-text instruction, these win.
+   must_include has to appear in the result, and nothing in must_exclude may
+   appear anywhere unless it is locked. Where these conflict with the
+   free-text instruction, these win. How to place them depends on the kind:
+   - kind "spot": a real visit in a morning or afternoon slot on a sensible day.
+   - kind "food": a DISH OR DRINK IS NEVER A STOP OF ITS OWN. Do not add an
+     activity called just "Trdelník" or "Schnitzel". Instead, find a real
+     restaurant, cafe, bakery or bar in the right city where the traveller can
+     eat it, and use it as that day's breakfast, lunch, dinner, coffee or
+     drinks slot (replace a generic meal rather than adding a new activity).
+     PREFER ONE VENUE THAT COVERS SEVERAL PICKS: group the food picks so that a
+     single traditional restaurant serves, say, the schnitzel AND the
+     Tafelspitz, and a single cafe serves the cake AND the coffee, then spread
+     those venues across the days and cities (a pick's "city", when present,
+     says where it belongs). Aim for the fewest venues that cover every pick.
+     Choose venues from community_posts when one fits (entries with source
+     "openstreetmap" are real mapped venues). If none fits, you may name a
+     well-known, long-established venue that you are certain exists in that
+     city and serves the dish; if you are not certain, describe the meal
+     generically ("Lunch at a traditional Beisl") rather than invent a name.
+     Name the activity so the venue and EVERY dish it covers are visible, e.g.
+     "Dinner at Figlmüller — Wiener Schnitzel & Tafelspitz", and repeat the dish
+     names in the description. Put a dish with no venue-able meal (a drink such
+     as absinthe) into a bar or cafe slot the same way. If a day is already
+     full, replace a lower-priority non-locked activity rather than dropping the
+     ask.
 1. Apply the instruction purposefully — change what the user asked to change. When the instruction asks to ADD specific places, dishes, or activities, you MUST include them in the result on suitable days — even if a day is already busy (you may exceed the usual per-day count or replace a lower-priority, non-locked activity). NEVER silently omit something the user explicitly asked to add.
 2. STANDING PREFERENCES ARE STICKY. Everything in standing_preferences was explicitly requested earlier and must still hold in your result. Do NOT undo or compromise an earlier request while satisfying the new one — only drop a standing preference if the current instruction directly contradicts it. (e.g. if they earlier asked to add a specific restaurant, keep it when they later say "make it cheaper".)
 3. Keep what the user did NOT ask to change where reasonable; preserve good activities that are unaffected by the instruction.
 3. LOCKED ITEMS ARE NON-NEGOTIABLE. Any day or activity marked "locked": true in the current itinerary represents a committed plan (e.g. a booking the user cannot move). Reproduce it EXACTLY — do not change, reword, reprice, reorder, or remove it — and plan the rest of the trip around it.
-4. Size each day to the traveller's PACE from the brief: relaxed ≈ 3-4, moderate ≈ 4-5, fast ≈ 6-7 activities (default ~4; meals included in the count; never exceed 8) — same policy as the original generation.
+4. Size each day to the traveller's PACE from the brief: relaxed ≈ 3-4, moderate ≈ 4-5, fast ≈ 6-7 activities (default ~4; meals included in the count; stay at or under 8 unless the traveller explicitly asks you to ADD something to a full day — then include it, up to 12).
 5. MEALS: keep breakfast, lunch, and dinner present on every full day (activity_type "food") at realistic times, unless the instruction explicitly changes meals. Arrival/departure days include only meals that fit around the flight. ${NAME_THE_PLACE}
 6. Keep each "description" to ONE short sentence.
 7. Maintain the same date range and day count as the original itinerary.
@@ -388,7 +423,7 @@ Your job is to apply the instruction to produce a revised itinerary. Rules:
    - costs: re-estimate every changed activity and keep daily_cost / total_cost_estimate consistent; removed activities no longer count;
    - never silently drop a locked item; if it now conflicts, keep it and say so in "notes".
    Treat the traveller's stated time as authoritative over the booked time in "booking"/"flights" for planning (the app cannot edit the booking itself), state that assumption in "notes", and in "notes" list in one or two sentences which days you changed and why. The date range and day count stay the same.
-15. If "legs", "flights" or "accommodations" are provided they are the real trip logistics: keep each city's days inside its leg, keep transfers on the transfer dates, cluster each day near the stay that covers it, and never contradict a flight time unless rule 14 says the traveller changed it.
+15. If "legs", "flights" or "accommodations" are provided they are the real trip logistics: keep each city's days inside its leg, keep transfers on the transfer dates, cluster each day near the stay that covers it, and never contradict a flight time unless rule 14 says the traveller changed it. A flight's depart_time is when it LEAVES from_airport, never its arrival: arrival = depart_time + a realistic flight duration for the route.
 
 Respond ONLY with valid JSON matching this exact shape:
 {
@@ -464,14 +499,15 @@ You will receive:
 - standing_preferences: things the traveller asked for in EARLIER revisions
 - Community-sourced place recommendations
 
-You also receive "trip_context": which day this is (day_number of day_count), whether it is the first/last day, the previous and next day's plan in brief, the city, and the real logistics (booking / flights / accommodations / legs).
+You also receive "trip_context": which day this is (day_number of day_count), whether it is the first/last day, the previous and next day's plan in brief, the city, and the real logistics (booking / flights / accommodations / legs). A flight's depart_time is when it LEAVES from_airport, never its arrival: arrival = depart_time + a realistic flight duration for the route.
 
 Rules:
+FIXED PLANS: any of the brief's "fixed_plans" whose date is THIS day must stay in the day at its start_time when given, exactly like a locked activity, unless the instruction explicitly removes or moves that specific plan.
 0. SCOPE: apply the instruction to THIS day only, EXCEPT when it changes trip logistics that reach beyond today: arrival or departure time, leaving early or late on the last day, check-out, a ferry/flight/train time, a city move. In that case still produce your best plan for THIS day, and set "affects_other_days": true with a short "ripple_reason" (the app then re-plans the neighbouring days, the budget and the notes). For ordinary style asks ("more outdoorsy", "cheaper lunch") set it to false.
 1. Apply the instruction to THIS day only; keep unaffected activities where reasonable.
 2. STANDING PREFERENCES ARE STICKY. Everything in standing_preferences was explicitly requested earlier and must still hold. Do NOT undo or compromise an earlier request while satisfying the new one — only drop one if the current instruction directly contradicts it.
 2. LOCKED ITEMS ARE NON-NEGOTIABLE. Any activity with "locked": true must be reproduced EXACTLY (do not change, reorder, reprice, or remove it) and the rest of the day planned around it.
-3. Size the day to the traveller's PACE: relaxed ≈ 3-4, moderate ≈ 4-5, fast ≈ 6-7 activities (default ~4; meals count; never exceed 8).
+3. Size the day to the traveller's PACE: relaxed ≈ 3-4, moderate ≈ 4-5, fast ≈ 6-7 activities (default ~4; meals count; stay at or under 8 unless the traveller explicitly asks you to ADD something to a full day — then include it, up to 12 — and never drop what they asked for to stay under 8).
 4. Keep breakfast, lunch, and dinner present (activity_type "food") at realistic times unless the instruction explicitly changes meals. ${NAME_THE_PLACE}
 5. Give every activity a "start_time" in 24-hour "HH:MM" format — chronological, consistent with each activity's estimated_time_hours and realistic venue/meal hours.
 6. Keep each "description" to ONE short sentence.
@@ -532,6 +568,12 @@ Respond ONLY with valid JSON matching this exact shape:
 const ITINERARY_SYSTEM_PROMPT = `You are an expert travel itinerary planner.
 You will receive a trip brief, a set of community-sourced place recommendations, and optionally a booking record containing flight and accommodation details.
 
+FIXED PLANS COME FIRST — the brief's "fixed_plans" (when present) are things the traveller has ALREADY booked or decided. Every one MUST appear in the itinerary as an activity:
+- With a "date": put it on that day. With a "start_time": schedule it at exactly that time (and through "end_time" when given). Plan the rest of that day around it — travel time, meals and other activities must fit before and after it.
+- With no date: place it on the most sensible day yourself.
+- Keep the traveller's own wording and names in the activity name (e.g. "Ghibli Museum (booked)"). Never replace it with a similar alternative, never drop it to satisfy pace, budget or geography — remove other non-fixed activities instead.
+- A fixed plan that is itself a meal counts as that meal.
+
 Generate a detailed day-by-day itinerary that:
 1. Respects the budget, pace, and preferences in the brief
 2. Prioritises places from the community posts, especially those matching the local/touristy dial
@@ -573,10 +615,12 @@ MULTI-CITY — if a "legs" array is provided, the trip visits multiple cities in
 - Respect each leg's dates exactly; do not move a city's days outside its range.
 
 MULTI-CITY FLIGHTS — if a "flights" array is provided (each: from_airport, to_airport, depart_date, depart_time, sort_order), it is the REAL flight schedule and SUPERSEDES the single "booking" arrival/departure rules above:
-- The EARLIEST flight (by depart_date/depart_time) is the inbound flight: its arrival bounds the START of day 1. Subtract realistic transit from to_airport to the first accommodation, and schedule only activities that fit the remaining usable hours (late arrivals = arrival logistics + dinner/rest only).
+- depart_time is when the plane LEAVES from_airport, in from_airport's local time. It is NEVER the arrival time. Work out each flight's ARRIVAL at to_airport yourself: add a realistic flight duration for that route (and any time-zone difference). Example: a 21:45 departure on a ~1h15 flight lands ~23:00, so the traveller reaches the hotel around midnight — the arrival activity is at ~23:00, not 21:45.
+- The EARLIEST flight (by depart_date/depart_time) is the inbound flight: its ARRIVAL (depart_time + flight duration) bounds the START of day 1. Subtract realistic transit from to_airport to the first accommodation, and schedule only activities that fit the remaining usable hours (late arrivals = arrival logistics + dinner/rest only).
 - The LAST flight is the outbound flight: the final day ends when the traveller must leave for from_airport. Allow 2-3 hours before depart_time for transit + check-in; early departures leave the last day with zero or one quick activity.
 - A flight whose depart_date falls MID-TRIP is an INTER-CITY TRANSFER. Schedule it as a transport activity (activity_type "transport") on that day at its depart_time, and SPLIT that day's activities around it: activities in the DEPARTING city (near from_airport) before the flight, activities in the ARRIVING city (near to_airport) after arrival + transit. Subtract the flight + transfer time from that day's usable hours.
 - Use depart_time when present; if a flight has no time, assume typical 1-2 hour transit and reasonable hours.
+- LATE NIGHT: an activity after midnight on an arrival day (e.g. a 00:15 hotel check-in) keeps its real clock time ("00:15") on the SAME day — list it last, after the arrival.
 - When "flights" is provided, IGNORE the single booking's flight_arrival_*/flight_departure_* fields — the flight list is authoritative.
 
 MULTI-CITY ACCOMMODATIONS — if an "accommodations" array is provided (each: name, neighborhood, lat, lon, check_in, check_out, sort_order), there may be one per city:
@@ -755,6 +799,30 @@ export class AnthropicProvider implements LLMProvider {
     return { assistantMessage, updatedBrief, briefComplete };
   }
 
+  /** Original no-tools path: prefill "{" so the reply is raw JSON. */
+  private async plainItineraryCall(
+    client: Anthropic,
+    system: string,
+    userContent: string
+  ): Promise<string> {
+    const response = await client.messages.create({
+      model: ITINERARY_MODEL,
+      max_tokens: 8192,
+      system,
+      messages: [
+        { role: "user", content: userContent },
+        { role: "assistant", content: "{" },
+      ],
+    });
+    return (
+      "{" +
+      response.content
+        .filter((b): b is Anthropic.TextBlock => b.type === "text")
+        .map((b) => b.text)
+        .join("")
+    );
+  }
+
   async generateItinerary(
     params: GenerateItineraryParams
   ): Promise<LLMItinerary> {
@@ -786,35 +854,24 @@ export class AnthropicProvider implements LLMProvider {
         : {}),
     });
 
-    const response = await client.messages.create({
-      model: ITINERARY_MODEL,
-      max_tokens: 8192,
-      system: ITINERARY_SYSTEM_PROMPT,
-      // Prefill the assistant turn with "{" so Claude returns raw JSON without a
-      // markdown code fence or any preamble.
-      messages: [
-        { role: "user", content: userContent },
-        { role: "assistant", content: "{" },
-      ],
-    });
-
-    const raw =
-      "{" +
-      (response.content
-        .filter((block): block is Anthropic.TextBlock => block.type === "text")
-        .map((block) => block.text)
-        .join("") ?? "");
-
-    // Robustly extract the JSON object: strip any markdown fences, then fall
-    // back to slicing between the first "{" and the last "}".
-    let jsonStr = raw.trim();
-    const fence = jsonStr.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-    if (fence) jsonStr = fence[1].trim();
-    if (!jsonStr.startsWith("{")) {
-      const s = jsonStr.indexOf("{");
-      const e = jsonStr.lastIndexOf("}");
-      if (s !== -1 && e !== -1 && e > s) jsonStr = jsonStr.slice(s, e + 1);
+    let raw: string;
+    if (webSearchEnabled()) {
+      try {
+        raw = await runWithWebSearch(client, {
+          model: ITINERARY_MODEL,
+          system: ITINERARY_SYSTEM_PROMPT,
+          userContent,
+          maxTokens: 8192,
+        });
+      } catch (err) {
+        console.error("Web search planning failed, falling back:", err);
+        raw = await this.plainItineraryCall(client, ITINERARY_SYSTEM_PROMPT, userContent);
+      }
+    } else {
+      raw = await this.plainItineraryCall(client, ITINERARY_SYSTEM_PROMPT, userContent);
     }
+
+    const jsonStr = extractJsonObject(raw);
 
     let itinerary: LLMItinerary;
     try {
@@ -851,6 +908,9 @@ export class AnthropicProvider implements LLMProvider {
       current_itinerary: params.currentItinerary,
       revision_instruction: params.instruction,
       standing_preferences: params.standingPreferences ?? [],
+      ...(params.conversation && params.conversation.length > 0
+        ? { planning_conversation: params.conversation }
+        : {}),
       // Omit when empty so the prompt is unchanged for revisions that do not
       // come from the guide picker.
       ...(params.mustInclude && params.mustInclude.length > 0
@@ -868,31 +928,24 @@ export class AnthropicProvider implements LLMProvider {
         : {}),
     });
 
-    const response = await client.messages.create({
-      model: ITINERARY_MODEL,
-      max_tokens: 8192,
-      system: ITINERARY_REVISION_SYSTEM_PROMPT,
-      messages: [
-        { role: "user", content: userContent },
-        { role: "assistant", content: "{" },
-      ],
-    });
-
-    const raw =
-      "{" +
-      (response.content
-        .filter((block): block is Anthropic.TextBlock => block.type === "text")
-        .map((block) => block.text)
-        .join("") ?? "");
-
-    let jsonStr = raw.trim();
-    const fence = jsonStr.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-    if (fence) jsonStr = fence[1].trim();
-    if (!jsonStr.startsWith("{")) {
-      const s = jsonStr.indexOf("{");
-      const e = jsonStr.lastIndexOf("}");
-      if (s !== -1 && e !== -1 && e > s) jsonStr = jsonStr.slice(s, e + 1);
+    let raw: string;
+    if (webSearchEnabled()) {
+      try {
+        raw = await runWithWebSearch(client, {
+          model: ITINERARY_MODEL,
+          system: ITINERARY_REVISION_SYSTEM_PROMPT,
+          userContent,
+          maxTokens: 8192,
+        });
+      } catch (err) {
+        console.error("Web search planning failed, falling back:", err);
+        raw = await this.plainItineraryCall(client, ITINERARY_REVISION_SYSTEM_PROMPT, userContent);
+      }
+    } else {
+      raw = await this.plainItineraryCall(client, ITINERARY_REVISION_SYSTEM_PROMPT, userContent);
     }
+
+    const jsonStr = extractJsonObject(raw);
 
     let itinerary: LLMItinerary;
     try {
@@ -903,7 +956,7 @@ export class AnthropicProvider implements LLMProvider {
       );
     }
 
-    const MAX_ACTIVITIES_PER_DAY = 8;
+    const MAX_ACTIVITIES_PER_DAY = MAX_ACTIVITIES_PER_REVISED_DAY;
     if (Array.isArray(itinerary.days)) {
       for (const day of itinerary.days) {
         if (
@@ -1040,8 +1093,8 @@ export class AnthropicProvider implements LLMProvider {
 
     const activities = Array.isArray(parsed.activities) ? parsed.activities : [];
     return {
-      // safety ceiling; pace drives the real count
-      activities: activities.slice(0, 8),
+      // safety ceiling with headroom for explicit adds; pace drives the real count
+      activities: activities.slice(0, MAX_ACTIVITIES_PER_REVISED_DAY),
       ripple:
         parsed.affects_other_days === true
           ? {
@@ -1057,31 +1110,43 @@ export class AnthropicProvider implements LLMProvider {
   async generateDestinationGuide(destination: string): Promise<DestinationGuide> {
     const client = this.getClient();
 
-    const response = await client.messages.create({
-      model: ITINERARY_MODEL,
-      max_tokens: 1500,
-      system: DESTINATION_GUIDE_SYSTEM_PROMPT,
-      messages: [
-        { role: "user", content: `Destination: ${destination}` },
-        { role: "assistant", content: "{" },
-      ],
-    });
-
-    const raw =
-      "{" +
-      (response.content
-        .filter((block): block is Anthropic.TextBlock => block.type === "text")
-        .map((block) => block.text)
-        .join("") ?? "");
-
-    let jsonStr = raw.trim();
-    const fence = jsonStr.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-    if (fence) jsonStr = fence[1].trim();
-    if (!jsonStr.startsWith("{")) {
-      const s = jsonStr.indexOf("{");
-      const e = jsonStr.lastIndexOf("}");
-      if (s !== -1 && e !== -1 && e > s) jsonStr = jsonStr.slice(s, e + 1);
+    const userContent = `Destination: ${destination}`;
+    let raw: string;
+    const plain = async (): Promise<string> => {
+      const response = await client.messages.create({
+        model: ITINERARY_MODEL,
+        max_tokens: 1500,
+        system: DESTINATION_GUIDE_SYSTEM_PROMPT,
+        messages: [
+          { role: "user", content: userContent },
+          { role: "assistant", content: "{" },
+        ],
+      });
+      return (
+        "{" +
+        response.content
+          .filter((block): block is Anthropic.TextBlock => block.type === "text")
+          .map((block) => block.text)
+          .join("")
+      );
+    };
+    if (webSearchEnabled()) {
+      try {
+        raw = await runWithWebSearch(client, {
+          model: ITINERARY_MODEL,
+          system: DESTINATION_GUIDE_SYSTEM_PROMPT,
+          userContent,
+          maxTokens: 2500,
+        });
+      } catch (err) {
+        console.error("Web search destination guide failed, falling back:", err);
+        raw = await plain();
+      }
+    } else {
+      raw = await plain();
     }
+
+    const jsonStr = extractJsonObject(raw);
 
     let guide: DestinationGuide;
     try {

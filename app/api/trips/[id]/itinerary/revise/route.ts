@@ -42,6 +42,8 @@ export interface ReviseItineraryRequestBody {
    * composes an instruction from the picks in that case.
    */
   instruction?: string;
+  /** The "Plan with AI" chat being applied, both sides (optional). */
+  conversation?: { role: "user" | "assistant"; content: string }[];
   /**
    * "tidy" marks a system-issued cleanup (the "Tidy up" button) so it is NOT
    * remembered as a standing preference. Defaults to a user revision.
@@ -136,6 +138,19 @@ export async function POST(
     .filter(Boolean)
     .join(" ");
 
+  const conversation = Array.isArray(body.conversation)
+    ? body.conversation
+        .filter(
+          (m) =>
+            m &&
+            (m.role === "user" || m.role === "assistant") &&
+            typeof m.content === "string" &&
+            m.content.trim()
+        )
+        .slice(-30)
+        .map((m) => ({ role: m.role, content: m.content.trim().slice(0, 2000) }))
+    : [];
+
   const instruction = body.instruction?.trim() || composed;
   if (!instruction) {
     return Response.json(
@@ -198,6 +213,7 @@ export async function POST(
       currentItinerary,
       instruction,
       standingPreferences,
+      conversation,
       mustInclude,
       mustExclude,
       booking: logistics.booking,

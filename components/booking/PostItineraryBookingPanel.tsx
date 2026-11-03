@@ -7,12 +7,15 @@
  * trip detail page (itinerary already exists). Lets the user view and edit
  * their booking at any time after generation.
  *
- * Two actions are available after saving:
- *   1. "Save bookings" — persists the booking without regenerating.
- *      The itinerary stays as-is.
- *   2. "Regenerate itinerary with these bookings" — saves booking first (if
- *      unsaved) then calls POST /api/trips/[id]/itinerary, which reads the
- *      current booking and generates a new itinerary version.
+ * Actions after saving:
+ *   1. "Save bookings" — persists the booking without touching the itinerary.
+ *   2. "Update my plan around these changes" (recommended) — re-plans through
+ *      POST /api/trips/[id]/itinerary/revise, which keeps locked days and
+ *      activities, earlier requests and everything the traveller already
+ *      shaped, and only adjusts what the new flights and stays affect.
+ *   3. "Start over from scratch" — a full regeneration through
+ *      POST /api/trips/[id]/itinerary. It discards every edit, lock and
+ *      guide pick, so it sits behind a confirmation.
  *
  * Shows the same ItineraryGeneratingOverlay used elsewhere so the prominent
  * loading state is consistent during the 10-20s generation window.
@@ -23,11 +26,9 @@ import { useRouter } from "next/navigation";
 import { BookingForm } from "@/components/booking/BookingForm";
 import { ItineraryGeneratingOverlay } from "@/components/itinerary/ItineraryGeneratingOverlay";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import type { Booking } from "@/lib/types";
-import type {
-  GenerateItineraryResponseBody,
-  GenerateItineraryErrorBody,
-} from "@/app/api/trips/[id]/itinerary/route";
+import type { GenerateItineraryErrorBody } from "@/app/api/trips/[id]/itinerary/route";
 
 export interface PostItineraryBookingPanelProps {
   tripId: string;
@@ -61,27 +62,46 @@ export function PostItineraryBookingPanel({
     setTimeout(() => setSaveConfirmed(false), 4000);
   }
 
-  async function handleRegenerate() {
+  const [startOverOpen, setStartOverOpen] = useState(false);
+
+  // Re-plan around the new logistics while keeping the traveller's work.
+  async function handleUpdatePlan() {
+    await runPlanChange(`/api/trips/${tripId}/itinerary/revise`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        instruction:
+          "My flights or accommodation were updated. Re-plan around the updated flights and stays: adjust the arrival and departure days, check-in and check-out, and any city moves they affect. Keep every other day, every locked item and everything I asked for earlier exactly as it is.",
+      }),
+    });
+  }
+
+  // Full rebuild: discards edits, locks and guide picks.
+  async function handleStartOver() {
+    setStartOverOpen(false);
+    await runPlanChange(`/api/trips/${tripId}/itinerary`, { method: "POST" });
+  }
+
+  async function runPlanChange(url: string, init: RequestInit) {
     setRegenerating(true);
     setRegenerateError(null);
     setSaveConfirmed(false);
 
     try {
-      const res = await fetch(`/api/trips/${tripId}/itinerary`, {
-        method: "POST",
-      });
+      const res = await fetch(url, init);
 
       if (!res.ok) {
         const body = (await res.json()) as GenerateItineraryErrorBody;
         setRegenerateError(
-          body.error ?? "Regeneration failed. Please try again."
+          res.status === 409
+            ? "An earlier change is still being applied to your trip. Wait a minute, then try again."
+            : body.error ?? "Updating the plan failed. Please try again."
         );
         return;
       }
 
-      // Cast to verify shape; result unused — router.refresh() re-renders
-      // the server component with the new itinerary version.
-      const _body = (await res.json()) as GenerateItineraryResponseBody;
+      // router.refresh() re-renders the server component with the new
+      // itinerary version.
       router.refresh();
     } catch {
       setRegenerateError(
@@ -174,18 +194,29 @@ export function PostItineraryBookingPanel({
           {savedSinceLastGenerate && (
             <div className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-4">
               <p className="text-sm font-medium text-amber-900">
-                Your booking has been updated. Regenerate the itinerary to
-                plan around your new flights and accommodation.
+                Your booking has been updated. Update your plan to fit your
+                new flights and accommodation. Your locked items, edits and
+                earlier requests are kept.
               </p>
-              <Button
-                variant="primary"
-                size="md"
-                onClick={handleRegenerate}
-                disabled={regenerating}
-                className="w-full sm:w-auto"
-              >
-                Regenerate itinerary with these bookings
-              </Button>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  variant="primary"
+                  size="md"
+                  onClick={handleUpdatePlan}
+                  disabled={regenerating}
+                  className="w-full sm:w-auto"
+                >
+                  Update my plan around these changes
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => setStartOverOpen(true)}
+                  disabled={regenerating}
+                  className="min-h-11 px-2 text-sm font-medium text-amber-900 underline underline-offset-2 hover:text-amber-950"
+                >
+                  Start over from scratch
+                </button>
+              </div>
 
               {regenerateError && (
                 <p className="text-sm text-red-600" role="alert">
@@ -196,6 +227,17 @@ export function PostItineraryBookingPanel({
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        open={startOverOpen}
+        title="Start over from scratch?"
+        description="This rebuilds the whole itinerary and discards your edits, locked items and destination-guide picks. Your earlier versions stay in the history, but there's no one-click restore."
+        confirmLabel="Start over"
+        cancelLabel="Keep my plan"
+        destructive
+        onConfirm={handleStartOver}
+        onCancel={() => setStartOverOpen(false)}
+      />
     </section>
   );
 }

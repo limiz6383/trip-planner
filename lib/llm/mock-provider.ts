@@ -11,6 +11,7 @@
  */
 
 import { requestedStartTime } from "@/lib/planner/activity-edit";
+import { MAX_ACTIVITIES_PER_REVISED_DAY } from "@/lib/planner/limits";
 import { travellerCount } from "@/lib/planner/costs";
 import type {
   LLMProvider,
@@ -1019,7 +1020,7 @@ export class MockProvider implements LLMProvider {
     return {
       activities: [...locked, ...rebuilt]
         .sort((a, b) => (a.start_time ?? "").localeCompare(b.start_time ?? ""))
-        .slice(0, 8),
+        .slice(0, MAX_ACTIVITIES_PER_REVISED_DAY),
       ripple: null,
     };
   }

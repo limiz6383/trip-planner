@@ -60,7 +60,51 @@ interface PhotonFeature {
   properties: { extent?: [number, number, number, number] };
 }
 
+function radiusFromCorners(a: LatLon, b: LatLon): number {
+  const diag = haversineMeters(a, b);
+  return Math.min(MAX_RADIUS_M, Math.max(MIN_RADIUS_M, diag / 2));
+}
+
+// Photon first; if it is down or refusing connections, Nominatim (same OSM data,
+// different operator) so one flaky geocoder can't take out the venue lookup.
 async function geocodeCity(city: string, signal: AbortSignal): Promise<GeocodedCity | null> {
+  try {
+    const hit = await geocodeWithPhoton(city, signal);
+    if (hit) return hit;
+  } catch (err) {
+    if (signal.aborted) throw err;
+    console.warn(`[places] Photon geocode failed for "${city}", trying Nominatim:`, err);
+  }
+  return geocodeWithNominatim(city, signal);
+}
+
+interface NominatimResult {
+  lat: string;
+  lon: string;
+  boundingbox?: [string, string, string, string]; // [minLat, maxLat, minLon, maxLon]
+}
+
+async function geocodeWithNominatim(city: string, signal: AbortSignal): Promise<GeocodedCity | null> {
+  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1&accept-language=en`;
+  const res = await fetch(url, {
+    headers: { "User-Agent": USER_AGENT },
+    cache: "no-store",
+    signal,
+  });
+  if (!res.ok) return null;
+  const r = ((await res.json()) as NominatimResult[])[0];
+  if (!r) return null;
+
+  const center = { lat: Number(r.lat), lon: Number(r.lon) };
+  let radius = DEFAULT_RADIUS_M;
+  const b = r.boundingbox?.map(Number);
+  if (b && b.every((n) => !Number.isNaN(n))) {
+    radius = radiusFromCorners({ lat: b[0], lon: b[2] }, { lat: b[1], lon: b[3] });
+  }
+  return { center, radiusMeters: radius };
+}
+
+async function geocodeWithPhoton(city: string, signal: AbortSignal): Promise<GeocodedCity | null> {
   const url = `https://photon.komoot.io/api?q=${encodeURIComponent(city)}&limit=1&lang=en`;
   const res = await fetch(url, {
     headers: { "User-Agent": USER_AGENT },
@@ -80,8 +124,7 @@ async function geocodeCity(city: string, signal: AbortSignal): Promise<GeocodedC
   let radius = DEFAULT_RADIUS_M;
   const e = f.properties.extent;
   if (e) {
-    const diag = haversineMeters({ lat: e[1], lon: e[0] }, { lat: e[3], lon: e[2] });
-    radius = Math.min(MAX_RADIUS_M, Math.max(MIN_RADIUS_M, diag / 2));
+    radius = radiusFromCorners({ lat: e[1], lon: e[0] }, { lat: e[3], lon: e[2] });
   }
   return { center, radiusMeters: radius };
 }

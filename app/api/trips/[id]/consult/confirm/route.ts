@@ -25,6 +25,7 @@ import { getUser } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/db/server";
 import { upsertTripBrief, getTripById } from "@/lib/db/queries";
 import type { LLMTripBrief } from "@/lib/types";
+import { sanitizeFixedPlans } from "@/lib/fixed-plans";
 
 export interface ConfirmRequestBody {
   brief: LLMTripBrief;
@@ -104,13 +105,19 @@ export async function POST(
       dietary_constraints: brief.dietary_constraints,
       accessibility_needs: brief.accessibility_needs,
       pace: brief.pace,
+      fixed_plans: sanitizeFixedPlans(brief.fixed_plans),
     });
 
     const responseBody: ConfirmResponseBody = { briefId: persisted.brief_id };
     return Response.json(responseBody, { status: 200 });
   } catch (err) {
+    console.error("[consult confirm]", err);
+    // Supabase throws plain PostgrestError objects, not Error instances.
     const message =
-      err instanceof Error ? err.message : "Failed to save trip brief.";
+      err && typeof err === "object" && "message" in err &&
+      typeof (err as { message?: unknown }).message === "string"
+        ? (err as { message: string }).message
+        : "Failed to save trip brief.";
     return Response.json({ error: message }, { status: 500 });
   }
 }

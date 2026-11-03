@@ -14,6 +14,7 @@
  *   onItineraryUpdated?: () => void   fired after any successful mutation
  */
 
+import { cascadeAfterEdit, compareByClock } from "@/lib/planner/cascade";
 import { useState, useCallback, useEffect, useId, useMemo, useRef } from "react";
 import type { DragEvent } from "react";
 import { useRouter } from "next/navigation";
@@ -202,13 +203,7 @@ function activityEndMinutes(a: Activity): number | null {
 
 /** Sort comparator: by start_time (untimed last), tiebreak by sort_order. */
 function byClock(a: Activity, b: Activity): number {
-  const am = parseClock(a.start_time);
-  const bm = parseClock(b.start_time);
-  if (am == null && bm == null) return a.sort_order - b.sort_order;
-  if (am == null) return 1;
-  if (bm == null) return -1;
-  if (am !== bm) return am - bm;
-  return a.sort_order - b.sort_order;
+  return compareByClock(a, b);
 }
 
 /**
@@ -2568,11 +2563,20 @@ export function ItineraryView({
       const res = await fetch(`/api/trips/${tripId}/itinerary/revise`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ instruction } satisfies ReviseItineraryRequestBody),
+        // Send the whole chat, not just the traveller's lines: a reply like
+        // "yes, do that" only means something next to what the assistant proposed.
+        body: JSON.stringify({
+          instruction,
+          conversation: chatMessages,
+        } satisfies ReviseItineraryRequestBody),
       });
       if (!res.ok) {
         const errBody = (await res.json()) as ReviseItineraryErrorBody;
-        setChatError(errBody.error ?? "Failed to apply changes.");
+        setChatError(
+          res.status === 409
+            ? "An earlier change is still being applied to your trip, which can take a minute or two. Your chat is kept: wait for it to finish, then press Apply changes again."
+            : errBody.error ?? "Failed to apply changes."
+        );
         return;
       }
       // New version persisted — refresh so the server re-renders it. The
@@ -2668,33 +2672,12 @@ export function ItineraryView({
         return;
       }
 
-      const acts = prev[dayIdx].activities ?? [];
-      const editedIdx = acts.findIndex(
-        (a) => a.activity_id === updated.activity_id
+      // Moving an activity moves only it (plus anything it now overlaps);
+      // a duration change shifts the rest of the day. See lib/planner/cascade.
+      const { activities: newActs, changed: downstream } = cascadeAfterEdit(
+        prev[dayIdx].activities ?? [],
+        updated
       );
-      const old = acts[editedIdx];
-
-      // How far the edited activity's END moved (start and/or duration change).
-      const newEnd = activityEndMinutes(updated);
-      const oldEnd = old ? activityEndMinutes(old) : null;
-      const delta = newEnd != null && oldEnd != null ? newEnd - oldEnd : 0;
-
-      // Replace the edited activity; shift everything after it by the delta.
-      const downstream: { activity_id: string; start_time: string | null }[] = [];
-      let newActs = acts.map((a, i) => {
-        if (a.activity_id === updated.activity_id) return updated;
-        if (delta === 0 || i <= editedIdx) return a;
-        // A locked activity is a fixed anchor — never shift its time via cascade.
-        if (a.locked) return a;
-        const s = parseClock(a.start_time);
-        if (s == null) return a;
-        const shifted = minutesToHHMM(s + delta);
-        downstream.push({ activity_id: a.activity_id, start_time: shifted });
-        return { ...a, start_time: shifted };
-      });
-
-      // Re-sort by clock time so a retimed activity lands in the right slot.
-      newActs = [...newActs].sort(byClock);
 
       const newDays = prev.map((d, i) =>
         i === dayIdx ? { ...d, activities: newActs } : d

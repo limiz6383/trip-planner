@@ -38,7 +38,7 @@ Without this, friends' sign-up / login / email confirmation will fail.
 Your Supabase already has these applied. For a **fresh** Supabase project, run
 the SQL in `supabase/migrations/` in order (SQL editor):
 `0001_init.sql` → `0002` airports* → `0003` sort_order → `0004` start_time →
-`0005` destination_guide → `0006` trip_legs → `0007` flights_accommodations.
+`0005` destination_guide → `0006` trip_legs → `0007` flights_accommodations → `0008` brief_fixed_plans.
 (Plus the `supabase/fix_*.sql` constraints.)
 
 ## Deploying the demo instead (no keys, no cost)

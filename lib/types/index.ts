@@ -97,6 +97,22 @@ export interface PartyComposition {
 
 export type TripPace = "relaxed" | "moderate" | "fast";
 
+/**
+ * Something the traveller has ALREADY decided before planning: a booked tour,
+ * a dinner reservation, concert tickets, "Louvre on Tuesday morning". Captured
+ * in the consulting chat and treated as a fixed anchor by every planner call.
+ */
+export interface FixedPlan {
+  /** What it is, in the traveller's words (e.g. "Ghibli Museum tickets"). */
+  description: string;
+  /** YYYY-MM-DD when the traveller gave a day; null when any day works. */
+  date?: string | null;
+  /** HH:MM (24h) when the traveller gave a time. */
+  start_time?: string | null;
+  /** HH:MM (24h) when the traveller gave an end time. */
+  end_time?: string | null;
+}
+
 export interface TripBrief {
   brief_id: string;
   trip_id: string;
@@ -111,6 +127,8 @@ export interface TripBrief {
   dietary_constraints: string[];
   accessibility_needs: string[];
   pace: TripPace;
+  /** Plans the traveller already has; every one must appear in the itinerary. */
+  fixed_plans?: FixedPlan[];
   created_at: string;
   updated_at: string;
 }
@@ -412,4 +430,5 @@ export interface LLMTripBrief {
   dietary_constraints: string[];
   accessibility_needs: string[];
   pace: TripPace;
+  fixed_plans?: FixedPlan[];
 }

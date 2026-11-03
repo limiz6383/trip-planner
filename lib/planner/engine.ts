@@ -55,6 +55,7 @@ import {
 } from "@/lib/planner/geo";
 import {
   deriveLockedConstraint,
+  restoreUntouchedDays,
   mergeLockedDays,
   validateLockedConstraints,
   applyLocksToRevision,
@@ -123,6 +124,18 @@ export interface ReviseItineraryInput {
   instruction: string;
   /** Earlier revision asks to keep honoring. */
   standingPreferences?: string[];
+  /**
+   * The "Plan with AI" chat the traveller is applying, both sides. Lets the
+   * model resolve replies like "yes, do that" against what the assistant
+   * proposed.
+   */
+  conversation?: { role: "user" | "assistant"; content: string }[];
+  /**
+   * When set, only these dates may change: every other day is restored exactly
+   * as it was after the model responds (a change to one day only reaches its
+   * neighbours).
+   */
+  onlyChangeDates?: string[];
   /** Guide items the traveller ticked — each must appear in the result. */
   mustInclude?: GuidePick[];
   /** Guide items the traveller un-ticked — none may appear in the result. */
@@ -407,7 +420,7 @@ export class PlannerEngine {
    * (which creates a new version via createItineraryFromLLMOutput).
    */
   async reviseItinerary(input: ReviseItineraryInput): Promise<LLMItinerary> {
-    const { brief, currentItinerary, instruction, booking, currentDate, standingPreferences, mustInclude, mustExclude, legs, flights, accommodations } = input;
+    const { brief, currentItinerary, instruction, booking, currentDate, standingPreferences, conversation, onlyChangeDates, mustInclude, mustExclude, legs, flights, accommodations } = input;
 
     // Multi-city trips: the denormalised brief.destination ("Paros → Athens")
     // matches no city's posts, so fetch per leg exactly like generation does.
@@ -427,6 +440,7 @@ export class PlannerEngine {
       currentItinerary: hydratedItineraryToLLM(brief, currentItinerary),
       instruction,
       standingPreferences,
+      conversation,
       mustInclude,
       mustExclude,
       legs: legs?.map((l) => ({
@@ -442,9 +456,18 @@ export class PlannerEngine {
     // content is then restored verbatim, so it is never re-ordered).
     polishItinerary(revised, buildVenueIndex(ranked), legs);
 
+    // A change that can only reach some days must not rewrite the rest.
+    const bounded = onlyChangeDates
+      ? restoreUntouchedDays(
+          revised,
+          hydratedItineraryToLLM(brief, currentItinerary),
+          onlyChangeDates
+        )
+      : revised;
+
     // Deterministically guarantee locked content survives regardless of model
     // output, and carry lock state forward into the persisted new version.
-    return applyLocksToRevision(revised, currentItinerary, constraint);
+    return applyLocksToRevision(bounded, currentItinerary, constraint);
   }
 
   /**

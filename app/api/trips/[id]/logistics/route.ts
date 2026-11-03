@@ -37,6 +37,17 @@ export interface LogisticsErrorBody {
   error: string;
 }
 
+/** Supabase throws plain PostgrestError objects, not Error instances. */
+function errorMessage(err: unknown, fallback: string): string {
+  if (
+    err && typeof err === "object" && "message" in err &&
+    typeof (err as { message?: unknown }).message === "string"
+  ) {
+    return (err as { message: string }).message;
+  }
+  return fallback;
+}
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -59,7 +70,8 @@ export async function GET(
       { status: 200 }
     );
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to load logistics.";
+    console.error("[logistics GET]", err);
+    const message = errorMessage(err, "Failed to load logistics.");
     return Response.json({ error: message } satisfies LogisticsErrorBody, {
       status: 500,
     });
@@ -103,7 +115,8 @@ export async function POST(
       { status: 200 }
     );
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to save logistics.";
+    console.error("[logistics POST]", err);
+    const message = errorMessage(err, "Failed to save logistics.");
     return Response.json({ error: message } satisfies LogisticsErrorBody, {
       status: 500,
     });
