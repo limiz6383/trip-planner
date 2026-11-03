@@ -2,7 +2,10 @@
 
 An LLM-assisted travel planner: describe a trip, get a day-by-day itinerary you
 can revise by talking to it. Multi-city trips, flight and accommodation
-constraints, per-city destination guides, and a subscribable calendar feed.
+constraints, per-city destination guides, and a subscribable calendar feed. In
+live mode the planner researches the web for what is actually worth doing and
+avoids tourist traps, and it keeps the fixed plans you already have (tickets,
+reservations, flights) as anchors.
 
 Built with Next.js (App Router), Supabase (Postgres + Auth, RLS-enforced), and
 the Anthropic API.
@@ -42,6 +45,12 @@ mode came last, once the product was worth showing to people.
 - **Learn from past trips.** Preferences inferred from earlier trips gently bias new
   itineraries and are shown on the dashboard, so the personalisation is visible
   and not hidden in a prompt.
+- **Fixed plans come first.** Anything you already have booked (a concert at
+  8:15 pm, a dinner reservation) is captured during the planning chat, stored on
+  the trip, and treated as an anchor that the rest of the day is built around.
+- **Food picks become meals, not stops.** A dish you tick in the destination guide
+  is eaten at a real restaurant or cafe in a meal slot, and several picks are
+  grouped at one venue where it makes sense.
 - **A demo that costs nothing.** One flag swaps the LLM, database, auth and
   geocoder for fixtures behind four seams, so the whole product is shareable with
   no keys and no bill (see below).
@@ -75,8 +84,14 @@ score from what the map does know:
 
 That score feeds the same ranking as everything else, so the existing
 local ↔ touristy slider decides which venues the model sees. The model is told to
-name only venues present in that data and never to invent a restaurant; if
-nothing fits it says so generically instead.
+name venues from that data first. In live mode it can also search the web
+(Anthropic's server-side web search, up to 8 searches per plan) for the
+must-do sights, for restaurants that serve your food picks and for opening
+hours, preferring recent local sources and skipping tourist traps; a venue
+found that way may be named only if sources agree it exists. Web search adds
+cost and latency (a plan can take a minute or more); set `LLM_WEB_SEARCH=0` to
+turn it off. Day, activity and chat revisions do not search. If nothing fits,
+the model says so generically instead of inventing a place.
 
 **Honest limits.** The locality score is a heuristic, not a measurement, and it
 will misjudge some places (a genuinely local café on a tourist street, a chain the
@@ -87,7 +102,9 @@ in memory and each lookup has a 12-second budget. When every Overpass server fai
 falls back to a plain place search: it finds fewer venues and cannot tell how close they are
 to the major sights, so every venue gets the same locality score and the local/touristy dial
 cannot separate them (the venues are still real, named places). If both fail, the plan falls
-back to generic suggestions rather than failing. A production setup would self-host Overpass
+back to the model's own knowledge and web search rather than failing. City lookup
+(Photon) falls back to Nominatim, and the destination autocomplete falls back to
+Open-Meteo's geocoder, because the free public Photon service is sometimes down. A production setup would self-host Overpass
 or use a paid provider. The hosted demo does not use any of this: its itinerary is a saved
 sample generated before this feature existed, and its curated posts (Tokyo and Berlin) are
 seeded sample data.
